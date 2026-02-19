@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { db } from "@/lib/db";
+import { db, getDueWords, gradeWord } from "@/lib/db";
 import type { Word } from "@/lib/types";
 import { makeId } from "@/lib/id";
 
@@ -11,10 +11,14 @@ export default function WordsPage() {
   const [pinyin, setPinyin] = useState("");
   const [meaning, setMeaning] = useState("");
   const [loading, setLoading] = useState(true);
+  const [hasDueWords, setHasDueWords] = useState(false);
 
   async function refresh() {
     const all = await db.words.orderBy("createdAt").reverse().toArray();
     setWords(all);
+
+    const due = await getDueWords();
+    setHasDueWords(due.length > 0);
   }
 
   useEffect(() => {
@@ -39,8 +43,9 @@ export default function WordsPage() {
       createdAt: now,
       repetitions: 0,
       intervalDays: 0,
-      ease: 2.5,
-      nextReviewAt: now,
+      // word.ease is repurposed to store stabilityDays (S) for the forgetting curve model
+      ease: 1.0,
+      nextReviewAt: 0,
     };
 
     await db.words.add(newWord);
@@ -53,6 +58,21 @@ export default function WordsPage() {
 
   async function removeWord(id: string) {
     await db.words.delete(id);
+    await refresh();
+  }
+
+  async function logDueWords() {
+    const due = await getDueWords();
+    console.table(due);
+  }
+
+  async function gradeFirstDueWordAsGood() {
+    const due = await getDueWords();
+    if (due.length === 0) {
+      return;
+    }
+
+    await gradeWord(due[0].id, "good");
     await refresh();
   }
 
@@ -90,6 +110,28 @@ export default function WordsPage() {
         </button>
       </form>
 
+      {process.env.NODE_ENV === "development" && (
+        <section className="space-y-2 rounded-lg border p-4">
+          <h2 className="font-medium">Debug</h2>
+          <button
+            type="button"
+            className="rounded-md border px-3 py-2"
+            onClick={logDueWords}
+          >
+            Log due words
+          </button>
+          {hasDueWords && (
+            <button
+              type="button"
+              className="ml-2 rounded-md border px-3 py-2"
+              onClick={gradeFirstDueWordAsGood}
+            >
+              Grade first due word as GOOD
+            </button>
+          )}
+        </section>
+      )}
+
       <section className="space-y-3">
         {loading ? (
           <p>Loading…</p>
@@ -103,6 +145,13 @@ export default function WordsPage() {
                 <div className="text-sm text-gray-600">
                   {w.pinyin} {w.meaning}
                 </div>
+                <button
+                  type="button"
+                  className="mt-2 rounded-md border px-2 py-1 text-sm"
+                  onClick={() => removeWord(w.id)}
+                >
+                  Delete
+                </button>
               </li>
             ))}
           </ul>
