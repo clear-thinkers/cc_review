@@ -63,8 +63,10 @@ export default function WordsPage() {
 
   async function logDueWords() {
     const due = await getDueWords();
+    console.log("due length:", due.length, "now:", Date.now());
     console.table(due);
   }
+  
 
   async function gradeFirstDueWordAsGood() {
     const due = await getDueWords();

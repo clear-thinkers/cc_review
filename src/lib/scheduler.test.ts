@@ -11,7 +11,7 @@ function makeWord(overrides: Partial<Word> = {}): Word {
     createdAt: 1000,
     repetitions: 2,
     intervalDays: 3,
-    ease: 1,
+    ease: 21,
     nextReviewAt: 1000,
     ...overrides,
   };
@@ -87,7 +87,7 @@ describe("calculateNextState", () => {
 
   it("produces larger interval for larger stability from same starting word", () => {
     const now = 99_999;
-    const base = makeWord({ ease: 10, repetitions: 0, nextReviewAt: 0 });
+    const base = makeWord({ ease: 21, repetitions: 0, nextReviewAt: 0 });
 
     const again = calculateNextState(base, "again", now);
     const hard = calculateNextState(base, "hard", now);
