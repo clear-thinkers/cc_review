@@ -2,28 +2,41 @@
 
 import { useEffect, useState } from "react";
 import { db, getDueWords, gradeWord } from "@/lib/db";
-import type { Word } from "@/lib/types";
 import { makeId } from "@/lib/id";
+import type { Grade } from "@/lib/scheduler";
+import type { Word } from "@/lib/types";
+
+const REVIEW_GRADES: Grade[] = ["again", "hard", "good", "easy"];
 
 export default function WordsPage() {
   const [words, setWords] = useState<Word[]>([]);
+  const [dueWords, setDueWords] = useState<Word[]>([]);
   const [hanzi, setHanzi] = useState("");
   const [pinyin, setPinyin] = useState("");
   const [meaning, setMeaning] = useState("");
   const [loading, setLoading] = useState(true);
-  const [hasDueWords, setHasDueWords] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [grading, setGrading] = useState(false);
 
-  async function refresh() {
+  async function refreshWords() {
     const all = await db.words.orderBy("createdAt").reverse().toArray();
     setWords(all);
+  }
 
+  async function refreshDueWords() {
     const due = await getDueWords();
-    setHasDueWords(due.length > 0);
+    setDueWords(due);
+    return due;
+  }
+
+  async function refreshAll() {
+    await refreshWords();
+    await refreshDueWords();
   }
 
   useEffect(() => {
     (async () => {
-      await refresh();
+      await refreshAll();
       setLoading(false);
     })();
   }, []);
@@ -44,7 +57,7 @@ export default function WordsPage() {
       repetitions: 0,
       intervalDays: 0,
       // word.ease is repurposed to store stabilityDays (S) for the forgetting curve model
-      ease: 1.0,
+      ease: 21,
       nextReviewAt: 0,
     };
 
@@ -53,40 +66,44 @@ export default function WordsPage() {
     setHanzi("");
     setPinyin("");
     setMeaning("");
-    await refresh();
+    await refreshAll();
   }
 
   async function removeWord(id: string) {
     await db.words.delete(id);
-    await refresh();
+    await refreshAll();
   }
 
-  async function logDueWords() {
-    const due = await getDueWords();
-    console.log("due length:", due.length, "now:", Date.now());
-    console.table(due);
-  }
-  
-
-  async function gradeFirstDueWordAsGood() {
-    const due = await getDueWords();
-    if (due.length === 0) {
+  async function handleGrade(grade: Grade) {
+    const currentWord = dueWords[0];
+    if (!currentWord || grading) {
       return;
     }
 
-    await gradeWord(due[0].id, "good");
-    await refresh();
+    setGrading(true);
+
+    try {
+      await gradeWord(currentWord.id, { grade });
+      await refreshAll();
+      setShowAnswer(false);
+    } catch (error) {
+      console.error("Failed to grade word", error);
+    } finally {
+      setGrading(false);
+    }
   }
 
+  const currentWord = dueWords[0];
+
   return (
-    <main className="mx-auto max-w-2xl p-6 space-y-6">
+    <main className="mx-auto max-w-2xl space-y-6 p-6">
       <h1 className="text-2xl font-semibold">Words</h1>
 
       <form onSubmit={addWord} className="space-y-3 rounded-lg border p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <input
             className="rounded-md border px-3 py-2"
-            placeholder="汉字"
+            placeholder="??"
             value={hanzi}
             onChange={(e) => setHanzi(e.target.value)}
           />
@@ -104,39 +121,56 @@ export default function WordsPage() {
           />
         </div>
 
-        <button
-          type="submit"
-          className="rounded-md bg-black px-4 py-2 text-white"
-        >
+        <button type="submit" className="rounded-md bg-black px-4 py-2 text-white">
           Add
         </button>
       </form>
 
-      {process.env.NODE_ENV === "development" && (
-        <section className="space-y-2 rounded-lg border p-4">
-          <h2 className="font-medium">Debug</h2>
-          <button
-            type="button"
-            className="rounded-md border px-3 py-2"
-            onClick={logDueWords}
-          >
-            Log due words
-          </button>
-          {hasDueWords && (
-            <button
-              type="button"
-              className="ml-2 rounded-md border px-3 py-2"
-              onClick={gradeFirstDueWordAsGood}
-            >
-              Grade first due word as GOOD
-            </button>
-          )}
-        </section>
-      )}
+      <section className="space-y-3 rounded-lg border p-4">
+        <h2 className="font-medium">Review</h2>
+        <p className="text-sm text-gray-700">Due now: {dueWords.length}</p>
+
+        {currentWord ? (
+          <div className="space-y-4 rounded-lg border p-4">
+            <div className="text-center text-4xl font-semibold">{currentWord.hanzi}</div>
+
+            {showAnswer ? (
+              <>
+                <div className="text-center text-gray-700">{currentWord.pinyin || "(no pinyin)"}</div>
+                <div className="text-center text-gray-700">{currentWord.meaning || "(no meaning)"}</div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {REVIEW_GRADES.map((grade) => (
+                    <button
+                      key={grade}
+                      type="button"
+                      className="rounded-md border px-3 py-2 capitalize disabled:opacity-50"
+                      disabled={grading}
+                      onClick={() => handleGrade(grade)}
+                    >
+                      {grade}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="mx-auto block rounded-md border px-3 py-2"
+                onClick={() => setShowAnswer(true)}
+              >
+                Show answer
+              </button>
+            )}
+          </div>
+        ) : (
+          <p>All caught up ??</p>
+        )}
+      </section>
 
       <section className="space-y-3">
         {loading ? (
-          <p>Loading…</p>
+          <p>Loading...</p>
         ) : words.length === 0 ? (
           <p>No words yet.</p>
         ) : (

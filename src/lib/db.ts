@@ -2,6 +2,7 @@ import Dexie, { Table } from "dexie";
 import type { Word } from "./types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade } from "./scheduler";
+import type { GradeResult } from "./review";
 
 export class AppDB extends Dexie {
   words!: Table<Word, string>;
@@ -34,7 +35,13 @@ export async function getDueWords(now = Date.now()): Promise<Word[]> {
   return Array.from(byId.values());
 }
 
-export async function gradeWord(id: string, grade: Grade, now = Date.now()): Promise<Word> {
+export async function gradeWord(
+  id: string,
+  gradeOrResult: Grade | GradeResult,
+  now = Date.now()
+): Promise<Word> {
+  const grade = typeof gradeOrResult === "string" ? gradeOrResult : gradeOrResult.grade;
+
   return db.transaction("rw", db.words, async () => {
     const word = await db.words.get(id);
     if (!word) {
