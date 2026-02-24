@@ -1,26 +1,200 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8f3e5;
+  --foreground: #2d4f3f;
+  --surface: #fffaf0;
+  --surface-soft: #f5edd9;
+  --border-soft: #d9c89c;
+  --primary: #57a86f;
+  --primary-strong: #438b5a;
+  --ink-soft: #617866;
+  --shadow-soft: 0 16px 30px rgba(85, 122, 84, 0.18);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-nunito);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-nunito), "Trebuchet MS", "Segoe UI", sans-serif;
+  min-height: 100vh;
+  background-image:
+    radial-gradient(circle at 12% 14%, rgba(115, 183, 131, 0.2), transparent 28%),
+    radial-gradient(circle at 88% 12%, rgba(243, 205, 120, 0.2), transparent 32%),
+    radial-gradient(circle at 80% 86%, rgba(147, 194, 122, 0.18), transparent 26%),
+    radial-gradient(circle at 24% 82%, rgba(127, 166, 206, 0.14), transparent 24%),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.32));
+  background-attachment: fixed;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-baloo-display), "Comic Sans MS", "Trebuchet MS", sans-serif;
+  letter-spacing: 0.02em;
+}
+
+@keyframes float-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.kids-page section {
+  background: var(--surface);
+  border-color: var(--border-soft);
+  border-width: 2px;
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+  animation: float-in 320ms ease both;
+}
+
+.kids-page section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 14% 14%, rgba(255, 255, 255, 0.55), transparent 38%),
+    radial-gradient(circle at 92% 8%, rgba(255, 231, 171, 0.28), transparent 30%);
+}
+
+.kids-page section:nth-of-type(2) {
+  animation-delay: 40ms;
+}
+
+.kids-page section:nth-of-type(3) {
+  animation-delay: 80ms;
+}
+
+.kids-page section:nth-of-type(4) {
+  animation-delay: 120ms;
+}
+
+.kids-page input,
+.kids-page select,
+.kids-page textarea {
+  border-color: var(--border-soft);
+  border-width: 2px;
+  border-radius: 0.95rem;
+  background: #fffdf7;
+}
+
+.kids-page input:focus,
+.kids-page select:focus,
+.kids-page textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(87, 168, 111, 0.18);
+}
+
+.kids-page button {
+  border-radius: 9999px;
+  font-weight: 700;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.kids-page button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.kids-page button.bg-black {
+  border: 2px solid #7bc28f;
+  background: linear-gradient(135deg, var(--primary), #74c08b);
+  color: #fff;
+  box-shadow: 0 9px 18px rgba(66, 126, 87, 0.3);
+}
+
+.kids-page button.bg-black:hover:not(:disabled) {
+  border-color: #6dae80;
+  background: linear-gradient(135deg, var(--primary-strong), var(--primary));
+}
+
+.kids-page button.border {
+  border-width: 2px;
+  border-color: #d5b975;
+  color: #6a5530;
+  background: #fff8e7;
+}
+
+.kids-page button.border:hover:not(:disabled) {
+  background: #fff1cd;
+}
+
+.kids-page button:disabled {
+  box-shadow: none;
+}
+
+.kids-page table thead tr {
+  background: #f4ecd5;
+}
+
+.kids-page .border-b {
+  border-color: #ecdfbf;
+}
+
+.kids-page .text-gray-600 {
+  color: var(--ink-soft);
+}
+
+.kids-page .text-gray-700 {
+  color: #4e654f;
+}
+
+.kids-page .stats-gold {
+  border-color: #d8b86b;
+  color: #5d4a23;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  background:
+    linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.5) 0%,
+      rgba(255, 255, 255, 0.1) 18%,
+      rgba(255, 255, 255, 0.42) 35%,
+      rgba(255, 255, 255, 0.1) 52%,
+      rgba(255, 255, 255, 0.5) 68%,
+      rgba(255, 255, 255, 0.1) 86%,
+      rgba(255, 255, 255, 0.5) 100%
+    ),
+    linear-gradient(145deg, #fff7da 0%, #f2dc9a 35%, #eecf81 52%, #f7e6b6 74%, #fff6d3 100%),
+    repeating-linear-gradient(
+      125deg,
+      rgba(255, 244, 214, 0.18) 0 6px,
+      rgba(208, 160, 67, 0.08) 6px 12px
+    );
+  background-size:
+    220px 100%,
+    100% 100%,
+    24px 24px;
+  background-repeat: repeat-x, no-repeat, repeat;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -14px 24px rgba(176, 132, 43, 0.13),
+    0 10px 20px rgba(154, 119, 43, 0.18);
+}
+
+.kids-page .stats-gold strong {
+  color: #6a5326;
 }

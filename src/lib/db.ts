@@ -64,6 +64,7 @@ export async function gradeWord(
   now = Date.now()
 ): Promise<Word> {
   const grade = typeof gradeOrResult === "string" ? gradeOrResult : gradeOrResult.grade;
+  const source = typeof gradeOrResult === "string" ? undefined : gradeOrResult.source;
 
   return db.transaction("rw", db.words, async () => {
     const word = await db.words.get(id);
@@ -72,6 +73,8 @@ export async function gradeWord(
     }
 
     const updated = calculateNextState(word, grade, now);
+    updated.reviewCount = (word.reviewCount ?? 0) + 1;
+    updated.testCount = (word.testCount ?? 0) + (source === "fillTest" ? 1 : 0);
     await db.words.put(updated);
     return updated;
   });
