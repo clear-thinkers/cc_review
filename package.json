@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "download-xinhua-data": "node scripts/download-xinhua-data.mjs"
   },
   "dependencies": {
     "dexie": "^4.3.0",

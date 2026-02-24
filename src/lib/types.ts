@@ -14,4 +14,6 @@ export type Word = {
   intervalDays: number;
   ease: number;
   nextReviewAt: number;
+  reviewCount?: number;
+  testCount?: number;
 };
