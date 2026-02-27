@@ -18,9 +18,6 @@ export function useXinhuaFlashcardInfo(
   character: string,
   options: XinhuaFlashcardQueryOptions = {}
 ): UseXinhuaFlashcardInfoResult {
-  const ciLimit = options.ciLimit;
-  const idiomLimit = options.idiomLimit;
-  const xiehouyuLimit = options.xiehouyuLimit;
   const includeAllMatches = options.includeAllMatches;
 
   const [data, setData] = useState<XinhuaFlashcardInfo | null>(null);
@@ -51,12 +48,7 @@ export function useXinhuaFlashcardInfo(
         setLoading(true);
         setError(null);
 
-        const nextData = await getXinhuaFlashcardInfo(trimmedCharacter, {
-          ciLimit,
-          idiomLimit,
-          xiehouyuLimit,
-          includeAllMatches,
-        });
+        const nextData = await getXinhuaFlashcardInfo(trimmedCharacter, { includeAllMatches });
 
         if (!active) {
           return;
@@ -83,7 +75,7 @@ export function useXinhuaFlashcardInfo(
     return () => {
       active = false;
     };
-  }, [character, ciLimit, idiomLimit, xiehouyuLimit, includeAllMatches, reloadNonce]);
+  }, [character, includeAllMatches, reloadNonce]);
 
   return {
     data,

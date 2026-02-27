@@ -2,13 +2,23 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const DATA_FILES = ["word.json", "ci.json", "idiom.json", "xiehouyu.json", "ci.csv"];
-const DEFAULT_REPO_OWNER = "mitchell-dream";
-const DEFAULT_REPO_NAME = "chinese-xinhua";
-const DEFAULT_BRANCHES = ["master", "main"];
+const DATASET_FILES = {
+  full: [
+    { sourcePath: "character/char_base.json", outputName: "char_base.json" },
+    { sourcePath: "character/char_detail.json", outputName: "char_detail.json" },
+  ],
+  common: [
+    { sourcePath: "character/common/char_common_base.json", outputName: "char_base.json" },
+    { sourcePath: "character/common/char_common_detail.json", outputName: "char_detail.json" },
+  ],
+};
+
+const DEFAULT_REPO_OWNER = "mapull";
+const DEFAULT_REPO_NAME = "chinese-dictionary";
+const DEFAULT_BRANCHES = ["main", "master"];
 
 function readBranchesFromEnv() {
-  const value = process.env.XINHUA_REPO_BRANCHES;
+  const value = process.env.CHINESE_DICTIONARY_REPO_BRANCHES || process.env.XINHUA_REPO_BRANCHES;
   if (!value) {
     return DEFAULT_BRANCHES;
   }
@@ -21,20 +31,29 @@ function readBranchesFromEnv() {
   return branches.length > 0 ? branches : DEFAULT_BRANCHES;
 }
 
-function buildRawUrl(owner, repo, branch, filename) {
-  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/data/${filename}`;
+function readDatasetVariantFromEnv() {
+  const variant = (process.env.CHINESE_DICTIONARY_VARIANT || "full").trim().toLowerCase();
+  if (variant === "common") {
+    return "common";
+  }
+
+  return "full";
 }
 
-async function fetchDataFile({ owner, repo, branches, filename }) {
+function buildRawUrl(owner, repo, branch, sourcePath) {
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${sourcePath}`;
+}
+
+async function fetchDataFile({ owner, repo, branches, sourcePath }) {
   const errors = [];
 
   for (const branch of branches) {
-    const url = buildRawUrl(owner, repo, branch, filename);
+    const url = buildRawUrl(owner, repo, branch, sourcePath);
 
     try {
       const response = await fetch(url, {
         headers: {
-          "User-Agent": "cc_review/download-xinhua-data",
+          "User-Agent": "cc_review/download-dictionary-data",
         },
       });
 
@@ -53,29 +72,32 @@ async function fetchDataFile({ owner, repo, branches, filename }) {
     }
   }
 
-  throw new Error(`Failed to download ${filename}. Tried branches ${branches.join(", ")}. ${errors.join(" | ")}`);
+  throw new Error(`Failed to download ${sourcePath}. Tried branches ${branches.join(", ")}. ${errors.join(" | ")}`);
 }
 
 async function main() {
-  const owner = process.env.XINHUA_REPO_OWNER || DEFAULT_REPO_OWNER;
-  const repo = process.env.XINHUA_REPO_NAME || DEFAULT_REPO_NAME;
+  const owner =
+    process.env.CHINESE_DICTIONARY_REPO_OWNER || process.env.XINHUA_REPO_OWNER || DEFAULT_REPO_OWNER;
+  const repo = process.env.CHINESE_DICTIONARY_REPO_NAME || process.env.XINHUA_REPO_NAME || DEFAULT_REPO_NAME;
   const branches = readBranchesFromEnv();
+  const variant = readDatasetVariantFromEnv();
+  const files = DATASET_FILES[variant];
 
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const projectRoot = path.resolve(scriptDir, "..");
   const outputDir = path.join(projectRoot, "public", "data");
 
   await mkdir(outputDir, { recursive: true });
-  console.log(`Downloading Xinhua dataset from ${owner}/${repo}...`);
+  console.log(`Downloading dictionary dataset (${variant}) from ${owner}/${repo}...`);
 
-  for (const filename of DATA_FILES) {
-    const { branch, body } = await fetchDataFile({ owner, repo, branches, filename });
-    const outputPath = path.join(outputDir, filename);
+  for (const file of files) {
+    const { branch, body } = await fetchDataFile({ owner, repo, branches, sourcePath: file.sourcePath });
+    const outputPath = path.join(outputDir, file.outputName);
     await writeFile(outputPath, body, "utf8");
-    console.log(`Saved ${filename} (${branch})`);
+    console.log(`Saved ${file.outputName} from ${file.sourcePath} (${branch})`);
   }
 
-  console.log("Xinhua dataset download complete.");
+  console.log("Dictionary dataset download complete.");
 }
 
 main().catch((error) => {

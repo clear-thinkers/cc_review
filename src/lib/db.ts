@@ -1,6 +1,7 @@
 import Dexie, { Table } from "dexie";
 import type { Word } from "./types";
 import type { FillTest } from "./fillTest";
+import type { FlashcardLlmResponse } from "./flashcardLlm";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade } from "./scheduler";
 import type { GradeResult } from "./review";
@@ -16,10 +17,19 @@ export type DisabledFillTestEntry = {
   updatedAt: number;
 };
 
+export type FlashcardContentEntry = {
+  key: string;
+  character: string;
+  pronunciation: string;
+  content: FlashcardLlmResponse;
+  updatedAt: number;
+};
+
 export class AppDB extends Dexie {
   words!: Table<Word, string>;
   fillTests!: Table<FillTestOverride, string>;
   disabledFillTests!: Table<DisabledFillTestEntry, string>;
+  flashcardContents!: Table<FlashcardContentEntry, string>;
 
   constructor() {
     super("cc_review_db");
@@ -34,6 +44,12 @@ export class AppDB extends Dexie {
       words: "id, hanzi, nextReviewAt, createdAt",
       fillTests: "hanzi, updatedAt",
       disabledFillTests: "hanzi, updatedAt",
+    });
+    this.version(4).stores({
+      words: "id, hanzi, nextReviewAt, createdAt",
+      fillTests: "hanzi, updatedAt",
+      disabledFillTests: "hanzi, updatedAt",
+      flashcardContents: "key, character, pronunciation, updatedAt",
     });
   }
 }
@@ -114,4 +130,51 @@ export async function putDisabledFillTest(hanzi: string): Promise<void> {
 
 export async function deleteDisabledFillTest(hanzi: string): Promise<void> {
   await db.disabledFillTests.delete(hanzi);
+}
+
+function makeFlashcardContentKey(character: string, pronunciation: string): string {
+  return `${character}|${pronunciation}`;
+}
+
+export async function getFlashcardContent(
+  character: string,
+  pronunciation: string
+): Promise<FlashcardContentEntry | undefined> {
+  return db.flashcardContents.get(makeFlashcardContentKey(character, pronunciation));
+}
+
+export async function getFlashcardContentsByCharacter(character: string): Promise<FlashcardContentEntry[]> {
+  return db.flashcardContents.where("character").equals(character).toArray();
+}
+
+export async function getAllFlashcardContents(): Promise<FlashcardContentEntry[]> {
+  return db.flashcardContents.toArray();
+}
+
+export async function putFlashcardContent(
+  character: string,
+  pronunciation: string,
+  content: FlashcardLlmResponse
+): Promise<void> {
+  await db.flashcardContents.put({
+    key: makeFlashcardContentKey(character, pronunciation),
+    character,
+    pronunciation,
+    content,
+    updatedAt: Date.now(),
+  });
+}
+
+export async function deleteFlashcardContent(character: string, pronunciation: string): Promise<void> {
+  await db.flashcardContents.delete(makeFlashcardContentKey(character, pronunciation));
+}
+
+export async function putFlashcardContents(entries: Array<Omit<FlashcardContentEntry, "updatedAt">>): Promise<void> {
+  const now = Date.now();
+  await db.flashcardContents.bulkPut(
+    entries.map((entry) => ({
+      ...entry,
+      updatedAt: now,
+    }))
+  );
 }
