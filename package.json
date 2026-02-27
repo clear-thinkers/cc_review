@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "download-dictionary-data": "node scripts/download-xinhua-data.mjs",
-    "download-xinhua-data": "npm run download-dictionary-data"
+    "download-xinhua-data": "npm run download-dictionary-data",
+    "check:encoding": "node scripts/check-mojibake.mjs"
   },
   "dependencies": {
     "dexie": "^4.3.0",

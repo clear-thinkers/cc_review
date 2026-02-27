@@ -25,6 +25,7 @@ import { makeId } from "@/lib/id";
 import { calculateNextState, type Grade } from "@/lib/scheduler";
 import type { FillTest, Word } from "@/lib/types";
 import { getXinhuaFlashcardInfo, resetXinhuaCachesForTests } from "@/lib/xinhua";
+import { wordsStrings } from "./words.strings";
 
 const SLOT_INDICES: Array<0 | 1 | 2> = [0, 1, 2];
 const QUIZ_SELECTION_MODES = ["all", "10", "20", "30", "manual"] as const;
@@ -155,18 +156,24 @@ type AdminStatsFilter =
 type AdminTargetContentStatus = "missing_content" | "ready_for_testing" | "excluded_for_testing";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const NAV_ITEMS: Array<{ href: string; label: string; page: NavPage }> = [
-  { href: "/words/add", label: "\u6dfb\u52a0\u6c49\u5b57 / Add Characters", page: "add" },
-  { href: "/words/all", label: "\u5168\u90e8\u6c49\u5b57 / All Characters", page: "all" },
-  { href: "/words/admin", label: "\u5185\u5bb9\u7ba1\u7406 / Content Admin", page: "admin" },
-  { href: "/words/review", label: "\u5f85\u590d\u4e60 / Due Review", page: "review" },
-];
-const GRADE_LABELS = {
-  again: "\u4e0d\u8bb0\u5f97\u4e86 / Don't remember",
-  hard: "\u90e8\u5206\u8ba4\u8bc6 / Partially know",
-  good: "\u57fa\u672c\u8ba4\u8bc6 / Mostly know",
-  easy: "\u5168\u90e8\u8ba4\u8bc6 / Fully know",
-} as const;
+
+function getNavItems(str: typeof wordsStrings.en) {
+  return [
+    { href: "/words/add", label: `${str.nav.addCharacters}`, page: "add" as const },
+    { href: "/words/all", label: `${str.nav.allCharacters}`, page: "all" as const },
+    { href: "/words/admin", label: `${str.nav.contentAdmin}`, page: "admin" as const },
+    { href: "/words/review", label: `${str.nav.dueReview}`, page: "review" as const },
+  ];
+}
+
+function getGradeLabels(str: typeof wordsStrings.en) {
+  return {
+    again: str.grades.again,
+    hard: str.grades.hard,
+    good: str.grades.good,
+    easy: str.grades.easy,
+  } as const;
+}
 
 const HANZI_CHAR_REGEX = /\p{Script=Han}/u;
 
@@ -251,16 +258,16 @@ function formatProbability(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-function getSelectionModeLabel(mode: QuizSelectionMode): string {
+function getSelectionModeLabel(mode: QuizSelectionMode, str: typeof wordsStrings.en): string {
   if (mode === "all") {
-    return "全部待测 / All due";
+    return str.fillTest.selectionModes.all;
   }
 
   if (mode === "manual") {
-    return "手动选择 / Manual selection";
+    return str.fillTest.selectionModes.manualSelection;
   }
 
-  return `${mode} 个待测汉字 / ${mode} due characters`;
+  return `${mode} ${str.fillTest.selectionModes.custom.split("{count}")[1]}`;
 }
 
 function parseQuizPhraseIndex(raw: string): 0 | 1 | 2 | null {
@@ -774,6 +781,8 @@ function renderSentenceWithPinyin(sentence: string, pinyin: string): ReactNode {
 }
 
 export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
+  const locale = "en" as const;
+  const str = wordsStrings[locale];
   const router = useRouter();
   const searchParams = useSearchParams();
   const [words, setWords] = useState<Word[]>([]);
@@ -838,6 +847,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
   const activeMenuPage: NavPage = isFlashcardReviewPage || isFillTestReviewPage ? "review" : page;
   const requestedReviewWordId = searchParams.get("wordId");
 
+const gradeLabels = getGradeLabels(str);
   const fillTestDueWords = useMemo(() => dueWords.filter(hasFillTest), [dueWords]);
   const skippedDueCount = dueWords.length - fillTestDueWords.length;
   const manualSelectionSet = useMemo(() => new Set(manualSelectedWordIds), [manualSelectedWordIds]);
@@ -1329,18 +1339,18 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
   const adminEmptyTableMessage = useMemo(() => {
     if (adminStatsFilter === "missing_content") {
-      return "\u5df2\u65e0\u672a\u5b8c\u6210\u6761\u76ee / No missing targets.";
+      return "No missing targets.";
     }
     if (adminStatsFilter === "with_content") {
-      return "\u6682\u65e0\u5df2\u5b8c\u6210\u6761\u76ee / No targets with content.";
+      return "No targets with content.";
     }
     if (adminStatsFilter === "ready_for_testing") {
-      return "\u6682\u65e0\u5f55\u5165\u9898\u5e93\u6761\u76ee / No targets ready for testing.";
+      return "No targets ready for testing.";
     }
     if (adminStatsFilter === "excluded_for_testing") {
-      return "\u6682\u65e0\u4e0d\u5f55\u5165\u9898\u5e93\u6761\u76ee / No targets excluded for testing.";
+      return "No targets excluded for testing.";
     }
-    return "\u6682\u65e0\u8868\u683c\u6570\u636e\uff08\u8bf7\u5148\u9884\u751f\u6210\u6216\u4fdd\u5b58\u5185\u5bb9\uff09 / No table data yet. Preload or save content first.";
+    return "No table data yet. Preload or save content first.";
   }, [adminStatsFilter]);
 
   function toggleAllWordsSort(nextKey: AllWordsSortKey) {
@@ -1365,18 +1375,18 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
   function getSortIndicator(key: AllWordsSortKey): string {
     if (allWordsSortKey !== key) {
-      return "\u2195";
+      return "↕";
     }
 
-    return allWordsSortDirection === "asc" ? "\u2191" : "\u2193";
+    return allWordsSortDirection === "asc" ? "↑" : "↓";
   }
 
   function getDueSortIndicator(key: DueWordsSortKey): string {
     if (dueWordsSortKey !== key) {
-      return "\u2195";
+      return "↕";
     }
 
-    return dueWordsSortDirection === "asc" ? "\u2191" : "\u2193";
+    return dueWordsSortDirection === "asc" ? "↑" : "↓";
   }
 
   function clearForm() {
@@ -1403,7 +1413,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
       router.push("/words/review");
       return;
     }
-    setFlashcardNotice("\u95ea\u5361\u590d\u4e60\u5df2\u505c\u6b62 / Flashcard review stopped.");
+    setFlashcardNotice("Flashcard review stopped.");
     await refreshAll();
   }
 
@@ -1429,7 +1439,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
       router.push("/words/review");
       return;
     }
-    setQuizNotice("\u586b\u7a7a\u6d4b\u8bd5\u5df2\u505c\u6b62 / Fill-test quiz stopped.");
+    setQuizNotice("Fill-test quiz stopped.");
     await refreshAll();
   }
 
@@ -2626,14 +2636,14 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
     e.preventDefault();
     const input = hanzi.trim();
     if (!input) {
-      setFormNotice("\u8bf7\u8f93\u5165\u6c49\u5b57\u3002/ Please enter Chinese characters.");
+      setFormNotice("Please enter Chinese characters.");
       return;
     }
 
     const parsedCharacters = extractUniqueHanzi(input);
     if (parsedCharacters.length === 0) {
       setFormNotice(
-        "\u53ea\u652f\u6301\u6dfb\u52a0\u6c49\u5b57\uff08\u5355\u5b57\uff09\u3002/ Only Chinese characters are allowed."
+        "Only Chinese characters are allowed."
       );
       return;
     }
@@ -2665,15 +2675,15 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
     const skippedExistingCount = parsedCharacters.length - hanziToAdd.length;
     if (newWords.length === 0) {
       setFormNotice(
-        "\u6ca1\u6709\u65b0\u589e\u6c49\u5b57\uff08\u53ef\u80fd\u90fd\u5df2\u5b58\u5728\uff09\u3002/ No new characters were added."
+        "No new characters were added."
       );
     } else if (skippedExistingCount > 0) {
       setFormNotice(
-        `\u5df2\u6dfb\u52a0 ${newWords.length} \u4e2a\u6c49\u5b57\uff0c\u8df3\u8fc7 ${skippedExistingCount} \u4e2a\u5df2\u5b58\u5728\u5b57\u7b26\u3002/ Added ${newWords.length} character(s), skipped ${skippedExistingCount} existing.`
+        `Added ${newWords.length} character(s), skipped ${skippedExistingCount} existing.`
       );
     } else {
       setFormNotice(
-        `\u5df2\u6dfb\u52a0 ${newWords.length} \u4e2a\u6c49\u5b57\u3002/ Added ${newWords.length} character(s).`
+        `Added ${newWords.length} character(s).`
       );
     }
 
@@ -2824,7 +2834,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
     } catch (error) {
       console.error("Failed to grade flashcard word", error);
       setFlashcardNotice(
-        `\u672a\u80fd\u4fdd\u5b58 "${currentFlashcardWord.hanzi}" \u7684\u95ea\u5361\u8bc4\u5206 / Failed to save flashcard grade for "${currentFlashcardWord.hanzi}".`
+        `Failed to save flashcard grade for "${currentFlashcardWord.hanzi}".`
       );
     } finally {
       setFlashcardSubmitting(false);
@@ -2843,7 +2853,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
         return;
       }
       setFlashcardCompleted(true);
-      setFlashcardNotice("\u95ea\u5361\u590d\u4e60\u5df2\u5b8c\u6210 / Flashcard review complete.");
+      setFlashcardNotice("Flashcard review complete.");
       await refreshAll();
       return;
     }
@@ -2854,7 +2864,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
   function startQuizSessionWithWords(wordsForSession: TestableWord[]) {
     if (wordsForSession.length === 0) {
-      setQuizNotice("\u672a\u627e\u5230\u5339\u914d\u6b64\u586b\u7a7a\u9009\u62e9\u7684\u5f85\u6d4b\u6c49\u5b57 / No due characters match this fill-test selection.");
+      setQuizNotice("No due characters match this fill-test selection.");
       return;
     }
 
@@ -2883,7 +2893,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
     const wordsForSession = requestedWord ? [requestedWord] : sortedDueWords.map((entry) => entry.word);
     if (wordsForSession.length === 0) {
       setFlashcardNotice(
-        "\u5f53\u524d\u6ca1\u6709\u53ef\u7528\u4e8e\u95ea\u5361\u7684\u5f85\u590d\u4e60\u6c49\u5b57 / No due characters available for flashcard review."
+        "No due characters available for flashcard review."
       );
       return;
     }
@@ -2925,7 +2935,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
     const wordsForSession = requestedWord ? [requestedWord] : fillTestDueWords;
     if (wordsForSession.length === 0) {
       setQuizNotice(
-        "\u672a\u627e\u5230\u5339\u914d\u6b64\u586b\u7a7a\u9009\u62e9\u7684\u5f85\u6d4b\u6c49\u5b57 / No due characters match this fill-test selection."
+        "No due characters match this fill-test selection."
       );
       return;
     }
@@ -3013,7 +3023,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
         return;
       }
       setQuizCompleted(true);
-      setQuizNotice("\u586b\u7a7a\u6d4b\u8bd5\u5df2\u5b8c\u6210 / Fill-test quiz complete.");
+      setQuizNotice("Fill-test quiz complete.");
       await refreshAll();
       return;
     }
@@ -3026,15 +3036,15 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
   return (
     <main className="kids-page mx-auto max-w-7xl p-6">
-      <h1 className="text-2xl font-semibold">{"\u6c49\u5b57\u590d\u4e60\u6e38\u620f / Chinese Character Review Game"}</h1>
+      <h1 className="text-2xl font-semibold">Chinese Character Review Game</h1>
       <div className="mt-6 grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <section className="space-y-3 rounded-lg border pt-4 px-4 pb-6 lg:self-start">
-          <h2 className="font-medium">{"\u83dc\u5355 / Menu"}</h2>
+          <h2 className="font-medium">{str.nav.menu}</h2>
           <p className="text-sm text-gray-700">
-            {"\u5728\u9875\u9762\u4e4b\u95f4\u5bfc\u822a\u3002 / Navigate between pages."}
+            {str.nav.navigateBetweenPages}
           </p>
           <div className="flex flex-col gap-2">
-            {NAV_ITEMS.map((item) => (
+            {getNavItems(str).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -3050,13 +3060,13 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
           </div>
           <div className="stats-gold select-none space-y-1 rounded-md border p-3 text-sm text-gray-700">
             <p>
-              <strong>{"\u603b\u5b57\u6570 / Total characters:"}</strong> {allWordsSummary.totalWords}
+              <strong>{str.sidebar.totalCharacters}</strong> {allWordsSummary.totalWords}
             </p>
             <p>
-              <strong>{"\u5f53\u524d\u5f85\u590d\u4e60 / Due now:"}</strong> {allWordsSummary.dueNow}
+              <strong>{str.sidebar.dueNow}</strong> {allWordsSummary.dueNow}
             </p>
             <p>
-              <strong>{"\u5e73\u5747\u719f\u6089\u5ea6 / Avg familiarity:"}</strong>{" "}
+              <strong>{str.sidebar.avgFamiliarity}</strong>{" "}
               {formatProbability(allWordsSummary.averageFamiliarity)}
             </p>
           </div>
@@ -3065,24 +3075,22 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
         <div className="space-y-6">
       {page === "add" ? (
       <section className="space-y-3 rounded-lg border p-4">
-        <h2 className="font-medium">{"\u6dfb\u52a0\u6c49\u5b57 / Add Characters"}</h2>
+        <h2 className="font-medium">{str.add.pageTitle}</h2>
         <p className="text-sm text-gray-700">
-          {"\u4ec5\u6dfb\u52a0\u6c49\u5b57\uff08\u5355\u5b57\uff09\uff0c\u652f\u6301\u6279\u91cf\u8f93\u5165\u3002\u53ef\u4f7f\u7528\u9017\u53f7\u3001\u7a7a\u683c\u6216\u6362\u884c\u5206\u9694\u3002"}
-          / Add Chinese characters only (single
-          characters). Batch input is supported with commas, spaces, or line breaks.
+          {str.add.pageDescription}
         </p>
         {formNotice ? <p className="text-sm text-blue-700">{formNotice}</p> : null}
 
         <form onSubmit={addWord} className="space-y-3 rounded-md border p-3">
           <input
             className="w-full rounded-md border px-3 py-2"
-            placeholder={"\u6c49\u5b57\u6279\u91cf\u8f93\u5165\uff08\u5982\uff1a\u4f60, \u597d \u5b66 \u4e60\uff09 / Batch characters (e.g. \u4f60, \u597d \u5b66 \u4e60)"}
+            placeholder={str.add.inputPlaceholder}
             value={hanzi}
             onChange={(e) => setHanzi(e.target.value)}
           />
 
           <button type="submit" className="rounded-md bg-black px-4 py-2 text-white">
-            {"\u6279\u91cf\u6dfb\u52a0\u6c49\u5b57 / Add Characters"}
+            {str.add.submitButton}
           </button>
         </form>
       </section>
@@ -3091,8 +3099,8 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
       <>
       {isDueReviewPage ? (
       <section className="space-y-3 rounded-lg border p-4">
-        <h2 className="font-medium">{"\u5f85\u590d\u4e60\u6c49\u5b57 / Due Characters"}</h2>
-        <p className="text-sm text-gray-700">{"\u5f53\u524d\u5f85\u590d\u4e60 / Due now:"} {dueWords.length}</p>
+        <h2 className="font-medium">{str.due.pageTitle}</h2>
+        <p className="text-sm text-gray-700">{str.due.dueNowLabel} {dueWords.length}</p>
         {dueWords.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             <button
@@ -3100,7 +3108,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
               className="rounded-md bg-black px-4 py-2 text-white"
               onClick={() => openFlashcardReview()}
             >
-              {"\u5f00\u59cb\u95ea\u5361\u590d\u4e60 / Start flashcard review"}
+              {str.due.startFlashcard}
             </button>
             <button
               type="button"
@@ -3108,15 +3116,15 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
               disabled={fillTestDueWords.length === 0}
               onClick={() => openFillTestReview()}
             >
-              {"\u5f00\u59cb\u586b\u7a7a\u6d4b\u8bd5 / Start fill-test review"}
+              {str.due.startFillTest}
             </button>
           </div>
         ) : null}
 
         {loading ? (
-          <p>{"\u6b63\u5728\u52a0\u8f7d\u5f85\u590d\u4e60\u6c49\u5b57... / Loading due characters..."}</p>
+          <p>{str.due.loading}</p>
         ) : dueWords.length === 0 ? (
-          <p className="text-sm text-gray-600">{"\u5f53\u524d\u6ca1\u6709\u5f85\u590d\u4e60\u6c49\u5b57\u3002 / No due characters right now."}</p>
+          <p className="text-sm text-gray-600">{str.due.noCharacters}</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
             <table className="min-w-full border-collapse text-sm">
@@ -3124,7 +3132,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                 <tr className="border-b">
                   <th className="px-3 py-2 text-left">
                     <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleDueWordsSort("hanzi")}>
-                      {"\u6c49\u5b57 / Character"} <span aria-hidden>{getDueSortIndicator("hanzi")}</span>
+                      {str.due.table.character} <span aria-hidden>{getDueSortIndicator("hanzi")}</span>
                     </button>
                   </th>
                   <th className="px-3 py-2 text-left">
@@ -3133,7 +3141,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                       className="inline-flex items-center gap-1"
                       onClick={() => toggleDueWordsSort("nextReviewAt")}
                     >
-                      {"\u4e0b\u6b21\u590d\u4e60\u65e5\u671f / Next Review Date"}{" "}
+                      {str.due.table.nextReviewDate}{" "}
                       <span aria-hidden>{getDueSortIndicator("nextReviewAt")}</span>
                     </button>
                   </th>
@@ -3143,10 +3151,10 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                       className="inline-flex items-center gap-1"
                       onClick={() => toggleDueWordsSort("familiarity")}
                     >
-                      {"\u719f\u6089\u5ea6 / Familiarity"} <span aria-hidden>{getDueSortIndicator("familiarity")}</span>
+                      {str.due.table.familiarity} <span aria-hidden>{getDueSortIndicator("familiarity")}</span>
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left">{"\u64cd\u4f5c / Action"}</th>
+                  <th className="px-3 py-2 text-left">{str.due.table.action}</th>
                 </tr>
               </thead>
               <tbody>
@@ -3162,7 +3170,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                           className="rounded-md border px-2 py-1 text-sm"
                           onClick={() => openFlashcardReview(word.id)}
                         >
-                          {"\u95ea\u5361\u590d\u4e60 / Flashcard review"}
+                          {str.due.table.flashcard}
                         </button>
                         <button
                           type="button"
@@ -3170,7 +3178,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                           disabled={!hasFillTest(word)}
                           onClick={() => openFillTestReview(word.id)}
                         >
-                          {"\u586b\u7a7a\u6d4b\u8bd5 / Fill test"}
+                          {str.due.table.fillTest}
                         </button>
                       </div>
                     </td>
@@ -3185,26 +3193,25 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
       {isFlashcardReviewPage ? (
       <section className="space-y-3 rounded-lg border p-4">
-        <h2 className="font-medium">{"\u95ea\u5361\u590d\u4e60 / Flashcard Review"}</h2>
+        <h2 className="font-medium">{str.flashcard.pageTitle}</h2>
         {flashcardNotice ? <p className="text-sm text-blue-700">{flashcardNotice}</p> : null}
 
         {!flashcardInProgress ? (
           <p className="text-sm text-gray-700">
-            {"\u8bf7\u4ece\u4e0a\u65b9\u5f85\u590d\u4e60\u5217\u8868\u5f00\u59cb\u95ea\u5361\u590d\u4e60 / Start flashcard review from the due-character actions above."}
+            {"Please start a flashcard review from the due-character actions above."}
           </p>
         ) : (
           <div className="space-y-3 rounded-md border p-3">
             {!currentFlashcardWord ? (
               <p className="text-sm text-gray-600">
-                {"\u5f53\u524d\u672a\u52a0\u8f7d\u95ea\u5361\u6c49\u5b57 / No flashcard character loaded."}
+                {str.flashcard.noCharacterLoaded}
               </p>
             ) : (
               <>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">
-                      {"\u7b2c"} {flashcardIndex + 1} {"\u4e2a\uff0c\u5171"} {flashcardQueue.length}{" "}
-                      {"\u4e2a / Character"} {flashcardIndex + 1} {"of"} {flashcardQueue.length}
+                      {str.flashcard.progress.replace("{current}", String(flashcardIndex + 1)).replace("{total}", String(flashcardQueue.length))}
                     </p>
                     <p className="text-5xl font-semibold">{currentFlashcardWord.hanzi}</p>
                   </div>
@@ -3213,7 +3220,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                     className="rounded-md border px-3 py-2"
                     onClick={handleStopFlashcardSession}
                   >
-                    {"\u505c\u6b62\u95ea\u5361 / Stop flashcards"}
+                    {str.flashcard.stopButton}
                   </button>
                 </div>
 
@@ -3224,8 +3231,8 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                     onClick={() => setFlashcardRevealed((previous) => !previous)}
                   >
                     {flashcardRevealed
-                      ? "\u9690\u85cf\u8be6\u60c5 / Hide details"
-                      : "\u663e\u793a\u8be6\u60c5 / Reveal details"}
+                      ? str.flashcard.hideButton
+                      : str.flashcard.revealButton}
                   </button>
                 </div>
 
@@ -3233,19 +3240,17 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                   <div className="space-y-3">
                     {flashcardInfoLoading ? (
                       <p className="text-sm text-gray-600">
-                        {"\u6b63\u5728\u52a0\u8f7d\u8bcd\u5178\u8be6\u60c5... / Loading dictionary details..."}
+                        {str.flashcard.loadingDict}
                       </p>
                     ) : null}
                     {flashcardInfoError ? (
                       <p className="text-sm text-amber-700">
-                        {
-                          "\u65e0\u6cd5\u52a0\u8f7d\u8be5\u95ea\u5361\u7684\u8bcd\u5178\u6570\u636e\uff0c\u4f46\u4ecd\u53ef\u4ee5\u7ee7\u7eed\u8bc4\u5206 / Could not load dictionary data for this card. You can still grade the review."
-                        }
+                        {str.flashcard.noDictData}
                       </p>
                     ) : null}
                     {!flashcardInfoLoading && !flashcardInfoError && flashcardLlmLoading ? (
                       <p className="text-sm text-gray-600">
-                        {"\u6b63\u5728\u8bfb\u53d6\u5df2\u4fdd\u5b58\u5185\u5bb9... / Loading saved content..."}
+                        {str.flashcard.loadingContent}
                       </p>
                     ) : null}
                     {flashcardLlmError ? <p className="text-sm text-amber-700">{flashcardLlmError}</p> : null}
@@ -3258,14 +3263,13 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                                 className="rounded-md border p-3"
                               >
                                 <p className="text-2xl font-semibold">
-                                  {"\u8bfb\u97f3"}{index + 1}{"\uff1a"}
-                                  {entry.pinyin || "(\u6682\u65e0 / not available)"}
+                                  {str.flashcard.pronounciation.prefix}{index + 1}: {entry.pinyin || "(not available)"}
                                 </p>
                                 {(() => {
                                   if (!entry.pinyin) {
                                     return (
                                       <p className="mt-2 text-gray-600">
-                                        {"\uff08\u6682\u65e0\u8bfb\u97f3\uff09 / (pronunciation not available)"}
+                                        {str.flashcard.pronounciation.noMeanings}
                                       </p>
                                     );
                                   }
@@ -3279,9 +3283,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                                   if (!llmResponse) {
                                     return (
                                       <p className="mt-2 text-gray-600">
-                                        {
-                                          "\u6682\u65e0\u5df2\u4fdd\u5b58\u5185\u5bb9\uff0c\u8bf7\u5728\u5185\u5bb9\u7ba1\u7406\u9875\u9884\u751f\u6210\u5e76\u4fdd\u5b58 / No saved content yet. Preload and save from Content Admin."
-                                        }
+                                        {"No saved content yet. Preload and save from Content Admin."}
                                       </p>
                                     );
                                   }
@@ -3289,7 +3291,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                                   if (llmResponse.meanings.length === 0) {
                                     return (
                                       <p className="mt-2 text-gray-600">
-                                        {"\uff08\u6682\u65e0\u53ef\u7528\u91ca\u4e49\u5185\u5bb9\uff09 / (no suitable meanings generated)"}
+                                        {str.flashcard.noPronunciations}
                                       </p>
                                     );
                                   }
@@ -3302,7 +3304,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                                           className="rounded-md border bg-gray-50 p-3"
                                         >
                                           <p className="text-sm font-semibold text-gray-600">
-                                            {"\u91ca\u4e49"} {meaningIndex + 1}
+                                            {str.flashcard.meaning.prefix} {meaningIndex + 1}
                                           </p>
                                           <p className="whitespace-pre-wrap text-base font-semibold">
                                             {meaning.definition}
@@ -3321,7 +3323,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                                                   {phrase.phrase} ({phrase.pinyin})
                                                 </p>
                                                 <p className="mt-1 text-sm text-gray-700">
-                                                  {"\u4f8b\u53e5 / Example: "} {phrase.example}
+                                                  {str.flashcard.meaning.examplePrefix} {phrase.example}
                                                 </p>
                                               </div>
                                             ))}
@@ -3337,13 +3339,13 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                         </div>
                       ) : (
                         <p className="text-sm text-gray-600">
-                          {"\uff08\u65e0\u8bfb\u97f3\u91ca\u4e49\uff09 / (no pronunciation explanations)"}
+                          {str.flashcard.noPronunciations}
                         </p>
                       )}
                   </div>
                 ) : (
                   <p className="text-sm text-gray-600">
-                    {"\u8bc4\u5206\u524d\u8bf7\u5148\u663e\u793a\u8be6\u60c5 / Reveal details before grading this card."}
+                    {str.flashcard.revealPrompt}
                   </p>
                 )}
 
@@ -3354,7 +3356,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                     disabled={!flashcardRevealed || flashcardSubmitting}
                     onClick={() => submitFlashcardGrade("again")}
                   >
-                    {GRADE_LABELS.again}
+                    {gradeLabels.again}
                   </button>
                   <button
                     type="button"
@@ -3362,7 +3364,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                     disabled={!flashcardRevealed || flashcardSubmitting}
                     onClick={() => submitFlashcardGrade("hard")}
                   >
-                    {GRADE_LABELS.hard}
+                    {gradeLabels.hard}
                   </button>
                   <button
                     type="button"
@@ -3370,7 +3372,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                     disabled={!flashcardRevealed || flashcardSubmitting}
                     onClick={() => submitFlashcardGrade("good")}
                   >
-                    {GRADE_LABELS.good}
+                    {gradeLabels.good}
                   </button>
                   <button
                     type="button"
@@ -3378,7 +3380,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                     disabled={!flashcardRevealed || flashcardSubmitting}
                     onClick={() => submitFlashcardGrade("easy")}
                   >
-                    {GRADE_LABELS.easy}
+                    {gradeLabels.easy}
                   </button>
                 </div>
               </>
@@ -3388,13 +3390,13 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
         {flashcardCompleted && flashcardHistory.length > 0 ? (
           <div className="space-y-2 rounded-md border p-3">
-            <h3 className="font-medium">{"\u4e0a\u6b21\u95ea\u5361\u603b\u7ed3 / Last Flashcard Summary"}</h3>
+            <h3 className="font-medium">{str.flashcard.summary.title}</h3>
             <p className="text-sm text-gray-700">
-              {"\u5df2\u590d\u4e60\u6c49\u5b57 / Characters reviewed:"} {flashcardHistory.length}
+              {str.flashcard.summary.charactersReviewed} {flashcardHistory.length}
             </p>
             <p className="text-sm text-gray-700">
-              {GRADE_LABELS.again} {flashcardSummary.again} | {GRADE_LABELS.hard} {flashcardSummary.hard} |{" "}
-              {GRADE_LABELS.good} {flashcardSummary.good} | {GRADE_LABELS.easy} {flashcardSummary.easy}
+              {gradeLabels.again} {flashcardSummary.again} | {gradeLabels.hard} {flashcardSummary.hard} |{" "}
+              {gradeLabels.good} {flashcardSummary.good} | {gradeLabels.easy} {flashcardSummary.easy}
             </p>
           </div>
         ) : null}
@@ -3403,15 +3405,13 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
       {isFillTestReviewPage ? (
       <section className="space-y-3 rounded-lg border p-4">
-        <h2 className="font-medium">{"\u586b\u7a7a\u6d4b\u8bd5 / Fill Test Quiz"}</h2>
+        <h2 className="font-medium">{str.fillTest.pageTitle}</h2>
         <p className="text-sm text-gray-700">
-          {"\u5f53\u524d\u5f85\u6d4b\u6c49\u5b57 / Due now: "} {fillTestDueWords.length}
+          {str.fillTest.dueNowLabel} {fillTestDueWords.length}
         </p>
         {skippedDueCount > 0 ? (
           <p className="text-sm text-amber-700">
-            {skippedDueCount} {"\u4e2a\u5f85\u6d4b\u6c49\u5b57\u6682\u65e0\u586b\u7a7a\u9898 / due character"}
-            {skippedDueCount > 1 ? "s" : ""}
-            {" currently have no fill test."}
+            {skippedDueCount} {str.fillTest.noFillTests}
           </p>
         ) : null}
         {quizNotice ? <p className="text-sm text-blue-700">{quizNotice}</p> : null}
@@ -3427,14 +3427,14 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                     checked={quizSelectionMode === mode}
                     onChange={() => setQuizSelectionMode(mode)}
                   />
-                  <span>{getSelectionModeLabel(mode)}</span>
+                  <span>{getSelectionModeLabel(mode, str)}</span>
                 </label>
               ))}
             </div>
 
             {quizSelectionMode === "manual" ? (
               <p className="text-sm text-gray-600">
-                {"\u8ba1\u5212\u6d4b\u8bd5\u6570\u91cf / Selected characters: "}{" "}
+                {str.fillTest.selectedLabel}{" "}
                 <strong>{plannedQuizWords.length}</strong>
               </p>
             ) : null}
@@ -3442,17 +3442,17 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
             {quizSelectionMode === "manual" ? (
               <div className="space-y-2 overflow-x-auto rounded-md border p-2">
                 <p className="text-sm font-medium">
-                  {"\u4ece\u5f85\u6d4b\u6c49\u5b57\u4e2d\u624b\u52a8\u9009\u62e9 / Manual selection from fill-test due characters"}
+                  {str.fillTest.allCharactersSelection}
                 </p>
                 <table className="min-w-full border-collapse text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className="px-2 py-1 text-left">{"\u6d4b\u8bd5 / Test"}</th>
-                      <th className="px-2 py-1 text-left">{"\u6c49\u5b57 / Character"}</th>
-                      <th className="px-2 py-1 text-left">{"\u6dfb\u52a0\u65f6\u95f4 / Date added"}</th>
-                      <th className="px-2 py-1 text-left">{"\u5e94\u590d\u4e60 / Date due"}</th>
-                      <th className="px-2 py-1 text-left">{"\u4e0b\u6b21\u5e94\u590d\u4e60 / Next review due date"}</th>
-                      <th className="px-2 py-1 text-left">{"\u719f\u6089\u5ea6 / Familiarity"}</th>
+                      <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.test}</th>
+                      <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.hanzi}</th>
+                      <th className="px-2 py-1 text-left">"Date added"</th>
+                      <th className="px-2 py-1 text-left">"Date due"</th>
+                      <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.nextReviewDate}</th>
+                      <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.familiarity}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3491,7 +3491,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                 disabled={plannedQuizWords.length === 0}
                 onClick={startQuizSession}
               >
-                {"\u5f00\u59cb\u586b\u7a7a\u6d4b\u8bd5 / Start fill-test quiz"}
+                {str.fillTest.startButton}
               </button>
               {quizCompleted && quizHistory.length > 0 ? (
                 <button
@@ -3499,7 +3499,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                   className="rounded-md border px-4 py-2"
                   onClick={() => setQuizCompleted(false)}
                 >
-                  {"\u9690\u85cf\u4e0a\u6b21\u603b\u7ed3 / Hide last summary"}
+                  {str.fillTest.hideLastSummary}
                 </button>
               ) : null}
             </div>
@@ -3508,14 +3508,14 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
           <div className="space-y-3 rounded-md border p-3">
             {!currentQuizWord ? (
               <p className="text-sm text-gray-600">
-                {"\u672a\u52a0\u8f7d\u6d4b\u8bd5\u6c49\u5b57 / No quiz character loaded."}
+                {"No quiz character loaded."}
               </p>
             ) : (
               <>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">
-                      {"\u6c49\u5b57\u8fdb\u5ea6 / Character"} {quizIndex + 1} {" / "} {quizQueue.length}
+                      {str.fillTest.gameplay.characterProgress.replace("{current}", String(quizIndex + 1)).replace("{total}", String(quizQueue.length))}
                     </p>
                     <p className="text-3xl font-semibold">{currentQuizWord.hanzi}</p>
                   </div>
@@ -3524,19 +3524,17 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                     className="rounded-md border px-3 py-2"
                     onClick={handleStopQuizSession}
                   >
-                    {"\u505c\u6b62\u6d4b\u8bd5 / Stop quiz"}
+                    {"Stop quiz"}
                   </button>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-[16rem_minmax(0,1fr)]">
                   <aside className="rounded-md border bg-gray-50 p-3">
                     <p className="text-sm font-medium">
-                      {"\u8bcd\u7ec4\u533a / Phrase Bank"}
+                      {str.fillTest.gameplay.phraseBankHeader}
                     </p>
                     <p className="mt-1 text-xs text-gray-600">
-                      {
-                        "\u62d6\u62fd\u5230\u53f3\u4fa7\u7a7a\u683c\uff0c\u6216\u5148\u70b9\u8bcd\u7ec4\u518d\u70b9\u7a7a\u683c / Drag to a blank, or tap phrase then tap blank."
-                      }
+                      {str.fillTest.gameplay.dragInstruction}
                     </p>
                     <ul className="mt-3 space-y-2">
                       {currentQuizWord.fillTest.phrases.map((phrase, phraseIndex) => {
@@ -3606,7 +3604,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                           className="rounded-md border p-3"
                         >
                           <p className="mb-2 text-sm font-bold">
-                            {"\u53e5\u5b50"} {sentenceIndex + 1} {" / Sentence "} {sentenceIndex + 1}
+                            {str.fillTest.gameplay.sentenceLabel.replace("{current}", String(sentenceIndex + 1)).replace("{total}", String(3))}
                           </p>
                           <div className="flex flex-wrap items-center gap-1 text-base font-bold text-gray-900">
                             <span>{beforeBlank}</span>
@@ -3631,7 +3629,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                             >
                               {selectedPhraseIndex === null ? (
                                 <span className="font-medium text-gray-500">
-                                  {"\u62d6\u5230\u8fd9\u91cc / Drop phrase here"}
+                                  {str.fillTest.gameplay.dropPlaceholder}
                                 </span>
                               ) : (
                                 <span className={selectedPhrasePillClass}>{selectedPhrase}</span>
@@ -3650,7 +3648,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                                 setQuizActivePhraseIndex(null);
                               }}
                             >
-                              {"\u6e05\u7a7a / Clear"}
+                              {str.fillTest.gameplay.clearButton}
                             </button>
                           </div>
                         </div>
@@ -3667,16 +3665,16 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                       disabled={quizSubmitting}
                       onClick={submitCurrentQuizWord}
                     >
-                      {"\u63d0\u4ea4\u7b54\u6848 / Submit answer"}
+                      {str.fillTest.gameplay.submitButton}
                     </button>
                     <p className="text-sm text-gray-600">
-                      {"\u672a\u586b\u7a7a\u6570 / Unanswered blanks: "} {unansweredCount}
+                      {str.fillTest.gameplay.unansweredBlanks} {unansweredCount}
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-2 rounded-md border p-3">
                     <p className="text-sm font-bold">
-                      {"\u5f97\u5206 / Score: "} {quizResult.correctCount}/3, {"\u8c03\u5ea6\u7b49\u7ea7 / scheduler tier: "}
+                      {str.fillTest.results.scoreLabel.replace("{correct}", String(quizResult.correctCount))}
                       <span className="capitalize">{quizResult.tier}</span>
                     </p>
                     <ul className="space-y-1 text-sm">
@@ -3690,15 +3688,9 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
                         return (
                           <li key={`${currentQuizWord.id}-result-${resultItem.sentenceIndex}`}>
-                            {"\u53e5\u5b50 / Sentence"} {resultItem.sentenceIndex + 1}:{" "}
-                            {resultItem.isCorrect
-                              ? "\u6b63\u786e / correct"
-                              : "\u9519\u8bef / incorrect"}{" "}
-                            {"(\u4f60\u9009\u62e9 / chosen: "}
-                            {chosenPhrase}
-                            {", \u6b63\u786e\u7b54\u6848 / expected: "}
-                            {expectedPhrase}
-                            {")"}
+                            Sentence {resultItem.sentenceIndex + 1}:{" "}
+                            {resultItem.isCorrect ? "correct" : "incorrect"}{" "}
+                            (chosen: {chosenPhrase}, expected: {expectedPhrase})
                           </li>
                         );
                       })}
@@ -3710,8 +3702,8 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                       onClick={moveQuizForward}
                     >
                       {quizIndex >= quizQueue.length - 1
-                        ? "\u5b8c\u6210\u6d4b\u8bd5 / Finish quiz"
-                        : "\u4e0b\u4e00\u4e2a\u6c49\u5b57 / Next character"}
+                        ? str.fillTest.results.finishButton
+                        : str.fillTest.results.nextCharacterButton}
                     </button>
                   </div>
                 )}
@@ -3722,15 +3714,15 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
         {quizCompleted && quizHistory.length > 0 ? (
           <div className="space-y-2 rounded-md border p-3">
-            <h3 className="font-medium">{"\u4e0a\u6b21\u586b\u7a7a\u603b\u7ed3 / Last Fill-Test Summary"}</h3>
+            <h3 className="font-medium">{str.fillTest.summary.title}</h3>
             <p className="text-sm text-gray-700">
-              {"\u5df2\u6d4b\u6c49\u5b57 / Characters tested: "} {quizHistory.length}
-              {", \u586b\u7a7a\u6b63\u786e / correct blanks: "} {quizSummary.correct}/
+              {str.fillTest.summary.charactersReviewed} {quizHistory.length}
+              {", correct blanks: "} {quizSummary.correct}/
               {quizHistory.length * 3}
             </p>
             <p className="text-sm text-gray-700">
-              {GRADE_LABELS.again} {quizSummary.again} | {GRADE_LABELS.hard} {quizSummary.hard} |{" "}
-              {GRADE_LABELS.good} {quizSummary.good} | {GRADE_LABELS.easy} {quizSummary.easy}
+              {gradeLabels.again} {quizSummary.again} | {gradeLabels.hard} {quizSummary.hard} |{" "}
+              {gradeLabels.good} {quizSummary.good} | {gradeLabels.easy} {quizSummary.easy}
             </p>
           </div>
         ) : null}
@@ -3741,9 +3733,9 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
       {page === "admin" ? (
       <section className="space-y-3 rounded-lg border p-4">
-        <h2 className="font-medium">{"\u5185\u5bb9\u7ba1\u7406 / Content Admin"}</h2>
+        <h2 className="font-medium">{str.admin.pageTitle}</h2>
         <p className="text-sm text-gray-700">
-          {"\u9884\u751f\u6210\u5e76\u7ba1\u7406\u95ea\u5361\u7684\u91ca\u4e49\u3001\u8bcd\u7ec4\u3001\u4f8b\u53e5\u3002\u7528\u6237\u7aef\u5c06\u76f4\u63a5\u8bfb\u53d6\u5df2\u4fdd\u5b58\u5185\u5bb9\u3002 / Preload and manage meanings, phrases, and examples. Review page reads only saved content."}
+          {str.admin.pageDescription}
         </p>
 
         <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -3752,11 +3744,11 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
             className={getAdminStatsCardClass("characters")}
             onClick={() => handleAdminStatsFilterClick("characters")}
             aria-pressed={isAdminStatsFilterActive("characters")}
-            title="Show all targets (character overview)."
+            title={str.admin.filterTooltips.characters}
           >
             <p className="text-sm uppercase text-gray-600">
-              {"\u603b\u6c49\u5b57 / CHARACTERS"}
-              {isAdminStatsFilterActive("characters") ? " (ON)" : ""}
+              {str.admin.stats.characters}
+              {isAdminStatsFilterActive("characters") ? str.admin.filterStateOn : ""}
             </p>
             <p className="text-2xl font-semibold">{adminUniqueCharacterCount}</p>
           </button>
@@ -3765,11 +3757,11 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
             className={getAdminStatsCardClass("targets")}
             onClick={() => handleAdminStatsFilterClick("targets")}
             aria-pressed={isAdminStatsFilterActive("targets")}
-            title="Show all targets."
+            title={str.admin.filterTooltips.allTargets}
           >
             <p className="text-sm uppercase text-gray-600">
-              {"\u8bfb\u97f3\u6761\u76ee / Targets"}
-              {isAdminStatsFilterActive("targets") ? " (ON)" : ""}
+              {str.admin.stats.allTargets}
+              {isAdminStatsFilterActive("targets") ? str.admin.filterStateOn : ""}
             </p>
             <p className="text-2xl font-semibold">{adminTargets.length}</p>
           </button>
@@ -3785,7 +3777,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
             }
           >
             <p className="text-sm uppercase text-gray-600">
-              {"\u5df2\u5b8c\u6210\u7684\u6761\u76ee / Targets with content"}
+              {str.admin.stats.withContent}
               {isAdminStatsFilterActive("with_content") ? " (ON)" : ""}
             </p>
             <p className="text-2xl font-semibold">{adminTargetsWithContentCount}</p>
@@ -3802,7 +3794,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
             }
           >
             <p className="text-sm uppercase text-gray-600">
-              {"\u672a\u5b8c\u6210\u7684\u6761\u76ee / Targets missing content"}
+              {str.admin.stats.missingContent}
               {isAdminStatsFilterActive("missing_content") ? " (ON)" : ""}
             </p>
             <p className="text-2xl font-semibold">{adminMissingCount}</p>
@@ -3821,7 +3813,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
             }
           >
             <p className="text-sm uppercase text-gray-600">
-              {"\u5f55\u5165\u9898\u5e93\u7684\u6761\u76ee / Targets ready for testing"}
+              {str.admin.stats.readyForTesting}
               {isAdminStatsFilterActive("ready_for_testing") ? " (ON)" : ""}
             </p>
             <p className="text-2xl font-semibold">{adminTargetsReadyForTestingCount}</p>
@@ -3838,7 +3830,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
             }
           >
             <p className="text-sm uppercase text-gray-600">
-              {"\u4e0d\u5f55\u5165\u9898\u5e93\u7684\u6761\u76ee / Targets excluded for testing"}
+              {str.admin.stats.excludedForTesting}
               {isAdminStatsFilterActive("excluded_for_testing") ? " (ON)" : ""}
             </p>
             <p className="text-2xl font-semibold">{adminTargetsExcludedForTestingCount}</p>
@@ -3853,8 +3845,8 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
             disabled={adminLoading || adminPreloading || adminTargets.length === 0}
           >
             {adminPreloading
-              ? "\u9884\u751f\u6210\u4e2d... / Preloading..."
-              : "\u9884\u751f\u6210\u672a\u4fdd\u5b58\u5185\u5bb9 / Preload Missing"}
+              ? str.admin.buttons.preloading
+              : str.admin.buttons.preload}
           </button>
         </div>
 
@@ -3865,10 +3857,10 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
           <table className="min-w-full table-fixed border-collapse text-sm">
             <thead>
               <tr className="border-b bg-gray-50">
-                <th className="w-[15%] px-3 py-2 text-left">{"\u6c49\u5b57(\u8bfb\u97f3) / Character (Pronunciation)"}</th>
-                <th className="w-[25%] px-3 py-2 text-left">{"\u91ca\u4e49 / Meaning"}</th>
-                <th className="px-3 py-2 text-left">{"\u8bcd\u7ec4 / Phrase"}</th>
-                <th className="px-3 py-2 text-left">{"\u4f8b\u53e5 / Example"}</th>
+                <th className="w-[15%] px-3 py-2 text-left">{str.admin.table.headers.character} ({str.admin.table.headers.pronunciation})</th>
+                <th className="w-[25%] px-3 py-2 text-left">{str.admin.table.headers.meaningZh}</th>
+                <th className="px-3 py-2 text-left">{str.admin.table.headers.phrase}</th>
+                <th className="px-3 py-2 text-left">{str.admin.table.headers.example}</th>
               </tr>
             </thead>
             <tbody>
@@ -4224,43 +4216,43 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
         </div>
 
         {adminLoading ? (
-          <p className="text-sm text-gray-600">{"\u6b63\u5728\u52a0\u8f7d\u5185\u5bb9\u6761\u76ee... / Loading admin targets..."}</p>
+          <p className="text-sm text-gray-600">{str.admin.loading}</p>
         ) : adminTargets.length === 0 ? (
-          <p className="text-sm text-gray-600">{"\u6682\u65e0\u53ef\u7ba1\u7406\u5185\u5bb9\uff08\u8bf7\u5148\u6dfb\u52a0\u6c49\u5b57\uff09 / No targets yet. Add characters first."}</p>
+          <p className="text-sm text-gray-600">{str.admin.noTargets}</p>
         ) : null}
       </section>
       ) : null}
 
       {page === "all" ? (
       <section className="space-y-3 rounded-lg border p-4">
-        <h2 className="font-medium">{"\u5168\u90e8\u6c49\u5b57 / All Characters"}</h2>
+        <h2 className="font-medium">{str.all.pageTitle}</h2>
         <p className="text-sm text-gray-700">
-          {"\u6c49\u5b57\u5217\u8868\uff0c\u5305\u542b\u590d\u4e60/\u6d4b\u8bd5\u6b21\u6570\u4e0e\u719f\u6089\u5ea6\u3002 / Character list with review/test counts and familiarity."}
+          {str.all.pageDescription}
         </p>
 
         <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex min-h-[76px] w-full flex-col items-center justify-center rounded-md border px-2 py-2 text-center">
-            <p className="text-sm uppercase text-gray-600">{"\u603b\u6c49\u5b57 / Total Characters"}</p>
+            <p className="text-sm uppercase text-gray-600">{str.all.stats.totalCharacters}</p>
             <p className="text-2xl font-semibold">{allWordsSummary.totalWords}</p>
           </div>
           <div className="flex min-h-[76px] w-full flex-col items-center justify-center rounded-md border px-2 py-2 text-center">
-            <p className="text-sm uppercase text-gray-600">{"\u590d\u4e60\u6b21\u6570 / Times Reviewed"}</p>
+            <p className="text-sm uppercase text-gray-600">{str.all.stats.timesReviewed}</p>
             <p className="text-2xl font-semibold">{allWordsSummary.totalReviewed}</p>
           </div>
           <div className="flex min-h-[76px] w-full flex-col items-center justify-center rounded-md border px-2 py-2 text-center">
-            <p className="text-sm uppercase text-gray-600">{"\u6d4b\u8bd5\u6b21\u6570 / Times Tested"}</p>
+            <p className="text-sm uppercase text-gray-600">{str.all.stats.timesTested}</p>
             <p className="text-2xl font-semibold">{allWordsSummary.totalTested}</p>
           </div>
           <div className="flex min-h-[76px] w-full flex-col items-center justify-center rounded-md border px-2 py-2 text-center">
-            <p className="text-sm uppercase text-gray-600">{"\u5e73\u5747\u719f\u6089\u5ea6 / Avg Familiarity"}</p>
+            <p className="text-sm uppercase text-gray-600">{str.all.stats.avgFamiliarity}</p>
             <p className="text-2xl font-semibold">{formatProbability(allWordsSummary.averageFamiliarity)}</p>
           </div>
         </div>
 
         {loading ? (
-          <p>{"\u6b63\u5728\u52a0\u8f7d... / Loading..."}</p>
+          <p>{str.common.loading}</p>
         ) : words.length === 0 ? (
-          <p>{"\u6682\u65e0\u6c49\u5b57\u3002 / No characters yet."}</p>
+          <p>{str.all.noCharacters}</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border">
             <table className="min-w-full border-collapse text-sm">
@@ -4268,35 +4260,35 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
                 <tr className="border-b">
                   <th className="px-3 py-2 text-left">
                     <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleAllWordsSort("hanzi")}>
-                      {"\u6c49\u5b57 / Character"} <span aria-hidden>{getSortIndicator("hanzi")}</span>
+                      {str.all.table.headers.character} <span aria-hidden>{getSortIndicator("hanzi")}</span>
                     </button>
                   </th>
                   <th className="px-3 py-2 text-left">
                     <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleAllWordsSort("createdAt")}>
-                      {"\u6dfb\u52a0\u65e5\u671f / Date Added"} <span aria-hidden>{getSortIndicator("createdAt")}</span>
+                      Date Added <span aria-hidden>{getSortIndicator("createdAt")}</span>
                     </button>
                   </th>
                   <th className="px-3 py-2 text-left">
                     <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleAllWordsSort("nextReviewAt")}>
-                      {"\u4e0b\u6b21\u590d\u4e60\u65e5\u671f / Next Review Date"} <span aria-hidden>{getSortIndicator("nextReviewAt")}</span>
+                      {str.all.table.headers.nextReviewDate} <span aria-hidden>{getSortIndicator("nextReviewAt")}</span>
                     </button>
                   </th>
                   <th className="px-3 py-2 text-left">
                     <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleAllWordsSort("reviewCount")}>
-                      {"\u590d\u4e60\u6b21\u6570 / Times Reviewed"} <span aria-hidden>{getSortIndicator("reviewCount")}</span>
+                      {str.all.table.headers.reviewCount} <span aria-hidden>{getSortIndicator("reviewCount")}</span>
                     </button>
                   </th>
                   <th className="px-3 py-2 text-left">
                     <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleAllWordsSort("testCount")}>
-                      {"\u6d4b\u8bd5\u6b21\u6570 / Times Tested"} <span aria-hidden>{getSortIndicator("testCount")}</span>
+                      {str.all.table.headers.testCount} <span aria-hidden>{getSortIndicator("testCount")}</span>
                     </button>
                   </th>
                   <th className="px-3 py-2 text-left">
                     <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleAllWordsSort("familiarity")}>
-                      {"\u719f\u6089\u5ea6 / Familiarity"} <span aria-hidden>{getSortIndicator("familiarity")}</span>
+                      {str.all.table.headers.familiarity} <span aria-hidden>{getSortIndicator("familiarity")}</span>
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left">{"\u64cd\u4f5c / Action"}</th>
+                  <th className="px-3 py-2 text-left">{str.all.table.headers.actions}</th>
                 </tr>
               </thead>
               <tbody>
