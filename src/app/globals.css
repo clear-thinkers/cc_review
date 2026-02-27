@@ -63,6 +63,7 @@ h3 {
   border-radius: 1.5rem;
   box-shadow: var(--shadow-soft);
   position: relative;
+  isolation: isolate;
   overflow: hidden;
   animation: float-in 320ms ease both;
 }
@@ -72,9 +73,15 @@ h3 {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 0;
   background:
     radial-gradient(circle at 14% 14%, rgba(255, 255, 255, 0.55), transparent 38%),
     radial-gradient(circle at 92% 8%, rgba(255, 231, 171, 0.28), transparent 30%);
+}
+
+.kids-page section > * {
+  position: relative;
+  z-index: 1;
 }
 
 .kids-page section:nth-of-type(2) {
@@ -145,6 +152,11 @@ h3 {
 
 .kids-page button:disabled {
   box-shadow: none;
+}
+
+/* Content Admin stats cards should not inherit pill-shaped buttons. */
+.kids-page .admin-stats-card {
+  border-radius: 0.7rem;
 }
 
 .kids-page table thead tr {
