@@ -140,6 +140,33 @@ describe("normalizeFlashcardLlmResponse", () => {
     expect(response.meanings[0].phrases.some((item) => item.phrase === "打架")).toBe(false);
   });
 
+  it("rejects unsafe phrase 打架 as a regression guard", () => {
+    const response = normalizeFlashcardLlmResponse(
+      {
+        meanings: [
+          {
+            definition: "称说话的对方",
+            phrases: [
+              {
+                phrase: "打架",
+                pinyin: "dǎ jià",
+                example: "他们在打架。",
+              },
+              {
+                phrase: "你们",
+                pinyin: "nǐ men",
+                example: "你们今天认真听课。",
+              },
+            ],
+          },
+        ],
+      },
+      request
+    );
+
+    expect(response.meanings).toEqual([]);
+  });
+
   it("accepts examples longer than 15 chars when within 30-char limit", () => {
     const longExampleRequest: FlashcardLlmRequest = {
       character: "假",

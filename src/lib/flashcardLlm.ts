@@ -1,10 +1,10 @@
-﻿const MAX_MEANINGS = 3;
+const MAX_MEANINGS = 3;
 const MIN_MEANINGS = 1;
 const MAX_PHRASES_PER_MEANING = 2;
 const MAX_EXAMPLE_LENGTH = 30;
 
 const UNSAFE_CONTENT_PATTERN =
-  /(æš´åŠ›|æ‰“æž¶|æ–—æ®´|äº‰åµ|ææƒ§|å®³æ€•|ç„¦è™‘|ä½œå¼Š|æ’’è°Ž|å·æ‡’|çŽ©ç«|å±é™©|è‰²æƒ…|æ¯’å“|èµŒåš|ä»‡æ¨|ä¸æ–‡æ˜Ž)/;
+  /(暴力|打架|斗殴|争吵|恐惧|害怕|焦虑|作弊|撒谎|偷懒|玩火|危险|色情|毒品|赌博|仇恨|不文明)/u;
 
 export type FlashcardLlmRequest = {
   character: string;
@@ -232,4 +232,3 @@ export function parseAndNormalizeFlashcardLlmResponse(
   const payload = extractJsonPayload(rawText);
   return normalizeFlashcardLlmResponse(payload, request);
 }
-

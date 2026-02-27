@@ -1,9 +1,14 @@
+import { appStrings } from "./app.strings";
+
 export default function Home() {
+  const locale = "en" as const;
+  const str = appStrings[locale];
+
   return (
     <main className="p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">{"\u6c49\u5b57\u590d\u4e60\u6e38\u620f / Chinese Character Review Game"}</h1>
+      <h1 className="text-2xl font-semibold">{str.home.pageTitle}</h1>
       <a className="underline" href="/words">
-        {"\u8fdb\u5165\u6e38\u620f / Enter Game"}
+        {str.home.enterGameLink}
       </a>
     </main>
   );

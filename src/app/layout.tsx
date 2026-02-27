@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Baloo_2, Geist_Mono, Nunito } from "next/font/google";
+import { appStrings } from "./app.strings";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -18,8 +19,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "汉字复习游戏 Chinese Character Review Game",
-  description: "汉字复习游戏 Chinese Character Review Game",
+  title: appStrings.en.metadata.title,
+  description: appStrings.en.metadata.description,
 };
 
 export default function RootLayout({
