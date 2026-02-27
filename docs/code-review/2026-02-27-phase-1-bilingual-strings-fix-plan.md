@@ -956,4 +956,4 @@ If issues occur during implementation:
 
 ## Final Phase 1 Status
 
-Phase 1 is complete and ready for merge (as logged in `docs/fix-log/build-fix-log-2026-02-27.md`).
+Phase 1 is complete and ready for merge (as logged in `docs/fix-log/build-fix-log-2026-02-27-bilingual-string-extraction.md`).

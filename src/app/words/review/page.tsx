@@ -1,10 +1,5 @@
-import { Suspense } from "react";
-import WordsWorkspace from "../WordsWorkspace";
+import ReviewPage from "./ReviewPage";
 
 export default function ReviewWordsPage() {
-  return (
-    <Suspense fallback={null}>
-      <WordsWorkspace page="review" />
-    </Suspense>
-  );
+  return <ReviewPage />;
 }

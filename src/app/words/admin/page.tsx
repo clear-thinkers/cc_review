@@ -1,10 +1,5 @@
-import { Suspense } from "react";
-import WordsWorkspace from "../WordsWorkspace";
+import AdminPage from "./AdminPage";
 
 export default function AdminWordsPage() {
-  return (
-    <Suspense fallback={null}>
-      <WordsWorkspace page="admin" />
-    </Suspense>
-  );
+  return <AdminPage />;
 }

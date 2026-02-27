@@ -1,10 +1,5 @@
-import { Suspense } from "react";
-import WordsWorkspace from "../../WordsWorkspace";
+import FlashcardPage from "./FlashcardPage";
 
 export default function FlashcardReviewPage() {
-  return (
-    <Suspense fallback={null}>
-      <WordsWorkspace page="flashcard" />
-    </Suspense>
-  );
+  return <FlashcardPage />;
 }

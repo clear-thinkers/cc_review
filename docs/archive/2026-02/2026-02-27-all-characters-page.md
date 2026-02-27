@@ -1,5 +1,8 @@
 # All Characters Page
 
+> Authoritative behavior rules for this page are maintained in `0_ARCHITECTURE.md` under `All Characters Inventory Rules`.
+> This dated doc is retained for processing flow, page boundaries, risks, and iteration guardrails.
+
 ## Purpose
 
 The All Characters page is the canonical inventory view for all added characters.
@@ -73,3 +76,8 @@ This page is the operational source for quick auditing of learning state across 
 3. If adding filters/search, define interaction precedence with current sort behavior.
 4. If adding bulk actions, require confirmation and rollback/error messaging.
 5. If moving to multi-device sync, re-define `Reset/Delete` semantics with conflict rules.
+
+## Update - 2026-02-27
+
+- Folded authoritative inventory and boundary rules into `0_ARCHITECTURE.md` (`All Characters Inventory Rules`).
+- Retained this dated file as the active companion for flow, boundaries detail, risks, and iteration guardrails.

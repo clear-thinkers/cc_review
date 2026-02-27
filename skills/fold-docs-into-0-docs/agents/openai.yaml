@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fold Docs Into 0_ Docs"
+  short_description: "Fold feature docs into authoritative 0_ docs."
+  default_prompt: "Use $fold-docs-into-0-docs to fold dated docs into the correct 0_ docs and archive superseded files safely."

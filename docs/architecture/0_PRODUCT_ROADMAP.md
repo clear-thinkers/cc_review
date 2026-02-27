@@ -1,18 +1,17 @@
-﻿# PRODUCT_VISION.md
-#### last updated: 2-27-2026 9:45AM
+﻿# 0_PRODUCT_ROADMAP.md
 
-## ⭐ Read This Before Every Feature Build
+_Last updated: 2026-02-27_
 
-**This document is part of the `0_` prefix series.** All markdown files starting with `0_` in `docs/architecture/` are foundational reference documents that should be reviewed before starting any new feature, fix, or change:
+---
 
-- `0_ARCHITECTURE.md` — Product rules, layer boundaries, operational invariants
-- `0_BUILD_CONVENTIONS.md` — Development practices and conventions
-- `0_PRODUCT_ROADMAP.md` — High-level product strategy and planning (this file)
+> For reading order and authority hierarchy, see `AI_CONTRACT.md §1`.
+> This document covers: what to build, in what order, and what is explicitly out of scope.
 
 ---
 
 ## Product Name
-Chinese Review App — Memory Engine for Durable Language Growth
+
+**Chinese Review App — Memory Engine for Durable Language Growth**
 
 ---
 
@@ -20,166 +19,159 @@ Chinese Review App — Memory Engine for Durable Language Growth
 
 Build a long-term Chinese memory system that converts exposure into durable language ability.
 
-This is not a drill app.  
-This is not a content scraper.  
+This is not a drill app.
+This is not a content scraper.
 This is a structured memory engine designed to compound over years.
 
 ---
 
-## 2. Core System Model
+## 2. Tier 1 MVP — Feature Roadmap
 
-The product is organized around four operational pillars:
+Tier 1 MVP focuses on five outcomes: memory quality, content control, review clarity, feedback loops, and a motivation layer.
 
-- Character Ingestion :contentReference[oaicite:0]{index=0}
-- Inventory & State Audit :contentReference[oaicite:1]{index=1}
-- Deterministic Due Review :contentReference[oaicite:2]{index=2}
-- Controlled Content Authoring (Admin) :contentReference[oaicite:3]{index=3}
+Features are sequenced into three phases. **Do not begin a phase until the prior phase is shipped and stable.**
 
-Architecturally, the system is:
+> **Rule:** If a feature is not in this table, it is deferred. See §3.
 
-- Local-first
-- Deterministic
-- Modular (UI / Domain / Service / AI separated) :contentReference[oaicite:4]{index=4}
+### Phase 1 — Stability & Control
 
----
+| # | Feature | Description | Spec | Status |
+|---|---|---|---|---|
+| 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in IndexedDB. Separated by generation type (full / phrase / example / pinyin). | `docs/feature-specs/` | 📋 Planned |
+| 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | — | 📋 Planned |
+| 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. | `docs/feature-specs/` | 📋 Planned |
 
-## 3. Tier Strategy
+### Phase 2 — Structure & Visibility
 
-### Tier 1 — Controlled Micro Context (Current Focus)
+| # | Feature | Description | Spec | Status |
+|---|---|---|---|---|
+| 4 | **Character Level Tagging** | Add `level` field to `Word` (e.g., Grade 1, Grade 2). Assign and filter on All Characters page. Review scope can be filtered by level. Scheduler unaffected. | `docs/feature-specs/` | 📋 Planned |
+| 5 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | `docs/feature-specs/` | 📋 Planned |
 
-Purpose:
-- Establish word-level understanding
-- Support retrieval practice
-- Maintain controlled cognitive load
+### Phase 3 — Motivation Layer
 
-Characteristics:
-- Curated or AI-assisted example sentences
-- Stored and normalized before review
-- Used by flashcard and fill-test
-- Integrated with scheduler
-
-Tier 1 is the engine.
-
-Success Criteria:
-- Stable retention over time
-- Minimal context dependency
-- Clear semantic grounding
-- No AI instability during review
+| # | Feature | Description | Spec | Status |
+|---|---|---|---|---|
+| 6 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | 📋 Planned |
+| 7 | **Rewards System — Bakery MVP** | Coins earned per quiz (accuracy + completion based). Virtual bakery shop: purchase furniture, display items, decorations. New tables: `wallet`, `inventory`, `shopState`. No real money, no scheduler impact. | `docs/feature-specs/` | 📋 Planned |
 
 ---
 
-### Tier 2 — Structured Text Context (Future)
+## 3. Deferred — Do Not Build Yet
 
-Purpose:
-- Reinforce high-frequency phrases in paragraph form
-- Enable transfer from isolated retrieval to text context
-- Introduce light paragraph-level fill tasks
+These are explicitly out of scope. If a task implies one of these, stop and confirm before proceeding.
 
-Will not modify Tier 1 scheduling logic.
-
----
-
-### Tier 3 — Authentic Reading Layer (Future)
-
-Purpose:
-- Language appreciation
-- Reading comprehension
-- Long-form exposure
-
-Does not affect SRS scoring.
+- Tier 2 or Tier 3 features of any kind
+- Reading comprehension or paragraph-level review modes
+- Rewards system features beyond the Bakery MVP defined in Phase 3
+- Streak bonuses or time-based reward mechanics
+- Bulk level-tag editing (noted as future in the level tagging spec)
+- User accounts, authentication, or cloud sync
+- Multi-user or shared vocabulary lists
+- Mobile-native version or PWA packaging
+- Any new AI provider integration
+- Export or import of flashcard data
 
 ---
 
-## 4. Design Principles
+## 4. Tier 1 MVP — Completion Definition
 
-### 4.1 Memory First
+Tier 1 is complete when **all** of the following are true:
 
-- Spaced repetition drives review
-- Retrieval > re-reading
-- Scheduling remains deterministic
+**Content quality is controllable**
+- Admin can edit, version, and reset AI prompts without touching code
+- Prompt changes affect only future generations — review sessions remain deterministic
 
-Content supports memory.
-Memory does not depend on live generation.
+**Scheduling is stable and predictable**
+- Grading model is fully documented
+- Edge cases covered by test suite
+- No silent regressions in `nextReviewAt` or `interval` calculation
 
----
+**Review UI is child-friendly**
+- Flashcard screen: single focus per screen, progressive reveal, large touch targets
+- Fill-test screen: clear blank focus, optional pinyin assist, single blank per question
 
-### 4.2 Quality Over Volume
+**Progress is visible**
+- Parents and children can review session history, accuracy, and improvement over time
 
-High-quality context means:
+**Motivation loop exists**
+- Coins are earned from review completion and accuracy
+- Virtual bakery shop is functional with purchasable items
+- Reward system does not affect scheduler or grading logic
 
-- Natural language
-- Semantic richness
-- Structural clarity
-- Controlled complexity
+**Architecture remains modular**
+- All new features respect layer boundaries (UI / Domain / Service / AI)
+- No live AI during review execution
+- All new IndexedDB tables normalized before write
 
-More sentences ≠ better learning.
-
-Durability > Density.
-
----
-
-### 4.3 Separation of Concerns
-
-- UI handles interaction only
-- Domain handles scheduling and grading
-- Service layer handles DB/network
-- AI is generation-only and never controls scheduling :contentReference[oaicite:5]{index=5}
-
-Review consumes persisted content.
-No live AI during recall.
+Only after all criteria above are met should Tier 2 begin.
 
 ---
 
-## 5. Guardrails for Development
+## 5. Tier Strategy
 
-When adding features, evaluate:
+### Tier 1 — Controlled Micro Context (Current)
+
+Word-level understanding, retrieval practice, controlled cognitive load. All active work is here.
+
+### Tier 2 — Structured Text Context (Future — not started)
+
+Reinforcing high-frequency phrases in paragraph form. Light paragraph-level fill tasks. Will not modify Tier 1 scheduling logic. No implementation until Tier 1 completion definition above is fully met.
+
+### Tier 3 — Authentic Reading Layer (Future — not started)
+
+Long-form exposure and reading comprehension. Does not affect SRS scoring. Deferred until Tier 2 is stable.
+
+---
+
+## 6. Design Principles
+
+### Memory First
+Spaced repetition drives review. Retrieval beats re-reading. Scheduling stays deterministic. Content supports memory — memory does not depend on live generation.
+
+### Quality Over Volume
+Natural language, semantic richness, structural clarity, controlled complexity. More sentences ≠ better learning. Durability > Density.
+
+### Separation of Concerns
+UI handles interaction. Domain handles scheduling and grading. Service handles DB and network. AI is generation-only and never touches scheduling. Review consumes persisted content only.
+
+---
+
+## 7. Guardrails for Development
+
+Before shipping any feature, ask:
 
 1. Does this strengthen long-term retention?
 2. Does this increase uncontrolled cognitive load?
 3. Does this destabilize scheduler logic?
 4. Does this introduce runtime AI variability?
-5. Does this preserve modular boundaries?
+5. Does this preserve modular layer boundaries?
 
-If Tier 1 stability is weakened, the feature is deferred.
-
----
-
-## 6. Immediate Focus (Tier 1 Hardening)
-
-Current priority:
-
-- Improve example sentence quality
-- Support multiple controlled examples per phrase (future-ready)
-- Prevent semantic overfitting
-- Maintain clean normalization pipeline
-- Keep review deterministic and stable
-
-Tier 1 must be rock solid before expanding outward.
+If any answer undermines Tier 1 stability, the feature is deferred.
 
 ---
 
-## 7. Long-Term Evolution Path
+## 8. Long-Term Evolution Path
 
-Character Review Tool  
-→ Word Memory Engine  
-→ Context Reinforcement System  
-→ Reading Readiness Platform  
-→ Language Mastery Framework  
+```
+Character Review Tool
+  → Word Memory Engine (Tier 1 MVP)     ← current
+  → Context Reinforcement System (Tier 2)
+  → Reading Readiness Platform (Tier 3)
+  → Language Mastery Framework
+```
 
-The goal is not to complete a curriculum.  
+The goal is not to complete a curriculum.
 The goal is to build a compounding language system.
 
 ---
 
-## 8. Identity Statement
+## 9. Identity Statement
 
-This product is:
+This product is a structured, compounding Chinese memory engine.
 
-A structured, compounding Chinese memory engine.
+Not a worksheet generator.
+Not a random AI sentence toy.
+Not a content warehouse.
 
-Not:
-- A worksheet generator
-- A random AI sentence toy
-- A content warehouse
-
-It is an infrastructure for durable language growth.
+It is infrastructure for durable language growth.
