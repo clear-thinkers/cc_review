@@ -1893,7 +1893,7 @@ const gradeLabels = getGradeLabels(str);
           ...nextFlashcardMap,
         }));
         if (skippedNoPronunciationChars.length > 0) {
-          const preview = skippedNoPronunciationChars.slice(0, 12).join("ã€");
+          const preview = skippedNoPronunciationChars.slice(0, 12).join("、");
           const suffix = skippedNoPronunciationChars.length > 12 ? "..." : "";
           setAdminNotice(
             `Skipped ${skippedNoPronunciationChars.length} char(s) without dictionary pronunciation: ${preview}${suffix}`
