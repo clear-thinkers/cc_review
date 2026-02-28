@@ -1,6 +1,6 @@
 # BUILD CONVENTIONS
 
-_Last updated: 2026-02-27_
+_Last updated: 2026-02-28_
 
 ---
 
@@ -190,7 +190,27 @@ Every new feature must have tests before it is considered complete.
 
 ---
 
-## 6. Styling Conventions
+## 6. Build and CI Guardrails
+
+The repository enforces text encoding integrity to prevent mojibake (garbled characters from encoding corruption).
+
+### Required Encoding Check
+
+- Command: `npm run check:encoding`
+- Script: `scripts/check-mojibake.mjs`
+- Behavior: scans authoritative text files and fails when likely mojibake is detected
+
+### CI Enforcement
+
+- Workflow: `.github/workflows/encoding-guardrails.yml`
+- Triggers: all pull requests, plus pushes to `main` and `master`
+- Job purpose: block merges that introduce encoding corruption into tracked source and documentation files
+
+This guardrail exists to keep bilingual content and Chinese character data stable across local edits, commits, and CI environments.
+
+---
+
+## 7. Styling Conventions
 
 - Tailwind CSS only. No inline `style={{}}`. No CSS modules unless an existing file already uses them.
 - Use Tailwind utility classes directly on JSX elements.
@@ -199,7 +219,7 @@ Every new feature must have tests before it is considered complete.
 
 ---
 
-## 7. Before Building — Pre-Build Checklist
+## 8. Before Building — Pre-Build Checklist
 
 > Steps for reading docs, confirming scope, updating docs, and filing fix logs are in `AI_CONTRACT.md §1–§5`. The steps below are specific to feature implementation.
 
@@ -208,3 +228,4 @@ Every new feature must have tests before it is considered complete.
 3. **Create `[feature].strings.ts`** with full EN + ZH coverage before writing any JSX.
 4. **Plan the file structure** per §4 before writing component code.
 5. **Write tests** per §5 alongside implementation — not as a follow-up.
+6. **Run `npm run check:encoding`** to catch mojibake before opening or updating a PR.
