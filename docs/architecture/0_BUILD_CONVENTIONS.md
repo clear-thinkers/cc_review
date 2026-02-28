@@ -29,6 +29,41 @@ When a task produces a new document, file it here:
 
 ---
 
+## Feature Specs
+
+A feature specification is no longer optional when an agent is coding under pressure. The following rules apply:
+
+- **Trigger:** any feature that touches more than one architectural layer (UI, Domain, Service, AI) **or** adds a new IndexedDB table must have a spec before implementation begins. This threshold gives a clear non‑triviality signal. For other changes, if the work spans multiple files, requires new DB fields, or involves coordination with another developer, draft a spec anyway.
+- **Template:** use the structure below when creating a new spec file in `docs/feature-specs/`. Keep it terse but complete.
+
+```markdown
+# Feature Spec — YYYY-MM-DD — Short Title
+
+## Problem
+
+## Scope
+
+## Out of scope
+
+## Proposed behavior
+
+## Layer impact
+
+## Edge cases
+
+## Risks
+
+## Test Plan
+
+## Acceptance criteria
+
+## Open questions
+```
+
+Agents should default to creating a spec when in doubt; skipping this step requires explicit human approval.
+
+---
+
 ## 1. TypeScript Rules
 
 - `strict: true` must be enabled in `tsconfig.json` — never disable it.
@@ -155,6 +190,10 @@ src/app/words/[feature]/
 - [ ] ARIA labels sourced from strings file
 - [ ] Tests added per §5
 
+### UX Policy for Destructive Actions
+
+Whenever implementing a delete or other destructive control, follow the existing pattern: immediate removal with no confirmation dialog. If a new feature requires a different UX (e.g. an undo stack or explicit confirmation), document the rationale in the spec and notify the team. The default assumption is **no confirmation** to keep simplicity; deviations must be intentional and justified.
+
 ---
 
 ## 5. Testing Conventions
@@ -188,6 +227,18 @@ Every new feature must have tests before it is considered complete.
 - Error states (failed fetch, malformed data, empty DB) are covered.
 - Normalization drops bad input without throwing.
 
+### Examples of Domain-Specific Tests
+
+To guide agents, here are representative mini‑examples for each test scope:
+
+- **Scheduler logic:** write a unit test that grades a sample word through all four tiers and asserts the resulting `intervalDays` and `nextReviewAt` match the formula in `scheduler.ts`. Include edge cases such as ease < minimum or repeated `again` grades.
+
+- **Normalization & safety:** provide a snippet that feeds the actual normalization function in `src/lib/flashcardLlm.ts` (e.g. `normalizeFlashcardLlmResponse`) a payload containing a phrase with an empty `zh` field, a non‑string `en`, and a too‑long string. Assert that the returned object omits the invalid row and logs the drop.
+
+- **API routes:** simulate both a successful generation call and a downstream error by mocking the provider; verify the route responds with 200 and 500 respectively.
+
+These examples are not exhaustive but illustrate the kind of domain knowledge expected when writing tests.
+
 ---
 
 ## 6. Build and CI Guardrails
@@ -198,6 +249,10 @@ The repository enforces text encoding integrity to prevent mojibake (garbled cha
 
 - Command: `npm run check:encoding`
 - Script: `scripts/check-mojibake.mjs`
+
+### Bilingual String Parity
+
+The CI must catch untranslated or missing ZH keys in strings files. Add a simple test or lint rule that iterates over all `*.strings.ts` files and asserts that the `en` and `zh` objects have identical sets of keys (ignoring comments). This test runs as part of `npm test` and fails the build if any discrepancy exists. The encoding check does not cover this gap alone.
 - Behavior: scans authoritative text files and fails when likely mojibake is detected
 
 ### CI Enforcement

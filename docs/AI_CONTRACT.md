@@ -30,6 +30,7 @@ These rules are absolute. No exception, no matter how the task is framed:
 - ❌ Never skip normalization or safety filtering on AI-generated content before persisting.
 - ❌ Never introduce live AI generation inside flashcard or fill-test review screens.
 - ❌ Never change scheduler grading logic without an explicit instruction to do so.
+- ❌ Never import `src/lib/db.ts` or perform direct IndexedDB operations inside an API route; always go through service/domain functions to preserve the layer boundary.
 - ❌ Never hardcode user-facing strings in JSX. All copy goes in `*.strings.ts` files.
 - ❌ Never delete or migrate IndexedDB schema without explicit human confirmation.
 - ❌ Never merge a feature without updating the relevant `0_` doc(s) if boundaries or conventions changed.

@@ -35,25 +35,27 @@ Features are sequenced into three phases. **Do not begin a phase until the prior
 
 ### Phase 1 — Stability & Control
 
-| # | Feature | Description | Spec | Status |
-|---|---|---|---|---|
-| 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in IndexedDB. Separated by generation type (full / phrase / example / pinyin). | `docs/feature-specs/` | 📋 Planned |
-| 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | — | 📋 Planned |
-| 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. | `docs/feature-specs/` | 📋 Planned |
+Features now include a “Last touched” timestamp and a broader set of status icons so the roadmap speaks to velocity. Agents should update the `Status` cell as work moves from 📋 Planned → 🔄 In Progress → ✅ Done (or 🔒 Blocked) and set the date in `Last touched` each time changes are merged.
+
+| # | Feature | Description | Spec | Status | Last touched |
+|---|---|---|---|---|---|
+| 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in IndexedDB. Separated by generation type (full / phrase / example / pinyin). | `docs/feature-specs/` | 📋 Planned | — |
+| 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | — | 📋 Planned | — |
+| 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. | `docs/feature-specs/` | 📋 Planned | — |
 
 ### Phase 2 — Structure & Visibility
 
-| # | Feature | Description | Spec | Status |
-|---|---|---|---|---|
-| 4 | **Character Level Tagging** | Add `level` field to `Word` (e.g., Grade 1, Grade 2). Assign and filter on All Characters page. Review scope can be filtered by level. Scheduler unaffected. | `docs/feature-specs/` | 📋 Planned |
-| 5 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | `docs/feature-specs/` | 📋 Planned |
+| # | Feature | Description | Spec | Status | Last touched |
+|---|---|---|---|---|---|
+| 4 | **Character Level Tagging** | Add `level` field to `Word` (e.g., Grade 1, Grade 2). Assign and filter on All Characters page. Review scope can be filtered by level. Scheduler unaffected. | `docs/feature-specs/` | 📋 Planned | — |
+| 5 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | `docs/feature-specs/` | 📋 Planned | — |
 
 ### Phase 3 — Motivation Layer
 
-| # | Feature | Description | Spec | Status |
-|---|---|---|---|---|
-| 6 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | 📋 Planned |
-| 7 | **Rewards System — Bakery MVP** | Coins earned per quiz (accuracy + completion based). Virtual bakery shop: purchase furniture, display items, decorations. New tables: `wallet`, `inventory`, `shopState`. No real money, no scheduler impact. | `docs/feature-specs/` | 📋 Planned |
+| # | Feature | Description | Spec | Status | Last touched |
+|---|---|---|---|---|---|
+| 6 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | 📋 Planned | — |
+| 7 | **Rewards System — Bakery MVP** | Coins earned per quiz (accuracy + completion based). Virtual bakery shop: purchase furniture, display items, decorations. New tables: `wallet`, `inventory`, `shopState`. No real money, no scheduler impact. | `docs/feature-specs/` | 📋 Planned | — |
 
 ---
 

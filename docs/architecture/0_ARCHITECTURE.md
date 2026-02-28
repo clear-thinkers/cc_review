@@ -83,20 +83,33 @@ These rules govern content curation at `/words/admin`:
 9. Preload generation skips targets that already have persisted content and continues non-fatally on per-target failures.
 10. Characters with no dictionary pronunciation are skipped with notice; this is not a fatal load error.
 
+### Extension Guardrails (promoted from companion docs)
+
+These additional invariants were previously recorded only in dated flow documents; they are now authoritative and any change must trigger an update here:
+
+- Persisted content must always follow the pipeline: **draft → normalize → persist**. No direct writes of unnormalized data.
+- The `flashcardContents` primary key is fixed as `character|pronunciation`. Changing this composite key requires an architecture review and explicit doc update.
+- If fill-test semantics change, both the admin status definitions above **and** the due-review derivation rules (§1 Due Review Queue Rules) must be updated in sync.
+- Preload behaviour is sequential by default; converting to parallel or batched execution demands a documented rate‑limit, retry, and error policy before implementation.
+- Any feature touching fill-test inclusion or derivation must consider both admin and review layers simultaneously.
+
+
+
 ### Due Review Queue Rules
 
 These rules govern the due queue view at `/words/review`:
 
 1. `/words` redirects to `/words/review`, making due review the operational review entry route.
 2. Due eligibility is sourced from `getDueWords()`:
-   - rows with `nextReviewAt <= now` are due
-   - missing/zero `nextReviewAt` is treated as due
+  - rows with `nextReviewAt <= now` are due
+  - missing/zero `nextReviewAt` is treated as due
 3. The page derives and displays due-list presentation state only (count, sort order, familiarity, action availability).
 4. Fill-test availability is derived from saved `flashcardContents` and attached in-memory to due rows; this page does not persist fill-test content.
 5. The page routes to `/words/review/flashcard` and `/words/review/fill-test`, optionally scoped by `wordId`.
 6. This page must not grade words, mutate scheduler fields, create/delete words, or persist admin content edits.
 7. Due-table sorting is client-side; default due ordering uses `nextReviewAt` then `createdAt` as tie-breaker.
 8. Fill-test start/action controls are enabled only when a due row has a usable derived `fillTest`.
+9. Any change to fill-test eligibility or semantics must be reflected here and in the Content Admin Curation Rules (§1) concurrently. Failure to update both documents is a documentation gap.
 
 ---
 
@@ -117,6 +130,7 @@ This describes how layers are wired — the actual call and import relationships
 
 - `src/app/**` communicates with `src/app/api/**` via **fetch calls only** — no direct imports.
 - `src/app/api/**` is invoked only from admin authoring flows — never from review execution paths.
+- **API routes must never import from `src/lib/db.ts` or perform IndexedDB operations directly.** They should call service or domain functions instead, preserving the service-layer abstraction.
 - `src/lib/scheduler.ts` has no dependency on UI or API layers — it is a pure domain module.
 - AI output flows through normalization in `src/lib/flashcardLlm.ts` before reaching `src/lib/db.ts`.
 - `src/lib/db.ts` is the single point of contact for all IndexedDB reads and writes.
@@ -161,6 +175,22 @@ This describes how layers are wired — the actual call and import relationships
 
 ---
 
+### Normalization & Validation Rules
+
+To prevent data quality drift, the system enforces the following invariants whenever flashcard content is written or updated. Normalization functions in `src/lib/flashcardLlm.ts` and related helpers implement these checks; any row failing them is dropped and logged.
+
+- **Top-level payload shape:** must be an object with `meanings` (string array), `phrases` (array), and `examples` (array). Missing fields are treated as empty arrays.
+- **Strings:** all text fields (`meanings` entries, `phrase.zh`, `phrase.pinyin`, `phrase.en`, `example.*`) must be non‑empty strings. Trim whitespace; if the trimmed value is empty, the row is invalid.
+- **Boolean flags:** `include_in_fill_test` must be a boolean; non-boolean values default to `false`.
+- **Array lengths:** there is no hard limit, but individual items are capped at 500 characters; anything longer is truncated or the item dropped to avoid performance issues.
+- **Required fields for phrases/examples:** at minimum `zh` and `en` must be present. Rows lacking either are invalid.
+- **No nulls or undefineds:** any `null` or `undefined` in a phrase/example object causes that object to be removed.
+- **Key invariants:** `id` for `flashcardContents` is always `character|pronunciation`; the service layer protects this composite key from alteration.
+
+These rules are the authoritative definition of “bad content” referred to elsewhere. They live here so agents implementing normalization know exactly what to enforce.
+
+---
+
 ## 4) System Guarantees
 
 These are the technical behaviors the system upholds. They are the factual basis behind the hard stops in `AI_CONTRACT.md §2` — refer there for agent-facing rules.
@@ -187,6 +217,11 @@ Required error behaviors for each failure mode. Do not improvise alternatives.
 ---
 
 ## 6) Docs Structure
+
+### Companion-Doc Audit Requirement
+
+Dated flow documents under `docs/architecture/` (e.g. `2026-02-27-content-admin-curation-flow.md`) are allowed to contain narrative, risks, and examples. However any behavioral rule or implementation guardrail appearing in a companion doc must also be copied verbatim into this `0_` file. Agents are required to perform a quick audit when a companion doc is created or edited and elevate missing rules to maintain a single source of truth.
+
 
 ### Authority order (highest to lowest)
 1. `AI_CONTRACT.md` — agent rules and authority hierarchy
