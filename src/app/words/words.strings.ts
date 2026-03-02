@@ -12,6 +12,7 @@ export const wordsStrings = {
   en: {
     // ============= NAVIGATION =============
     nav: {
+      appTitle: "Chinese Character Review Game",
       menu: "Menu",
       navigateBetweenPages: "Navigate between pages.",
       addCharacters: "Add Characters",
@@ -159,37 +160,37 @@ export const wordsStrings = {
       pageDescription:
         "Preload and manage meanings, phrases, and examples. Review page reads only saved content.",
       stats: {
-        characters: "CHARACTERS",
+        characters: "All Characters",
         allTargets: "All Targets",
         withContent: "Targets with content",
         missingContent: "Targets missing content",
-        readyForTesting: "Targets ready for testing",
+        readyForTesting: "Targets included for testing",
         excludedForTesting: "Targets excluded for testing",
       },
       filterStateOn: " (ON)",
       filterTooltips: {
-        characters: "Show all targets (character overview).",
-        allTargets: "Show all targets (including with content).",
+        characters: "Show all targets.",
+        allTargets: "Show all targets.",
         withContent: "Filter table to targets with saved content.",
         missingContent: "Filter table to targets missing content.",
-        readyForTesting: "Filter table to targets ready for testing.",
+        readyForTesting: "Filter table to targets included for testing.",
         excludedForTesting: "Filter table to targets excluded for testing.",
       },
       buttons: {
-        preload: "Preload Missing",
+        preload: "Preload targets with missing content",
         preloading: "Preloading...",
       },
       table: {
         headers: {
           character: "Character",
           pronunciation: "Pronunciation",
-          meaningZh: "Meaning ZH",
-          meaningEn: "Meaning EN",
+          meaningZh: "Meaning",
+          meaningEn: "Meaning",
           phrase: "Phrase",
           phrasePinyin: "Phrase Pinyin",
           example: "Example",
           examplePinyin: "Example Pinyin",
-          includeInFillTest: "Include in Fill Test",
+          includeInFillTest: "Include in tests",
           actions: "Actions",
         },
         actionButtons: {
@@ -201,8 +202,8 @@ export const wordsStrings = {
           addPhrase: "+ Phrase",
           saveNew: "Save New",
           cancel: "Cancel",
-          fillTestOn: "FT On",
-          fillTestOff: "FT Off",
+          fillTestOn: "Test On",
+          fillTestOff: "Test Off",
         },
         actionTooltips: {
           regenerate: "Regenerate all content",
@@ -212,8 +213,8 @@ export const wordsStrings = {
           addPhrase: "Add phrase under this meaning",
           saveNew: "Save and generate EN meaning + phrase pinyin",
           cancelAdd: "Cancel add",
-          fillTestOn: "Exclude this row from fill-test generation",
-          fillTestOff: "Include this row in fill-test generation",
+          fillTestOn: "Exclude this row from test generation",
+          fillTestOff: "Include this row in test generation",
           regeneratePhrase: "Regenerate phrase and example",
           deletePhrase: "Delete this phrase row",
           regenerateExample: "Regenerate example",
@@ -297,6 +298,7 @@ export const wordsStrings = {
   zh: {
     // ============= NAVIGATION =============
     nav: {
+      appTitle: "汉字复习游戏",
       menu: "菜单",
       navigateBetweenPages: "在页面之间导航。",
       addCharacters: "添加汉字",
@@ -465,8 +467,8 @@ export const wordsStrings = {
         headers: {
           character: "汉字",
           pronunciation: "读音",
-          meaningZh: "释义（中文）",
-          meaningEn: "释义（英文）",
+          meaningZh: "释义",
+          meaningEn: "释义",
           phrase: "词组",
           phrasePinyin: "词组拼音",
           example: "例句",
@@ -476,15 +478,15 @@ export const wordsStrings = {
         },
         actionButtons: {
           regenerate: "重",
-          save: "保",
+          save: "存",
           delete: "删",
           edit: "编",
           addMeaning: "+ 释义",
           addPhrase: "+ 词组",
           saveNew: "保存新项",
           cancel: "取消",
-          fillTestOn: "测开",
-          fillTestOff: "测关",
+          fillTestOn: "录入On",
+          fillTestOff: "录入Off",
         },
         actionTooltips: {
           regenerate: "重新生成全部内容",
@@ -494,8 +496,8 @@ export const wordsStrings = {
           addPhrase: "在该释义下添加词组",
           saveNew: "保存并生成英文释义和拼音",
           cancelAdd: "取消添加",
-          fillTestOn: "从填空测试中排除此行",
-          fillTestOff: "在填空测试中包含此行",
+          fillTestOn: "从题库中排除此行",
+          fillTestOff: "将此行录入题库",
           regeneratePhrase: "重新生成词组和例句",
           deletePhrase: "删除该词组行",
           regenerateExample: "重新生成例句",

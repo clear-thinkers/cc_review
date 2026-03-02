@@ -1,7 +1,10 @@
+"use client";
+
 import { appStrings } from "./app.strings";
+import { useLocale } from "./shared/locale";
 
 export default function Home() {
-  const locale = "en" as const;
+  const locale = useLocale();
   const str = appStrings[locale];
 
   return (

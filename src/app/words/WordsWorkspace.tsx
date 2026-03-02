@@ -6,6 +6,7 @@ import AllWordsSection from "./all/AllWordsSection";
 import DueReviewSection from "./review/DueReviewSection";
 import FillTestReviewSection from "./review/fill-test/FillTestReviewSection";
 import FlashcardReviewSection from "./review/flashcard/FlashcardReviewSection";
+import { useLocale } from "../shared/locale";
 import WordsShell from "./shared/WordsShell";
 import { useWordsWorkspaceState } from "./shared/words.shared.state";
 import type { WordsSectionPage } from "./shared/words.shared.types";
@@ -14,7 +15,7 @@ import { wordsStrings } from "./words.strings";
 export type { WordsSectionPage } from "./shared/words.shared.types";
 
 export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
-  const locale = "en" as const;
+  const locale = useLocale();
   const str = wordsStrings[locale];
   const vm = useWordsWorkspaceState({ page, str });
 

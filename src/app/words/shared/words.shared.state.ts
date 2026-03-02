@@ -2003,15 +2003,13 @@ const gradeLabels = getGradeLabels(str);
     e.preventDefault();
     const input = hanzi.trim();
     if (!input) {
-      setFormNotice("Please enter Chinese characters.");
+      setFormNotice(str.add.noInput);
       return;
     }
 
     const parsedCharacters = extractUniqueHanzi(input);
     if (parsedCharacters.length === 0) {
-      setFormNotice(
-        "Only Chinese characters are allowed."
-      );
+      setFormNotice(str.add.onlyHanzi);
       return;
     }
 
@@ -2041,17 +2039,15 @@ const gradeLabels = getGradeLabels(str);
 
     const skippedExistingCount = parsedCharacters.length - hanziToAdd.length;
     if (newWords.length === 0) {
-      setFormNotice(
-        "No new characters were added."
-      );
+      setFormNotice(str.add.noNew);
     } else if (skippedExistingCount > 0) {
       setFormNotice(
-        `Added ${newWords.length} character(s), skipped ${skippedExistingCount} existing.`
+        str.add.partialSuccess
+          .replace("{count}", String(newWords.length))
+          .replace("{skipped}", String(skippedExistingCount))
       );
     } else {
-      setFormNotice(
-        `Added ${newWords.length} character(s).`
-      );
+      setFormNotice(str.add.allSuccess.replace("{count}", String(newWords.length)));
     }
 
     await refreshAll();

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Baloo_2, Geist_Mono, Nunito } from "next/font/google";
+import LanguageToggle from "./LanguageToggle";
 import { appStrings } from "./app.strings";
 import "./globals.css";
+import { LocaleProvider } from "./shared/locale";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -33,7 +35,10 @@ export default function RootLayout({
       <body
         className={`${nunito.variable} ${balooDisplay.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <LocaleProvider>
+          <LanguageToggle />
+          {children}
+        </LocaleProvider>
       </body>
     </html>
   );
