@@ -5,7 +5,7 @@ import type {
   QuizSelectionMode,
   QuizSelections,
   TestableWord,
-} from "../words.shared.types";
+} from "../../review/fill-test/fillTest.types";
 
 export function useFillTestReviewState() {
   const [quizSelectionMode, setQuizSelectionMode] = useState<QuizSelectionMode>("all");

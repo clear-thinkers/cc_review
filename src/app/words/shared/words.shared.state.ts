@@ -68,26 +68,39 @@ import type {
   AdminTableRow,
   AdminTarget,
   AdminTargetContentStatus,
-  FlashcardHistoryItem,
   FlashcardExampleGenerationRequest,
   FlashcardExampleGenerationResponse,
   FlashcardExamplePinyinGenerationRequest,
   FlashcardExamplePinyinGenerationResponse,
-  FlashcardLlmResponseMap,
-  FlashcardMeaningDetailGenerationRequest,
-  FlashcardMeaningDetailGenerationResponse,
   FlashcardPhraseDetailGenerationRequest,
   FlashcardPhraseDetailGenerationResponse,
   FlashcardPhraseGenerationRequest,
-  NavPage,
+  FlashcardMeaningDetailGenerationRequest,
+  FlashcardMeaningDetailGenerationResponse,
+} from "../admin/admin.types";
+import type {
+  FlashcardHistoryItem,
+  FlashcardLlmResponseMap,
+} from "../review/flashcard/flashcard.types";
+import type {
   QuizHistoryItem,
   QuizSelectionMode,
-  SortDirection,
-  DueWordsSortKey,
-  AllWordsSortKey,
   TestableWord,
-  WordsLocaleStrings,
+} from "../review/fill-test/fillTest.types";
+import type {
+  DueWordsSortKey,
+  SortedDueWord,
+} from "../review/review.types";
+import type {
+  AllWordsSortKey,
+} from "../all/all.types";
+import type {
+  NavPage,
   WordsSectionPage,
+} from "./shell.types";
+import type {
+  SortDirection,
+  WordsLocaleStrings,
 } from "./words.shared.types";
 import { useAdminState } from "./state/useAdminState";
 import { useFillTestReviewState } from "./state/useFillTestReviewState";

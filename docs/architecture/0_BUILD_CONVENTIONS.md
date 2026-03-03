@@ -1,6 +1,6 @@
 # BUILD CONVENTIONS
 
-_Last updated: 2026-03-02_
+_Last updated: 2026-03-03_
 
 ---
 
@@ -79,6 +79,71 @@ export function gradeWord(wordId: string, grade: Grade): SchedulerResult { ... }
 // ❌ Wrong
 export function gradeWord(wordId, grade) { ... }
 ```
+
+---
+
+## 1a. Type File Organization
+
+All TypeScript types must be defined in feature-scoped `*.types.ts` files, never inline in component files.
+
+**Principle:** Types live adjacent to the features that use them. This improves IDE navigation, prevents cross-feature coupling, and makes future feature development clearer.
+
+### Pattern
+
+```
+src/app/words/
+  shared/
+    shell.types.ts         ← Navigation/layout types (shared across features)
+    words.shared.types.ts  ← Re-export hub for backward compat + shared utilities only
+    words.shared.state.ts
+  add/
+    add.types.ts           ← Add feature types (empty placeholder if no feature-specific types yet)
+  all/
+    all.types.ts           ← All Characters inventory page types
+  review/
+    review.types.ts        ← Due queue page types
+    flashcard/
+      flashcard.types.ts   ← Flashcard review types
+    fill-test/
+      fillTest.types.ts    ← Fill-test review types
+  admin/
+    admin.types.ts         ← Admin curation + generation request/response types
+```
+
+### File Organization Rules
+
+1. **Feature-level scope:** Each feature directory (`add/`, `all/`, `review/`, `admin/`, etc.) owns one `[feature].types.ts` file
+2. **Navigation types:** Shared across all features in `shared/shell.types.ts` (`NavPage`, `WordsSectionPage`, `NavItem`)
+3. **Shared utilities:** Rare; kept only in central `words.shared.types.ts` (`WordsLocaleStrings`, `SortDirection`, `RenderWithPinyin`)
+4. **Sub-feature types:** Deep features like `review/flashcard/flashcard.types.ts` and `review/fill-test/fillTest.types.ts` own their own types
+5. **Import sources:** Feature code imports types from adjacent `[feature].types.ts` file; central file used only for re-exports and shared utilities
+
+### Example Usage
+
+```typescript
+// src/app/words/admin/admin.types.ts — types for admin curation
+export type AdminTarget = { character: string; pronunciation: string; key: string };
+export type AdminTableRow = { /* ... */ };
+
+// src/app/words/admin/AdminSection.tsx — consume types from adjacent file
+import type { AdminTarget, AdminTableRow } from "./admin.types";
+
+export function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
+  const targets: AdminTarget[] = vm.adminTargets;
+  // ...
+}
+```
+
+### Backward Compatibility
+
+Central `words.shared.types.ts` acts as a **re-export hub** to maintain backward compatibility with existing code. All feature types are re-exported from the central file, but **new code must import from feature-specific files directly**.
+
+### Test Coverage
+
+Each feature-scoped type file must have a companion `[feature].types.test.ts` file that validates:
+- Type construction (objects can be created with correct shape)
+- Union types (values match expected literals)
+- Tuple types (length and element types are correct)
 
 ---
 

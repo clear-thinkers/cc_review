@@ -4,7 +4,7 @@ import type {
   AdminPendingPhrase,
   AdminStatsFilter,
   AdminTarget,
-} from "../words.shared.types";
+} from "../../admin/admin.types";
 
 export function useAdminState() {
   const [adminTargets, setAdminTargets] = useState<AdminTarget[]>([]);

@@ -7,17 +7,19 @@ import {
 } from "@/lib/flashcardLlm";
 import type { FillTest, Word } from "@/lib/types";
 import type {
-  FillTestCandidateRow,
   FlashcardExampleGenerationResponse,
   FlashcardExamplePinyinGenerationResponse,
   FlashcardMeaningDetailGenerationResponse,
   FlashcardPhraseDetailGenerationResponse,
   FlashcardPhraseGenerationResponse,
-  NavItem,
+} from "../admin/admin.types";
+import type {
+  FillTestCandidateRow,
   QuizSelectionMode,
   TestableWord,
-  WordsLocaleStrings,
-} from "./words.shared.types";
+} from "../review/fill-test/fillTest.types";
+import type { NavItem } from "./shell.types";
+import type { WordsLocaleStrings } from "./words.shared.types";
 
 export const SLOT_INDICES: Array<0 | 1 | 2> = [0, 1, 2];
 export const QUIZ_SELECTION_MODES = ["all", "10", "20", "30", "manual"] as const;

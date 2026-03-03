@@ -291,5 +291,16 @@ If archived content conflicts with active docs or current implementation, active
 
 ## 7) Development Conventions
 
-All code must follow the conventions in `0_BUILD_CONVENTIONS.md`: bilingual UI, strings extraction, TypeScript strict mode, component file structure, and test coverage.
+All code must follow the conventions in `0_BUILD_CONVENTIONS.md`:
+
+- **Bilingual UI:** All user-facing text in `*.strings.ts` files (see §2)
+- **Strings extraction:** Never hardcode copy in JSX
+- **TypeScript strict mode:** Enabled; no `any` types; proper type annotations required
+- **Type file organization:** Types in feature-scoped `[feature].types.ts` files (see `0_BUILD_CONVENTIONS.md §1a`)
+  - Each feature directory owns its type definitions in an adjacent `*.types.ts` file
+  - Navigation/layout types in `shared/shell.types.ts`
+  - Central `shared/words.shared.types.ts` acts as re-export hub for backward compatibility
+  - Each type file has a companion `*.types.test.ts` for validation
+- **Component file structure:** Feature-scoped route + page + shared-contract structure
+- **Test coverage required:** All new features must include unit and integration tests
 
