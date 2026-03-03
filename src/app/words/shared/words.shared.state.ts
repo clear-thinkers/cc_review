@@ -23,7 +23,7 @@ import {
 import { makeId } from "@/lib/id";
 import { calculateNextState, type Grade } from "@/lib/scheduler";
 import type { Word } from "@/lib/types";
-import { getXinhuaFlashcardInfo, resetXinhuaCachesForTests } from "@/lib/xinhua";
+import { getXinhuaFlashcardInfo } from "@/lib/xinhua";
 import {
   QUIZ_PHRASE_DRAG_MIME,
   QUIZ_SELECTION_MODES,
@@ -198,6 +198,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setAdminSavingKey,
     adminDeletingKey,
     setAdminDeletingKey,
+    adminRefreshingAllPinyin,
+    setAdminRefreshingAllPinyin,
     adminPendingPhrases,
     setAdminPendingPhrases,
     adminPendingMeanings,
@@ -742,18 +744,18 @@ const gradeLabels = getGradeLabels(str);
 
   function getSortIndicator(key: AllWordsSortKey): string {
     if (allWordsSortKey !== key) {
-      return "â†•";
+      return "\u2195";
     }
 
-    return allWordsSortDirection === "asc" ? "â†‘" : "â†“";
+    return allWordsSortDirection === "asc" ? "\u2191" : "\u2193";
   }
 
   function getDueSortIndicator(key: DueWordsSortKey): string {
     if (dueWordsSortKey !== key) {
-      return "â†•";
+      return "\u2195";
     }
 
-    return dueWordsSortDirection === "asc" ? "â†‘" : "â†“";
+    return dueWordsSortDirection === "asc" ? "\u2191" : "\u2193";
   }
 
   function clearForm() {
@@ -1001,7 +1003,7 @@ const gradeLabels = getGradeLabels(str);
   }
 
   function showAdminManualEditPopup(message: string) {
-    const fullMessage = `${message}\nè¯·æ‰‹åŠ¨æ·»åŠ /åˆ é™¤åŽå†è¯•ã€‚ / Please manually add/delete and try again.`;
+    const fullMessage = `${message}\n${str.admin.messages.manualEditRequired}`;
     setAdminNotice(fullMessage);
     if (typeof window !== "undefined") {
       window.alert(fullMessage);
@@ -1169,12 +1171,12 @@ const gradeLabels = getGradeLabels(str);
 
     const phrase = pending.phraseInput.trim();
     if (!phrase) {
-      setAdminNotice("è¯·è¾“å…¥è¯ç»„åŽå†ä¿å­˜ / Enter a phrase before saving.");
+      setAdminNotice(str.admin.messages.phraseRequired);
       return;
     }
 
     if (!phrase.includes(target.character)) {
-      setAdminNotice(`è¯ç»„éœ€åŒ…å«æ±‰å­— "${target.character}" / Phrase must include ${target.character}.`);
+      setAdminNotice(str.admin.messages.phraseMustInclude.replace("{character}", target.character));
       return;
     }
 
@@ -1262,29 +1264,29 @@ const gradeLabels = getGradeLabels(str);
 
     const meaningZh = pending.meaningZhInput.trim();
     if (!meaningZh) {
-      setAdminNotice("è¯·è¾“å…¥é‡Šä¹‰åŽå†ä¿å­˜ / Enter meaning before saving.");
+      setAdminNotice(str.admin.messages.meaningRequired);
       return;
     }
 
     const phrase = pending.phraseInput.trim();
     if (!phrase) {
-      setAdminNotice("è¯·è¾“å…¥è¯ç»„åŽå†ä¿å­˜ / Enter a phrase before saving.");
+      setAdminNotice(str.admin.messages.phraseRequired);
       return;
     }
 
     if (!phrase.includes(target.character)) {
-      setAdminNotice(`è¯ç»„éœ€åŒ…å«æ±‰å­— "${target.character}" / Phrase must include ${target.character}.`);
+      setAdminNotice(str.admin.messages.phraseMustInclude.replace("{character}", target.character));
       return;
     }
 
     const example = pending.exampleInput.trim();
     if (!example) {
-      setAdminNotice("è¯·è¾“å…¥ä¾‹å¥åŽå†ä¿å­˜ / Enter an example before saving.");
+      setAdminNotice(str.admin.messages.exampleRequired);
       return;
     }
 
     if (!example.includes(phrase)) {
-      setAdminNotice("ä¾‹å¥éœ€åŒ…å«è¯ç»„ / Example must include the phrase.");
+      setAdminNotice(str.admin.messages.exampleMustInclude);
       return;
     }
 
@@ -1794,6 +1796,84 @@ const gradeLabels = getGradeLabels(str);
     );
   }
 
+  async function handleAdminRefreshAllPinyin() {
+    const allContent = await getAllFlashcardContents();
+    if (allContent.length === 0) {
+      setAdminNotice(str.admin.messages.noContentToRefresh);
+      return;
+    }
+
+    setAdminRefreshingAllPinyin(true);
+    setAdminProgressText(null);
+    setAdminNotice(null);
+
+    let refreshedCount = 0;
+    let failedCount = 0;
+    const total = allContent.length;
+
+    try {
+      for (let contentIndex = 0; contentIndex < total; contentIndex += 1) {
+        const entry = allContent[contentIndex];
+        const target = { character: entry.character, pronunciation: entry.pronunciation, key: buildFlashcardLlmRequestKey({ character: entry.character, pronunciation: entry.pronunciation }) };
+        
+        setAdminProgressText(
+          `Refreshing pinyin ${contentIndex + 1}/${total}: ${target.character} / ${target.pronunciation}`
+        );
+
+        try {
+          const content = cloneFlashcardLlmResponse(entry.content);
+          let hasChanges = false;
+
+          for (const meaning of content.meanings) {
+            for (const phraseItem of meaning.phrases) {
+              const example = phraseItem.example.trim();
+              const examplePinyin = (phraseItem.example_pinyin ?? "").trim();
+              
+              // Regenerate example pinyin if example exists
+              if (example && !examplePinyin) {
+                try {
+                  const newPinyin = await generateExamplePinyin({
+                    target,
+                    meaning: meaning.definition,
+                    meaningEn: meaning.definition_en,
+                    phrase: phraseItem.phrase,
+                    example,
+                  });
+                  phraseItem.example_pinyin = newPinyin;
+                  hasChanges = true;
+                } catch {
+                  // Skip on failure for this phrase
+                  continue;
+                }
+              }
+            }
+          }
+
+          if (hasChanges) {
+            await putFlashcardContent(target.character, target.pronunciation, content);
+            updateAdminJson(target.key, JSON.stringify(content, null, 2));
+            setFlashcardLlmData((previous) => ({
+              ...previous,
+              [target.key]: content,
+            }));
+            refreshedCount += 1;
+          }
+        } catch {
+          failedCount += 1;
+        }
+      }
+    } finally {
+      setAdminRefreshingAllPinyin(false);
+      setAdminProgressText(null);
+    }
+
+    setAdminNotice(
+      str.admin.messages.pinyinRefreshFinished
+        .replace("{refreshed}", String(refreshedCount))
+        .replace("{failed}", String(failedCount))
+    );
+  }
+
   useEffect(() => {
     if (page !== "admin") {
       return;
@@ -1802,7 +1882,6 @@ const gradeLabels = getGradeLabels(str);
     let active = true;
     setAdminLoading(true);
     setAdminNotice(null);
-    resetXinhuaCachesForTests();
 
     (async () => {
       try {
@@ -1856,12 +1935,8 @@ const gradeLabels = getGradeLabels(str);
           }
         }
 
-        const savedEntries = await Promise.all(
-          nextTargets.map(async (target) => ({
-            key: target.key,
-            entry: await getFlashcardContent(target.character, target.pronunciation),
-          }))
-        );
+        const allSavedContents = await getAllFlashcardContents();
+        const savedContentByKey = new Map(allSavedContents.map((entry) => [entry.key, entry.content] as const));
 
         if (!active) {
           return;
@@ -1871,15 +1946,16 @@ const gradeLabels = getGradeLabels(str);
         const nextJsonByKey: Record<string, string> = {};
         const nextFlashcardMap: FlashcardLlmResponseMap = {};
 
-        for (const item of savedEntries) {
-          if (!item.entry?.content) {
-            nextSavedByKey[item.key] = false;
+        for (const target of nextTargets) {
+          const savedContent = savedContentByKey.get(target.key);
+          if (!savedContent) {
+            nextSavedByKey[target.key] = false;
             continue;
           }
 
-          nextSavedByKey[item.key] = true;
-          nextJsonByKey[item.key] = JSON.stringify(item.entry.content, null, 2);
-          nextFlashcardMap[item.key] = item.entry.content;
+          nextSavedByKey[target.key] = true;
+          nextJsonByKey[target.key] = JSON.stringify(savedContent, null, 2);
+          nextFlashcardMap[target.key] = savedContent;
         }
 
         setAdminTargets(nextTargets);
@@ -1893,7 +1969,7 @@ const gradeLabels = getGradeLabels(str);
           ...nextFlashcardMap,
         }));
         if (skippedNoPronunciationChars.length > 0) {
-          const preview = skippedNoPronunciationChars.slice(0, 12).join("、");
+          const preview = skippedNoPronunciationChars.slice(0, 12).join("\u3001");
           const suffix = skippedNoPronunciationChars.length > 12 ? "..." : "";
           setAdminNotice(
             `Skipped ${skippedNoPronunciationChars.length} char(s) without dictionary pronunciation: ${preview}${suffix}`
@@ -1977,7 +2053,7 @@ const gradeLabels = getGradeLabels(str);
         }
 
         setFlashcardLlmError(
-          getErrorMessage(error, "è¯»å–å·²ä¿å­˜å†…å®¹å¤±è´¥ / Failed to load admin-saved flashcard content.")
+          getErrorMessage(error, "读取已保存内容失败 / Failed to load admin-saved flashcard content.")
         );
       } finally {
         if (!active) {
@@ -2487,8 +2563,10 @@ const gradeLabels = getGradeLabels(str);
     adminTargetsReadyForTestingCount,
     adminTargetsExcludedForTestingCount,
     handleAdminPreloadAll,
+    handleAdminRefreshAllPinyin,
     adminLoading,
     adminPreloading,
+    adminRefreshingAllPinyin,
     adminProgressText,
     adminNotice,
     adminTableRenderRows,
@@ -2538,5 +2616,6 @@ const gradeLabels = getGradeLabels(str);
 }
 
 export type UseWordsWorkspaceStateReturn = ReturnType<typeof useWordsWorkspaceState>;
+
 
 

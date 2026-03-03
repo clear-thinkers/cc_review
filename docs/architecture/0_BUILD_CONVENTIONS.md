@@ -188,6 +188,7 @@ src/app/words/[feature]/
 - [ ] No hardcoded text in JSX — all copy via strings object
 - [ ] Locale hook used consistently
 - [ ] ARIA labels sourced from strings file
+- [ ] **All buttons have bilingual labels, tooltips, and notifications** (per §7 Button Guidelines)
 - [ ] Tests added per §5
 
 ### UX Policy for Destructive Actions
@@ -295,8 +296,37 @@ New pages must visually match the existing `/words/admin` page as the baseline. 
 - Active (selected) state: `flex min-h-[70px] w-full flex-col items-center justify-center border border-black bg-gray-100 px-2 py-1.5 text-center`
 - Inactive state: `flex min-h-[70px] w-full flex-col items-center justify-center border px-2 py-1.5 text-center`
 
-**Primary buttons:**
-- Main action (e.g. Preload, Save scope-wide): `rounded-md bg-black px-4 py-2 text-white disabled:opacity-50`
+### Button Guidelines
+
+**Bilingual Requirements:**
+Every action button must have **full bilingual support** in all of the following:
+1. **Button label** — the visible text (e.g., `str.admin.buttons.preload`)
+2. **Tooltip/title** — hover text explaining the action (e.g., `title={str.admin.buttonTooltips.preload}`)
+3. **Notifications** — all success/error messages must use locale-aware strings (e.g., `str.admin.messages.preloadFinished`)
+
+All bilingual strings must be stored in `*.strings.ts` files. Never hardcode English-only labels, tooltips, or messages.
+
+**Standard Button Styling Pattern:**
+All new action buttons should follow this consistent pattern for corners, borders, padding, weight, and disabled state:
+- Container: `rounded-md border-2 px-4 py-2 font-medium disabled:opacity-50`
+- Use lighter/softer Tailwind color palettes consistent with the `/words/admin` page
+- Avoid dark/harsh colors; prefer `bg-[color]-100` with `border-[color]-400` or `border-[color]-300`
+- Always pair border and background colors from the same Tailwind color family
+
+**Color Examples (admin page reference):**
+- **Preload (yellow/amber):** `border-amber-400 bg-amber-100 text-amber-900`
+- **Refresh pinyin (soft purple):** `border-purple-300 bg-purple-100 text-purple-700`
+- **Regenerate (table action, amber):** `border-amber-400 bg-amber-100 text-amber-900`
+- **Save (table action, emerald):** `border-emerald-600 bg-emerald-600 text-white`
+- **Add/Edit (table action, sky):** `border-sky-300 bg-sky-50 text-sky-800`
+- **Toggle on (table action, teal):** `border-teal-600 bg-teal-50 text-teal-700`
+- **Toggle off (table action, gray):** `border-gray-400 bg-gray-100 text-gray-700`
+- **Delete (table action, rose):** `border-rose-500 bg-rose-50 text-rose-700`
+
+**Primary buttons (full-width page actions):**
+- Container format: `rounded-md border-2 px-4 py-2 font-medium disabled:opacity-50`
+- Pair with appropriate soft colors (e.g., amber for preload, purple for refresh)
+- Example: `className="rounded-md border-2 border-amber-400 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"`
 
 **Secondary buttons (small table actions):**
 - Regenerate (amber): `rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50`

@@ -179,6 +179,12 @@ export const wordsStrings = {
       buttons: {
         preload: "Preload targets with missing content",
         preloading: "Preloading...",
+        refreshAllPinyin: "Regenerate missing pinyin",
+        refreshingAllPinyin: "Regenerating...",
+      },
+      buttonTooltips: {
+        preload: "Generate content for all characters/pronunciations that are missing content",
+        refreshAllPinyin: "Batch regenerate missing pinyin for all saved phrases and examples",
       },
       table: {
         headers: {
@@ -251,6 +257,14 @@ export const wordsStrings = {
         regenerateExample: "Regenerating example...",
         saveError: "Could not save. Please try again.",
         deleteError: "Could not delete. Please try again.",
+        manualEditRequired: "Please manually add/delete and try again.",
+        meaningRequired: "Enter meaning before saving.",
+        phraseRequired: "Enter a phrase before saving.",
+        phraseMustInclude: "Phrase must include {character}.",
+        exampleRequired: "Enter an example before saving.",
+        exampleMustInclude: "Example must include the phrase.",
+        noContentToRefresh: "No saved content to refresh pinyin.",
+        pinyinRefreshFinished: "Pinyin refresh finished. Refreshed {refreshed}, failed {failed}.",
       },
     },
 
@@ -462,8 +476,13 @@ export const wordsStrings = {
       buttons: {
         preload: "预生成未保存内容",
         preloading: "预生成中...",
+        refreshAllPinyin: "批量生成拼音",
+        refreshingAllPinyin: "生成中...",
       },
-      table: {
+      buttonTooltips: {
+        preload: "为所有丢失内容的汉字/发音组合生成内容",
+        refreshAllPinyin: "批量生成所有已保存短语和例句的缺失拼音",
+      },      table: {
         headers: {
           character: "汉字",
           pronunciation: "读音",
@@ -535,6 +554,14 @@ export const wordsStrings = {
         regenerateExample: "重新生成例句中...",
         saveError: "保存失败。请重试。",
         deleteError: "删除失败。请重试。",
+        manualEditRequired: "请手动添加/删除后重试。",
+        meaningRequired: "请输入释义后再保存。",
+        phraseRequired: "请输入短语后再保存。",
+        phraseMustInclude: "短语需要包含汉字 {character}。",
+        exampleRequired: "请输入例句后再保存。",
+        exampleMustInclude: "例句需要包含短语。",
+        noContentToRefresh: "无保存内容可生成拼音。",
+        pinyinRefreshFinished: "拼音生成完成。已生成 {refreshed} 个，失败 {failed} 个。",
       },
     },
 

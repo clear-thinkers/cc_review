@@ -15,18 +15,20 @@ const DEFAULT_LOCALE: AppLocale = "en";
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<AppLocale>(() => {
+  // Hydration guardrail: first client render must match server-rendered locale.
+  // Read persisted locale only after mount to avoid server/client text mismatches.
+  const [locale, setLocaleState] = useState<AppLocale>(DEFAULT_LOCALE);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
-      return DEFAULT_LOCALE;
+      return;
     }
 
     const storedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
     if (storedLocale === "en" || storedLocale === "zh") {
-      return storedLocale;
+      setLocaleState(storedLocale);
     }
-
-    return DEFAULT_LOCALE;
-  });
+  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") {
