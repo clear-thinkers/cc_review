@@ -1,6 +1,9 @@
 import { useState } from "react";
 import type { Word } from "@/lib/types";
-import type { FlashcardLlmResponseMap, FlashcardHistoryItem } from "../words.shared.types";
+import type {
+  FlashcardLlmResponseMap,
+  FlashcardHistoryItem,
+} from "../../review/flashcard/flashcard.types";
 
 export function useFlashcardReviewState() {
   const [flashcardInProgress, setFlashcardInProgress] = useState(false);

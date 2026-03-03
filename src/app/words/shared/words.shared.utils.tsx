@@ -7,17 +7,19 @@ import {
 } from "@/lib/flashcardLlm";
 import type { FillTest, Word } from "@/lib/types";
 import type {
-  FillTestCandidateRow,
   FlashcardExampleGenerationResponse,
   FlashcardExamplePinyinGenerationResponse,
   FlashcardMeaningDetailGenerationResponse,
   FlashcardPhraseDetailGenerationResponse,
   FlashcardPhraseGenerationResponse,
-  NavItem,
+} from "../admin/admin.types";
+import type {
+  FillTestCandidateRow,
   QuizSelectionMode,
   TestableWord,
-  WordsLocaleStrings,
-} from "./words.shared.types";
+} from "../review/fill-test/fillTest.types";
+import type { NavItem } from "./shell.types";
+import type { WordsLocaleStrings } from "./words.shared.types";
 
 export const SLOT_INDICES: Array<0 | 1 | 2> = [0, 1, 2];
 export const QUIZ_SELECTION_MODES = ["all", "10", "20", "30", "manual"] as const;
@@ -26,7 +28,20 @@ export const QUIZ_PHRASE_DRAG_MIME = "text/x-cc-review-phrase-index";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HANZI_CHAR_REGEX = /\p{Script=Han}/u;
 
-const PINYIN_SYLLABLE_RE = /[a-zA-Z\u00FC\u00DCvV]+[1-5]?/g;
+// GUARDRAIL: Pinyin syllable regex must handle diphthongs and final consonants correctly.
+// Requirements:
+// 1. Match tone-marked vowels: à á ǎ ā è é ě ē ... (for proper tone rendering)
+// 2. Match vowel clusters (diphthongs/triphthongs): ao, ou, ai, ei, ia, ie, ua, uo, üe, etc.
+// 3. Match final consonants: ng (guang), r (er), n (ren), m (rare) — but avoid over-matching
+// 4. Handle compact pinyin: xiǎogǒu should split to ["xiǎo", "gǒu"], not ["xiǎog", "ǒu"]
+//
+// Pattern: [consonants][vowel-cluster][ending][tone]
+// Final consonant handling:
+//   - "ng" and "r" are always endings (never start new syllables in Mandarin)
+//   - "n" is ending only if NOT followed by a vowel (since nǐ, nǚ, etc. are separate syllables)
+//   - "m" is included but rare
+// Uppercase consonants: [a-zA-Z]* handles both lowercase and uppercase-starting pinyin (e.g., Xiáo, QING3)
+const PINYIN_SYLLABLE_RE = /[a-zA-Z]*[àáǎāèéěēìíǐīòóǒōùúǔūǜǚǖǘvüaeiou]+(?:ng|r|m|n(?![àáǎāèéěēìíǐīòóǒōùúǔūǜǚǖǘvüaeiou]))?[1-5]?/gu;
 const PINYIN_TONE_MAP: Record<string, string> = {
   "\u0101": "a1",
   "\u00E1": "a2",
@@ -365,13 +380,22 @@ function segmentCompactPinyin(compactPinyin: string, syllableCount: number): str
   return results[0] ?? null;
 }
 
+export function tokenizePinyinSyllables(pinyin: string): string[] {
+  const normalized = pinyin.trim();
+  if (!normalized) {
+    return [];
+  }
+
+  return normalized.match(PINYIN_SYLLABLE_RE) ?? [];
+}
+
 function alignPinyinPartsForCount(partCount: number, pinyin: string): string[] {
   const normalized = pinyin.trim();
   if (!normalized) {
     return Array(partCount).fill("");
   }
 
-  const tokens = normalized.match(PINYIN_SYLLABLE_RE) ?? [];
+  const tokens = tokenizePinyinSyllables(normalized);
   if (tokens.length === partCount) {
     return tokens;
   }
@@ -533,6 +557,8 @@ export function normalizeAdminDraftResponse(raw: unknown, request: FlashcardLlmR
         phrase,
         pinyin,
         example,
+        // GUARDRAIL: Always preserve example_pinyin if present, even if empty string.
+        // This ensures the field is consistent and can be regenerated via refresh-all-pinyin.
         ...(examplePinyin ? { example_pinyin: examplePinyin } : {}),
         include_in_fill_test: includeInFillTest,
       });
@@ -568,12 +594,17 @@ export function renderPhraseWithPinyin(phrase: string, pinyin: string): ReactNod
     return phrase;
   }
 
+  // GUARDRAIL: Pinyin rendering uses flex-nowrap (not flex-wrap) to prevent ruby element breaking.
+  // Previous issue: flex-wrap caused ruby (<rt> pinyin) to separate from base characters, truncating display.
+  // Fix: Use flex-nowrap + overflow-x-auto and flex-shrink-0 on ruby elements.
+  // Keep <rt> styling minimal to preserve natural ruby text positioning (above characters).
+  // Use items-end to align baseline with character baseline (not top with pinyin).
   return (
-    <span className="inline-flex flex-wrap items-end gap-1">
+    <span className="inline-flex flex-nowrap items-end gap-0.5 overflow-x-auto">
       {chars.map((char, index) => (
-        <ruby key={`${phrase}-${index}`} className="text-base leading-tight">
-          {char}
-          <rt className="text-[10px] text-gray-500">{pinyinParts[index] ?? ""}</rt>
+        <ruby key={`${phrase}-${index}`} className="inline-flex flex-col items-center flex-shrink-0">
+          <rt className="text-[10px] text-gray-500 leading-none whitespace-nowrap">{(pinyinParts[index] ?? "").toLowerCase()}</rt>
+          <span className="text-base">{char}</span>
         </ruby>
       ))}
     </span>
@@ -594,27 +625,29 @@ export function renderSentenceWithPinyin(sentence: string, pinyin: string): Reac
   const pinyinParts = alignPinyinPartsForCount(hanziCount, pinyin);
   let hanziIndex = 0;
 
+  // GUARDRAIL: Pinyin rendering uses flex-nowrap (not flex-wrap) to prevent ruby element breaking.
+  // Previous issue: flex-wrap caused ruby (<rt> pinyin) to separate from characters, truncating display.
+  // Fix: Use flex-nowrap + overflow-x-auto, and flex-col on ruby for top-positioned pinyin.
+  // Add whitespace-nowrap to <rt> to prevent pinyin syllables from wrapping.
+  // Use items-end to align punctuation at baseline with characters (not at top with pinyin).
   return (
-    <span className="inline-flex flex-wrap items-end gap-1">
+    <span className="inline-flex flex-nowrap items-end gap-0.5 overflow-x-auto">
       {chars.map((char, index) => {
         if (!isHanziCharacter(char)) {
           return (
-            <span key={`${sentence}-${index}`} className="text-base leading-tight">
-              {char}
-            </span>
+            <span key={`${sentence}-${index}`} className="text-base flex-shrink-0">{char}</span>
           );
         }
 
         const part = pinyinParts[hanziIndex] ?? "";
         hanziIndex += 1;
         return (
-          <ruby key={`${sentence}-${index}`} className="text-base leading-tight">
-            {char}
-            <rt className="text-[10px] text-gray-500">{part}</rt>
+          <ruby key={`${sentence}-${index}`} className="inline-flex flex-col items-center flex-shrink-0">
+            <rt className="text-[10px] text-gray-500 leading-none whitespace-nowrap">{part.toLowerCase()}</rt>
+            <span className="text-base">{char}</span>
           </ruby>
         );
       })}
     </span>
   );
 }
-

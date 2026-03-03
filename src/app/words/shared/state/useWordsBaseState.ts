@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { Word } from "@/lib/types";
-import type { AllWordsSortKey, DueWordsSortKey, SortDirection } from "../words.shared.types";
+import type { AllWordsSortKey } from "../../all/all.types";
+import type { DueWordsSortKey } from "../../review/review.types";
+import type { SortDirection } from "../words.shared.types";
 
 export function useWordsBaseState() {
   const [words, setWords] = useState<Word[]>([]);

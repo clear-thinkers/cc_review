@@ -46,6 +46,9 @@ export type XinhuaFlashcardQueryOptions = {
 
 let datasetCache: XinhuaDataset | null = null;
 let datasetPromise: Promise<XinhuaDataset> | null = null;
+// Guardrail: keep O(1) character lookup for admin target hydration. Linear scans per character
+// against char_detail.json can make /words/admin appear to hang on large local datasets.
+let detailIndexCache: Map<string, DictionaryDetailEntry> | null = null;
 const flashcardCache = new Map<string, XinhuaFlashcardInfo | null>();
 
 function normalizeText(value: string | undefined): string {
@@ -175,8 +178,17 @@ export async function loadXinhuaDataset(fetcher: Fetcher = fetch): Promise<Xinhu
 
   datasetPromise = fetchDatasetArray<DictionaryDetailEntry>(LOCAL_DATA_PATHS.detail, "char_detail.json", fetcher)
     .then((detail) => {
+      const detailIndex = new Map<string, DictionaryDetailEntry>();
+      for (const entry of detail) {
+        const character = normalizeText(entry.char);
+        if (!character || detailIndex.has(character)) {
+          continue;
+        }
+        detailIndex.set(character, entry);
+      }
       const dataset: XinhuaDataset = { detail };
       datasetCache = dataset;
+      detailIndexCache = detailIndex;
       return dataset;
     })
     .finally(() => {
@@ -195,7 +207,9 @@ export function buildXinhuaFlashcardInfo(
     return null;
   }
 
-  const detailEntry = dataset.detail.find((entry) => normalizeText(entry.char) === character);
+  const detailEntry =
+    detailIndexCache?.get(character) ??
+    dataset.detail.find((entry) => normalizeText(entry.char) === character);
   if (!detailEntry) {
     return null;
   }
@@ -241,5 +255,6 @@ export async function getXinhuaFlashcardInfo(
 export function resetXinhuaCachesForTests(): void {
   datasetCache = null;
   datasetPromise = null;
+  detailIndexCache = null;
   flashcardCache.clear();
 }

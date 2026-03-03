@@ -4,7 +4,7 @@ import type {
   AdminPendingPhrase,
   AdminStatsFilter,
   AdminTarget,
-} from "../words.shared.types";
+} from "../../admin/admin.types";
 
 export function useAdminState() {
   const [adminTargets, setAdminTargets] = useState<AdminTarget[]>([]);
@@ -17,6 +17,7 @@ export function useAdminState() {
   const [adminRegeneratingKey, setAdminRegeneratingKey] = useState<string | null>(null);
   const [adminSavingKey, setAdminSavingKey] = useState<string | null>(null);
   const [adminDeletingKey, setAdminDeletingKey] = useState<string | null>(null);
+  const [adminRefreshingAllPinyin, setAdminRefreshingAllPinyin] = useState(false);
   const [adminPendingPhrases, setAdminPendingPhrases] = useState<AdminPendingPhrase[]>([]);
   const [adminPendingMeanings, setAdminPendingMeanings] = useState<AdminPendingMeaning[]>([]);
   const [adminEditingExampleRowKey, setAdminEditingExampleRowKey] = useState<string | null>(null);
@@ -43,6 +44,8 @@ export function useAdminState() {
     setAdminSavingKey,
     adminDeletingKey,
     setAdminDeletingKey,
+    adminRefreshingAllPinyin,
+    setAdminRefreshingAllPinyin,
     adminPendingPhrases,
     setAdminPendingPhrases,
     adminPendingMeanings,

@@ -7,7 +7,7 @@ import type { WordsWorkspaceVM } from "./WordsWorkspaceVM";
 export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; children: ReactNode }) {
   return (
     <main className="kids-page mx-auto max-w-7xl p-6">
-      <h1 className="text-2xl font-semibold">Chinese Character Review Game</h1>
+      <h1 className="text-2xl font-semibold">{vm.str.nav.appTitle}</h1>
       <div className="mt-6 grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <section className="space-y-3 rounded-lg border px-4 pt-4 pb-6 lg:self-start">
           <h2 className="font-medium">{vm.str.nav.menu}</h2>

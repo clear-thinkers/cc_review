@@ -16,8 +16,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminTargetsReadyForTestingCount,
     adminTargetsExcludedForTestingCount,
     handleAdminPreloadAll,
+    handleAdminRefreshAllPinyin,
     adminLoading,
     adminPreloading,
+    adminRefreshingAllPinyin,
     adminProgressText,
     adminNotice,
     adminTableRenderRows,
@@ -145,11 +147,20 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+          className="rounded-md border-2 border-amber-400 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
           onClick={handleAdminPreloadAll}
-          disabled={adminLoading || adminPreloading || adminTargets.length === 0}
+          disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || adminTargets.length === 0}
         >
           {adminPreloading ? str.admin.buttons.preloading : str.admin.buttons.preload}
+        </button>
+        <button
+          type="button"
+          className="rounded-md border-2 border-purple-300 bg-purple-100 px-4 py-2 font-medium text-purple-700 disabled:opacity-50"
+          onClick={handleAdminRefreshAllPinyin}
+          disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || adminTargets.length === 0}
+          title={str.admin.buttonTooltips.refreshAllPinyin}
+        >
+          {adminRefreshingAllPinyin ? str.admin.buttons.refreshingAllPinyin : str.admin.buttons.refreshAllPinyin}
         </button>
       </div>
 

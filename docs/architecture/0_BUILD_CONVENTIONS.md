@@ -1,6 +1,6 @@
 # BUILD CONVENTIONS
 
-_Last updated: 2026-02-28_
+_Last updated: 2026-03-03_
 
 ---
 
@@ -79,6 +79,71 @@ export function gradeWord(wordId: string, grade: Grade): SchedulerResult { ... }
 // ❌ Wrong
 export function gradeWord(wordId, grade) { ... }
 ```
+
+---
+
+## 1a. Type File Organization
+
+All TypeScript types must be defined in feature-scoped `*.types.ts` files, never inline in component files.
+
+**Principle:** Types live adjacent to the features that use them. This improves IDE navigation, prevents cross-feature coupling, and makes future feature development clearer.
+
+### Pattern
+
+```
+src/app/words/
+  shared/
+    shell.types.ts         ← Navigation/layout types (shared across features)
+    words.shared.types.ts  ← Re-export hub for backward compat + shared utilities only
+    words.shared.state.ts
+  add/
+    add.types.ts           ← Add feature types (empty placeholder if no feature-specific types yet)
+  all/
+    all.types.ts           ← All Characters inventory page types
+  review/
+    review.types.ts        ← Due queue page types
+    flashcard/
+      flashcard.types.ts   ← Flashcard review types
+    fill-test/
+      fillTest.types.ts    ← Fill-test review types
+  admin/
+    admin.types.ts         ← Admin curation + generation request/response types
+```
+
+### File Organization Rules
+
+1. **Feature-level scope:** Each feature directory (`add/`, `all/`, `review/`, `admin/`, etc.) owns one `[feature].types.ts` file
+2. **Navigation types:** Shared across all features in `shared/shell.types.ts` (`NavPage`, `WordsSectionPage`, `NavItem`)
+3. **Shared utilities:** Rare; kept only in central `words.shared.types.ts` (`WordsLocaleStrings`, `SortDirection`, `RenderWithPinyin`)
+4. **Sub-feature types:** Deep features like `review/flashcard/flashcard.types.ts` and `review/fill-test/fillTest.types.ts` own their own types
+5. **Import sources:** Feature code imports types from adjacent `[feature].types.ts` file; central file used only for re-exports and shared utilities
+
+### Example Usage
+
+```typescript
+// src/app/words/admin/admin.types.ts — types for admin curation
+export type AdminTarget = { character: string; pronunciation: string; key: string };
+export type AdminTableRow = { /* ... */ };
+
+// src/app/words/admin/AdminSection.tsx — consume types from adjacent file
+import type { AdminTarget, AdminTableRow } from "./admin.types";
+
+export function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
+  const targets: AdminTarget[] = vm.adminTargets;
+  // ...
+}
+```
+
+### Backward Compatibility
+
+Central `words.shared.types.ts` acts as a **re-export hub** to maintain backward compatibility with existing code. All feature types are re-exported from the central file, but **new code must import from feature-specific files directly**.
+
+### Test Coverage
+
+Each feature-scoped type file must have a companion `[feature].types.test.ts` file that validates:
+- Type construction (objects can be created with correct shape)
+- Union types (values match expected literals)
+- Tuple types (length and element types are correct)
 
 ---
 
@@ -188,6 +253,7 @@ src/app/words/[feature]/
 - [ ] No hardcoded text in JSX — all copy via strings object
 - [ ] Locale hook used consistently
 - [ ] ARIA labels sourced from strings file
+- [ ] **All buttons have bilingual labels, tooltips, and notifications** (per §7 Button Guidelines)
 - [ ] Tests added per §5
 
 ### UX Policy for Destructive Actions
@@ -271,6 +337,90 @@ This guardrail exists to keep bilingual content and Chinese character data stabl
 - Use Tailwind utility classes directly on JSX elements.
 - No arbitrary Tailwind values (`w-[347px]`) without a documented reason.
 - Dark mode and responsive breakpoints follow the pattern in `WordsWorkspace` — do not introduce new patterns without discussion.
+
+### Consistency Reference
+
+New pages must visually match the existing `/words/admin` page as the baseline. Before writing any component JSX, read the `AdminSection.tsx` component and note these patterns:
+
+**Page structure & containers:**
+- Main content section: `space-y-3 rounded-lg border p-4`
+
+**Headings & labels:**
+- Page title (h2): `font-medium`
+- Page description: `text-sm text-gray-700`
+- Stats card labels: `text-sm uppercase text-gray-600`
+- Table headers: `px-3 py-2 text-left`
+
+**Body text & values:**
+- Large numbers (stats): `text-2xl font-semibold`
+- Regular content: `text-base leading-tight`
+- Helper/body text: `text-sm text-gray-600`
+- Small helper/placeholder: `text-xs text-gray-500`
+
+**Stats cards:**
+- Active (selected) state: `flex min-h-[70px] w-full flex-col items-center justify-center border border-black bg-gray-100 px-2 py-1.5 text-center`
+- Inactive state: `flex min-h-[70px] w-full flex-col items-center justify-center border px-2 py-1.5 text-center`
+
+### Button Guidelines
+
+**Bilingual Requirements:**
+Every action button must have **full bilingual support** in all of the following:
+1. **Button label** — the visible text (e.g., `str.admin.buttons.preload`)
+2. **Tooltip/title** — hover text explaining the action (e.g., `title={str.admin.buttonTooltips.preload}`)
+3. **Notifications** — all success/error messages must use locale-aware strings (e.g., `str.admin.messages.preloadFinished`)
+
+All bilingual strings must be stored in `*.strings.ts` files. Never hardcode English-only labels, tooltips, or messages.
+
+**Standard Button Styling Pattern:**
+All new action buttons should follow this consistent pattern for corners, borders, padding, weight, and disabled state:
+- Container: `rounded-md border-2 px-4 py-2 font-medium disabled:opacity-50`
+- Use lighter/softer Tailwind color palettes consistent with the `/words/admin` page
+- Avoid dark/harsh colors; prefer `bg-[color]-100` with `border-[color]-400` or `border-[color]-300`
+- Always pair border and background colors from the same Tailwind color family
+
+**Color Examples (admin page reference):**
+- **Preload (yellow/amber):** `border-amber-400 bg-amber-100 text-amber-900`
+- **Refresh pinyin (soft purple):** `border-purple-300 bg-purple-100 text-purple-700`
+- **Regenerate (table action, amber):** `border-amber-400 bg-amber-100 text-amber-900`
+- **Save (table action, emerald):** `border-emerald-600 bg-emerald-600 text-white`
+- **Add/Edit (table action, sky):** `border-sky-300 bg-sky-50 text-sky-800`
+- **Toggle on (table action, teal):** `border-teal-600 bg-teal-50 text-teal-700`
+- **Toggle off (table action, gray):** `border-gray-400 bg-gray-100 text-gray-700`
+- **Delete (table action, rose):** `border-rose-500 bg-rose-50 text-rose-700`
+
+**Primary buttons (full-width page actions):**
+- Container format: `rounded-md border-2 px-4 py-2 font-medium disabled:opacity-50`
+- Pair with appropriate soft colors (e.g., amber for preload, purple for refresh)
+- Example: `className="rounded-md border-2 border-amber-400 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"`
+
+**Secondary buttons (small table actions):**
+- Regenerate (amber): `rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50`
+- Save (emerald): `rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50`
+- Add / Edit / Info (sky blue): `rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-sky-800 disabled:opacity-50`
+- Toggle on (teal): `rounded border-2 border-teal-600 bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-teal-700 disabled:opacity-50`
+- Toggle off (gray): `rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50`
+
+**Destructive buttons:**
+- Delete (rose): `rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50`
+
+**Text inputs & form elements:**
+- Standard input: `w-full rounded-md border px-2 py-1 text-sm`
+
+**Tables:**
+- Wrapper: `overflow-x-auto rounded-md border`
+- Table element: `min-w-full table-fixed border-collapse text-sm`
+- Header row: `border-b bg-gray-50`
+- Body rows: `border-b align-top`
+- Cell padding: `px-3 py-2`
+
+**Messages & status:**
+- Informational notice (blue): `text-sm text-blue-700`
+- Status/help text (gray): `text-sm text-gray-600`
+
+**Do not:**
+- Introduce new color values or spacing scales not present in AdminPage
+- Create new component patterns (unique button styles, card layouts, etc.)
+- If a pattern needed by the new feature genuinely does not exist in the codebase, flag it in the feature spec's **Open Questions** section before building — do not invent it
 
 ---
 
