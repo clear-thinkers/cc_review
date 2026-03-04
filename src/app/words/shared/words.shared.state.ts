@@ -776,7 +776,7 @@ const gradeLabels = getGradeLabels(str);
   }
 
   function resetFlashcardWordState() {
-    setFlashcardRevealed(false);
+    setFlashcardRevealed(true);
     setFlashcardLlmLoading(false);
     setFlashcardLlmError(null);
   }
@@ -2360,7 +2360,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizDropSentenceIndex(null);
     setFlashcardQueue(wordsForSession.map(cloneWord));
     setFlashcardIndex(0);
-    setFlashcardRevealed(false);
+    setFlashcardRevealed(true);
     setFlashcardLlmLoading(false);
     setFlashcardLlmError(null);
     setFlashcardHistory([]);
@@ -2509,6 +2509,7 @@ const gradeLabels = getGradeLabels(str);
     flashcardInProgress,
     currentFlashcardWord,
     flashcardIndex,
+    setFlashcardIndex,
     flashcardQueue,
     handleStopFlashcardSession,
     setFlashcardRevealed,

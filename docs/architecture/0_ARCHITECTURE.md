@@ -83,18 +83,6 @@ These rules govern content curation at `/words/admin`:
 9. Preload generation skips targets that already have persisted content and continues non-fatally on per-target failures.
 10. Characters with no dictionary pronunciation are skipped with notice; this is not a fatal load error.
 
-### Extension Guardrails (promoted from companion docs)
-
-These additional invariants were previously recorded only in dated flow documents; they are now authoritative and any change must trigger an update here:
-
-- Persisted content must always follow the pipeline: **draft → normalize → persist**. No direct writes of unnormalized data.
-- The `flashcardContents` primary key is fixed as `character|pronunciation`. Changing this composite key requires an architecture review and explicit doc update.
-- If fill-test semantics change, both the admin status definitions above **and** the due-review derivation rules (§1 Due Review Queue Rules) must be updated in sync.
-- Preload behaviour is sequential by default; converting to parallel or batched execution demands a documented rate‑limit, retry, and error policy before implementation.
-- Any feature touching fill-test inclusion or derivation must consider both admin and review layers simultaneously.
-
-
-
 ### Due Review Queue Rules
 
 These rules govern the due queue view at `/words/review`:
@@ -110,6 +98,21 @@ These rules govern the due queue view at `/words/review`:
 7. Due-table sorting is client-side; default due ordering uses `nextReviewAt` then `createdAt` as tie-breaker.
 8. Fill-test start/action controls are enabled only when a due row has a usable derived `fillTest`.
 9. Any change to fill-test eligibility or semantics must be reflected here and in the Content Admin Curation Rules (§1) concurrently. Failure to update both documents is a documentation gap.
+
+### Flashcard Review Rules (`/words/review/flashcard`)
+
+These rules govern the flashcard review screen for memory consolidation:
+
+1. Flashcard is **review-only** — it does not award grades or update scheduling. Grading happens exclusively in dedicated test interfaces (`/words/review/fill-test` or other test modes).
+2. Flashcard displays:
+   - **Always visible:** Character (Hanzi) with pinyin support, meaning(s), and a pinyin toggle button
+   - **Conditionally visible:** Phrase-example pairs marked with `include_in_fill_test: true`
+   - **Placeholder when empty:** If no phrases are marked for testing, display "No phrases included for testing" instead of blank space
+3. Character and meaning are always displayed; only phrases are conditionally rendered based on the `include_in_fill_test` flag.
+4. Pinyin toggle (`showPinyin` state in parent `FlashcardReviewSection`) controls visibility of pinyin spans across all text (character, phrases, examples). When toggled off, pinyin is removed from DOM (not hidden via CSS).
+5. Parent component manages session-level state (toggle, word sequence); individual cards are stateless display components.
+6. No grading buttons, no progress tracking, no scheduler mutations on this screen.
+7. Any change to how flashcard content is displayed (phrases, pinyin, layout) must be codified here before implementation.
 
 ---
 
@@ -198,6 +201,17 @@ These are the technical behaviors the system upholds. They are the factual basis
 1. **Review screens read only from `flashcardContents`.** No path from `/words/review/*` reaches `/api/flashcard/generate`.
 2. **Every value written to `flashcardContents` has been normalized.** Schema shape is enforced before any IndexedDB write.
 3. **Normalization drops bad content — it does not pass it through.** Invalid phrases/examples are removed; the rest of the payload proceeds.
+4. **Pinyin rendering on review screens uses per-character ruby alignment (not inline or line-level pinyin):**
+   - Each Hanzi character displays its pinyin token on a separate line directly above the character.
+   - Pinyin is mapped only to Hanzi code points (CJK #3400–#4DBF, #4E00–#9FFF, #F900–#FAFF); non-Hanzi characters (punctuation, spaces, English) do not consume pinyin tokens.
+   - Pinyin tokens are cleaned (punctuation removed via regex `/[^\p{L}\p{M}0-9]/gu`) and normalized to lowercase before display.
+   - Pinyin appears italicized and in gray (#888) at a smaller font size than the associated Hanzi.
+   - This alignment applies to character, phrase, and example text in flashcard review (`/words/review/flashcard`).
+5. **Flashcard review conditionally displays phrases based on `include_in_fill_test` flag:**
+   - Only phrases marked `include_in_fill_test: true` in `flashcardContents` are rendered as visible blocks on the flashcard.
+   - If no phrases are marked for testing, a placeholder message ("No phrases included for testing") is displayed in place of the phrase-example blocks.
+   - Character and meaning remain visible regardless of phrase-test inclusion; phrases are the only conditional element.
+   - Parent component (`FlashcardReviewSection`) controls visibility toggle via `showPinyin` state (boolean); when `false`, pinyin spans are removed from DOM entirely (not hidden via CSS).
 4. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists.
 5. **Due review pages wrap `WordsWorkspace` in `<Suspense>`.** Required for correct search-param handling in Next.js.
 

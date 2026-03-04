@@ -77,9 +77,9 @@ export const wordsStrings = {
       progress: "Character {current} of {total}",
       stopButton: "Stop flashcards",
       noActiveSession: "Please start a flashcard review from the due-character actions above.",
-      revealButton: "Reveal details",
-      hideButton: "Hide details",
-      revealPrompt: "Reveal details before grading this card.",
+      revealButton: "Show Pinyin",
+      hideButton: "Hide Pinyin",
+      revealPrompt: "Show pinyin before grading this card.",
       loadingDict: "Loading dictionary details...",
       noDictData:
         "Could not load dictionary data for this card. You can still grade the review.",
@@ -96,6 +96,17 @@ export const wordsStrings = {
       meaning: {
         prefix: "Meaning",
         examplePrefix: "Example: ",
+      },
+      card: {
+        showDetailsButton: "Show Details",
+        hideDetailsButton: "Hide Details",
+        noPhraseIncluded: "No phrases included for testing",
+      },
+      navigation: {
+        first: "First",
+        previous: "Previous",
+        next: "Next",
+        end: "End",
       },
       summary: {
         title: "Last Flashcard Summary",
@@ -376,9 +387,9 @@ export const wordsStrings = {
       progress: "第 {current} 个，共 {total} 个",
       stopButton: "停止闪卡",
       noActiveSession: "请先从上方待复习区域开始闪卡复习。",
-      revealButton: "显示详情",
-      hideButton: "隐藏详情",
-      revealPrompt: "评分前请先显示详情。",
+      revealButton: "显示拼音",
+      hideButton: "隐藏拼音",
+      revealPrompt: "评分前请先显示拼音。",
       loadingDict: "正在加载词典详情...",
       noDictData: "无法加载该闪卡的词典数据，但仍可以继续评分。",
       loadingContent: "正在读取已保存内容...",
@@ -394,6 +405,17 @@ export const wordsStrings = {
       meaning: {
         prefix: "释义",
         examplePrefix: "例句：",
+      },
+      card: {
+        showDetailsButton: "显示详情",
+        hideDetailsButton: "隐藏详情",
+        noPhraseIncluded: "未包含任何用于测试的短语",
+      },
+      navigation: {
+        first: "第一个",
+        previous: "上一个",
+        next: "下一个",
+        end: "最后一个",
       },
       summary: {
         title: "上次闪卡总结",

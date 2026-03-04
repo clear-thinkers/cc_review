@@ -338,6 +338,46 @@ This guardrail exists to keep bilingual content and Chinese character data stabl
 - No arbitrary Tailwind values (`w-[347px]`) without a documented reason.
 - Dark mode and responsive breakpoints follow the pattern in `WordsWorkspace` — do not introduce new patterns without discussion.
 
+### Per-Character Pinyin (Ruby) Alignment
+
+For Chinese learning UI where pinyin is shown with Hanzi, use per-character ruby alignment instead of line-level pinyin.
+
+**Core implementation rules:**
+- Render text as per-character units (`Hanzi + its pinyin token`), not a full pinyin line above a full Hanzi line.
+- Map pinyin tokens only to Hanzi code points (`\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff`); punctuation and non-Hanzi characters must not consume pinyin tokens.
+- Split pinyin by whitespace to separate tokens (one token per Hanzi character in order).
+- Remove punctuation from pinyin tokens using regex `/[^\p{L}\p{M}0-9]/gu` (keep Unicode letters, diacritical marks, and numbers) before mapping.
+- Normalize all pinyin to lowercase using `.toLowerCase()` before display to ensure consistent presentation regardless of data source.
+- When a Hanzi has no corresponding pinyin token (mismatch in token count or missing data), render the Hanzi without pinyin above it (no placeholder, no blank space).
+- For non-Hanzi characters in the text (punctuation, spaces, English), do not render pinyin above them.
+- Keep one visual unit per character: pinyin flex-direction column above Hanzi below using small flex gap (2px).
+- Use responsive sizing by content tier (`character`, `phrase`, `example`) with corresponding pinyin sizes (12px–15px).
+
+**DOM structure pattern** (per `FlashcardCard.tsx` implementation):
+```tsx
+<div className="flashcard-ruby-line">  // Container for the full line
+  {characters.map(char => (
+    <span className="flashcard-ruby-unit">  // Per-character container
+      {showPinyin && pinyinForChar ? (
+        <span className="flashcard-ruby-pinyin">pinyin</span>
+      ) : null}
+      <span className="flashcard-ruby-text">char</span>
+    </span>
+  ))}
+</div>
+```
+
+**Conditional rendering (not CSS hiding):**
+- When pinyin toggle is off (`showPinyin === false`), do not render pinyin spans at all — remove from DOM entirely (not `visibility: hidden` or `display: none` with CSS).
+- Preference for DOM removal vs. CSS hiding avoids layout ghost spaces and makes intent explicit in JSX.
+- Example spacing (`column-gap`) adapts dynamically: tighter when pinyin hidden, normal when visible.
+
+**Styling applied to ruby units:**
+- Pinyin styling: italic, gray (#888), font-size 12px–15px depending on context
+- Hanzi/text styling: bold or normal weight, larger font-size (20px–120px depending on context)
+- Ruby unit padding: small inline padding (0.06em) for Hanzi units to control spacing
+- Ruby line gap: 2px between pinyin and text within unit; variable column-gap between units
+
 ### Consistency Reference
 
 New pages must visually match the existing `/words/admin` page as the baseline. Before writing any component JSX, read the `AdminSection.tsx` component and note these patterns:

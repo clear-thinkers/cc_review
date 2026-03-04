@@ -1,6 +1,6 @@
 ﻿# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-02-27_
+_Last updated: 2026-03-03_
 
 ---
 
@@ -40,8 +40,8 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
 | 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in IndexedDB. Separated by generation type (full / phrase / example / pinyin). | `docs/feature-specs/` | 📋 Planned | — |
-| 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | — | 📋 Planned | — |
-| 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. | `docs/feature-specs/` | 📋 Planned | — |
+| 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | `docs/architecture/2026-03-03-grading-logic-model.md` | ✅ Done | 2026-03-03 |
+| 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. Per-character pinyin ruby alignment, phrase-example pairing, pinyin toggle. | `docs/feature-specs/2026-03-03-flashcard-ui-redesign.md` | ✅ Done | 2026-03-04 |
 
 ### Phase 2 — Structure & Visibility
 

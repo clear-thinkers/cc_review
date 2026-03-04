@@ -10,7 +10,7 @@ export function useFlashcardReviewState() {
   const [flashcardCompleted, setFlashcardCompleted] = useState(false);
   const [flashcardQueue, setFlashcardQueue] = useState<Word[]>([]);
   const [flashcardIndex, setFlashcardIndex] = useState(0);
-  const [flashcardRevealed, setFlashcardRevealed] = useState(false);
+  const [flashcardRevealed, setFlashcardRevealed] = useState(true);
   const [flashcardSubmitting, setFlashcardSubmitting] = useState(false);
   const [flashcardHistory, setFlashcardHistory] = useState<FlashcardHistoryItem[]>([]);
   const [flashcardNotice, setFlashcardNotice] = useState<string | null>(null);
