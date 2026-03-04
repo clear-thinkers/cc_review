@@ -48,7 +48,7 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
 | 4 | **Character Level Tagging** | Add `level` field to `Word` (e.g., Grade 1, Grade 2). Assign and filter on All Characters page. Review scope can be filtered by level. Scheduler unaffected. | `docs/feature-specs/` | 📋 Planned | — |
-| 5 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | `docs/feature-specs/` | 📋 Planned | — |
+| 5 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | [`docs/feature-specs/2026-03-04-quiz-results-summary.md`](../feature-specs/2026-03-04-quiz-results-summary.md) | ✅ Shipped | 2026-03-04 |
 
 ### Phase 3 — Motivation Layer
 

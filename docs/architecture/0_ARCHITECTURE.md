@@ -114,6 +114,36 @@ These rules govern the flashcard review screen for memory consolidation:
 6. No grading buttons, no progress tracking, no scheduler mutations on this screen.
 7. Any change to how flashcard content is displayed (phrases, pinyin, layout) must be codified here before implementation.
 
+### Quiz Results Rules (`/words/results`)
+
+These rules govern the results/history view for session data reporting:
+
+1. Results page is **view-only and read-only** — no modifications to `quizSessions` are performed here except for the explicit "Clear History" action.
+2. The page displays all completed fill-test sessions in a table/list sorted by `createdAt` (newest first).
+3. Each session row displays: Session Date, % Fully Correct, % Failed, % Partial, Duration, Tested Count, Tested Characters, Failed Count, Failed Characters, Coins Earned.
+4. **Accuracy calculation rules:**
+   - `% Fully Correct = (fullyCorrectCount / totalGrades) × 100`, rounded to nearest integer
+   - `% Failed = (failedCount / totalGrades) × 100`, rounded to nearest integer
+   - `% Partial = (partiallyCorrectCount / totalGrades) × 100`, rounded to nearest integer
+   - Only `grade="easy"` counts as fully correct for accuracy; `grade="hard"` and `grade="again"` do not contribute to accuracy
+   - The three percentages must sum to 100% (within ±1% rounding tolerance)
+5. **Character list derivation:**
+   - Tested characters = unique hanzi from all grade entries in `gradeData`, deduplicated and ordered by first appearance
+   - Failed characters = unique hanzi from grade entries where `grade="again"` only; excludes `grade="hard"` or `grade="easy"`
+   - Character lists are displayed as comma-separated Hanzi with truncation to first 8–10 characters plus "…" if longer
+6. **Summary card calculations:** When multiple sessions exist, compute weighted averages across all sessions:
+   - Total Sessions = count of all records
+   - Overall % Fully Correct = (sum of fullyCorrectCounts across all sessions / sum of totalGrades across all sessions) × 100
+   - Overall % Failed and Overall % Partial calculated similarly
+   - Total Characters Tested = sum of unique character counts across all sessions
+   - Total Duration = sum of durationSeconds across all sessions, displayed in human-readable format (hh:mm:ss)
+7. **Clear History action:**
+   - Single destructive action button available only when sessions exist
+   - Requires confirmation dialog before deletion
+   - On confirmation, all records in `quizSessions` table are deleted permanently with no undo
+   - Table and summary cards clear immediately upon successful deletion
+8. **Empty state:** When no sessions exist, display a placeholder message directing users to start a review session; hide all table and summary UI elements.
+
 ---
 
 ## 2) Layer Boundaries
@@ -171,6 +201,21 @@ This describes how layers are wired — the actual call and import relationships
 | `meanings` | string[] | Definition list |
 | `phrases` | Phrase[] | Each: `{ zh, pinyin, en, include_in_fill_test }` |
 | `examples` | Example[] | Each: `{ zh, pinyin, en, include_in_fill_test }` |
+
+**`quizSessions` table** — completed fill-test session records (view-only, reporting interface)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | Unique session ID — generated as `makeId()` or UUID |
+| `createdAt` | number | Unix timestamp (milliseconds) when session ended |
+| `sessionType` | string | Currently "fill-test"; reserved for future quiz types (Phase 3+) |
+| `gradeData` | SessionGradeData[] | Individual word grades: `{ wordId, hanzi, grade, timestamp }` |
+| `fullyCorrectCount` | number | Count of grades === "easy" |
+| `failedCount` | number | Count of grades === "again" |
+| `partiallyCorrectCount` | number | Count of grades === "good" or "hard" |
+| `totalGrades` | number | Sum of all grade counts (fullyCorrect + failed + partiallyCorrect) |
+| `durationSeconds` | number | Elapsed time in seconds from session start to completion |
+| `coinsEarned` | number | Initially `0`; updated by Rewards System (Phase 3) |
 
 ### Static Data
 

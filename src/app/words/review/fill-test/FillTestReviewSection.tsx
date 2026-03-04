@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 
 export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
+  const router = useRouter();
   const {
     isFillTestReviewPage,
     str,
@@ -142,6 +144,13 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
             >
               {str.fillTest.startButton}
             </button>
+            <button
+              type="button"
+              className="rounded-full border-4 border-amber-500 bg-amber-50 px-8 py-2 text-lg font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+              onClick={() => router.push("/words/review")}
+            >
+              {str.results.goToReviewPage}
+            </button>
             {quizCompleted && quizHistory.length > 0 ? (
               <button
                 type="button"
@@ -170,7 +179,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                 </div>
                 <button
                   type="button"
-                  className="rounded-md border px-3 py-2"
+                  className="rounded-md border-2 border-red-500 bg-red-50 px-3 py-2 text-red-800"
                   onClick={handleStopQuizSession}
                 >
                   {str.fillTest.gameplay.stopButton}
@@ -333,7 +342,10 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                           : currentQuizWord.fillTest.phrases[resultItem.chosenPhraseIndex];
 
                       return (
-                        <li key={`${currentQuizWord.id}-result-${resultItem.sentenceIndex}`}>
+                        <li
+                          key={`${currentQuizWord.id}-result-${resultItem.sentenceIndex}`}
+                          className={resultItem.isCorrect ? "text-green-700" : "text-red-700"}
+                        >
                           {str.fillTest.results.sentenceResult
                             .replace("{index}", String(resultItem.sentenceIndex + 1))
                             .replace(

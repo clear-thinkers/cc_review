@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Chinese Review App - Words Module Strings
  *
  * All user-facing text for the words feature (add, review, admin, all pages).
@@ -19,6 +19,7 @@ export const wordsStrings = {
       allCharacters: "All Characters",
       contentAdmin: "Content Admin",
       dueReview: "Due Review",
+      quizResults: "Quiz Results",
     },
 
     // ============= GRADING LABELS =============
@@ -163,6 +164,50 @@ export const wordsStrings = {
         correctBlanks: "correct blanks: ",
       },
       completionMessage: "Fill-test quiz complete.",
+    },
+
+    // ============= QUIZ RESULTS PAGE =============
+    results: {
+      locale: "en",
+      pageTitle: "Quiz Results",
+      noSessions: "No quiz sessions yet.",
+      goToReviewPage: "Go to Review Page",
+      summary: {
+        totalSessions: "Total Sessions",
+        fullyCorrectPercent: "Fully Correct %",
+        failedPercent: "Failed %",
+        partiallyCorrectPercent: "Partially Correct %",
+        totalCharactersTested: "Total Characters Tested",
+        totalDuration: "Total Duration",
+        totalCoinsEarned: "Total Coins Earned",
+      },
+      table: {
+        headers: {
+          date: "Date",
+          fullyCorrectPercent: "Fully Correct %",
+          failedPercent: "Failed %",
+          partiallyCorrectPercent: "Partially Correct %",
+          duration: "Duration",
+          testedCount: "Tested Count",
+          testedCharacters: "Tested Characters",
+          failedCount: "Failed Count",
+          failedCharacters: "Failed Characters",
+          coinsEarned: "Coins Earned",
+        },
+        noCharacters: "—",
+      },
+      clearHistory: {
+        button: "Clear History",
+        title: "Delete all history?",
+        message: "This action cannot be undone. All quiz results will be permanently deleted.",
+        confirmButton: "Delete All",
+        cancelButton: "Cancel",
+      },
+      emptyState: {
+        heading: "No Results Yet",
+        message: "Start a quiz to see your results here.",
+        action: "Go to Review Page",
+      },
     },
 
     // ============= CONTENT ADMIN PAGE =============
@@ -330,6 +375,7 @@ export const wordsStrings = {
       allCharacters: "全部汉字",
       contentAdmin: "内容管理",
       dueReview: "待复习",
+      quizResults: "测验结果",
     },
 
     // ============= GRADING LABELS =============
@@ -472,6 +518,50 @@ export const wordsStrings = {
         correctBlanks: "填空正确: ",
       },
       completionMessage: "填空测试已完成",
+    },
+
+    // ============= 测验结果页面 =============
+    results: {
+      locale: "zh",
+      pageTitle: "测验结果",
+      noSessions: "还没有测验记录。",
+      goToReviewPage: "前往复习页面",
+      summary: {
+        totalSessions: "总测验次数",
+        fullyCorrectPercent: "全对 %",
+        failedPercent: "失败 %",
+        partiallyCorrectPercent: "部分正确 %",
+        totalCharactersTested: "总共测试汉字",
+        totalDuration: "总用时",
+        totalCoinsEarned: "总获得金币",
+      },
+      table: {
+        headers: {
+          date: "日期",
+          fullyCorrectPercent: "全对 %",
+          failedPercent: "失败 %",
+          partiallyCorrectPercent: "部分正确 %",
+          duration: "用时",
+          testedCount: "测试数量",
+          testedCharacters: "测试汉字",
+          failedCount: "失败数量",
+          failedCharacters: "失败汉字",
+          coinsEarned: "获得金币",
+        },
+        noCharacters: "—",
+      },
+      clearHistory: {
+        button: "清除历史",
+        title: "删除所有测验记录?",
+        message: "此操作无法撤销。所有测验结果将被永久删除。",
+        confirmButton: "删除全部",
+        cancelButton: "取消",
+      },
+      emptyState: {
+        heading: "还没有测验结果",
+        message: "开始一次测验来查看您的结果。",
+        action: "前往复习页面",
+      },
     },
 
     // ============= CONTENT ADMIN PAGE =============
@@ -628,3 +718,4 @@ export const wordsStrings = {
     },
   },
 };
+

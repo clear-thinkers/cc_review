@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useXinhuaFlashcardInfo } from "@/hooks/useXinhuaFlashcardInfo";
 import {
   db,
+  createQuizSession,
   deleteFlashcardContent,
   getAllFlashcardContents,
   getDueWords,
@@ -23,6 +24,7 @@ import {
 import { makeId } from "@/lib/id";
 import { calculateNextState, type Grade } from "@/lib/scheduler";
 import type { Word } from "@/lib/types";
+import type { QuizSession } from "@/app/words/results/results.types";
 import { getXinhuaFlashcardInfo } from "@/lib/xinhua";
 import {
   QUIZ_PHRASE_DRAG_MIME,
@@ -189,6 +191,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setQuizDraggingPhraseIndex,
     quizDropSentenceIndex,
     setQuizDropSentenceIndex,
+    quizSessionStartTime,
+    setQuizSessionStartTime,
   } = fillTestState;
 
   const {
@@ -811,6 +815,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizInProgress(false);
     setQuizQueue([]);
     setQuizIndex(0);
+    setQuizSessionStartTime(null);
     resetQuizWordState();
   }
 
@@ -2327,6 +2332,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizHistory([]);
     setQuizCompleted(false);
     setQuizInProgress(true);
+    setQuizSessionStartTime(Date.now());
     setQuizNotice(null);
   }
 
@@ -2408,6 +2414,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizHistory([]);
     setQuizCompleted(false);
     setQuizInProgress(true);
+    setQuizSessionStartTime(Date.now());
     setQuizNotice(null);
   }, [
     fillTestDueWords,
@@ -2468,6 +2475,61 @@ const gradeLabels = getGradeLabels(str);
 
     const isLastWord = quizIndex >= quizQueue.length - 1;
     if (isLastWord) {
+      // Create and save the quiz session before finishing
+      try {
+        if (quizSessionStartTime !== null) {
+          const sessionEndTime = Date.now();
+          const durationSeconds = Math.floor((sessionEndTime - quizSessionStartTime) / 1000);
+
+          // Calculate grade counts from quizHistory
+          let fullyCorrectCount = 0;
+          let failedCount = 0;
+          let partiallyCorrectCount = 0;
+
+          console.log("Quiz completion - quizHistory:", quizHistory); // DEBUG
+
+          // Build gradeData array from quizHistory
+          const gradeData = quizHistory.map((item) => {
+            const grade: "again" | "hard" | "good" | "easy" = item.tier;
+            
+            if (grade === "easy") {
+              fullyCorrectCount += 1;
+            } else if (grade === "again") {
+              failedCount += 1;
+            } else {
+              partiallyCorrectCount += 1;
+            }
+
+            return {
+              wordId: item.wordId,
+              hanzi: item.hanzi,
+              grade,
+              timestamp: sessionEndTime, // Use session end time as approximation
+            };
+          });
+
+          const session: QuizSession = {
+            id: makeId(),
+            createdAt: sessionEndTime,
+            sessionType: "fill-test",
+            gradeData,
+            fullyCorrectCount,
+            failedCount,
+            partiallyCorrectCount,
+            totalGrades: quizHistory.length,
+            durationSeconds,
+            coinsEarned: 0,
+          };
+
+          console.log("Saving quiz session:", session); // DEBUG
+          await createQuizSession(session);
+          console.log("Quiz session saved successfully"); // DEBUG
+        }
+      } catch (error) {
+        console.error("Failed to save quiz session:", error);
+        // Don't block quiz completion if session save fails
+      }
+
       stopQuizSession();
       if (isFillTestReviewPage) {
         await refreshAll();

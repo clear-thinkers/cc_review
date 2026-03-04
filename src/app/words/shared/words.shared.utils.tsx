@@ -76,6 +76,7 @@ export function getNavItems(str: WordsLocaleStrings): NavItem[] {
     { href: "/words/add", label: `${str.nav.addCharacters}`, page: "add" },
     { href: "/words/all", label: `${str.nav.allCharacters}`, page: "all" },
     { href: "/words/admin", label: `${str.nav.contentAdmin}`, page: "admin" },
+    { href: "/words/results", label: `${str.nav.quizResults}`, page: "results" },
     { href: "/words/review", label: `${str.nav.dueReview}`, page: "review" },
   ];
 }

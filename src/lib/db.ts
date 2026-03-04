@@ -2,6 +2,7 @@ import Dexie, { Table } from "dexie";
 import type { Word } from "./types";
 import type { FillTest } from "./fillTest";
 import type { FlashcardLlmResponse } from "./flashcardLlm";
+import type { QuizSession } from "@/app/words/results/results.types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade } from "./scheduler";
 import type { GradeResult } from "./review";
@@ -30,6 +31,7 @@ export class AppDB extends Dexie {
   fillTests!: Table<FillTestOverride, string>;
   disabledFillTests!: Table<DisabledFillTestEntry, string>;
   flashcardContents!: Table<FlashcardContentEntry, string>;
+  quizSessions!: Table<QuizSession, string>;
 
   constructor() {
     super("cc_review_db");
@@ -50,6 +52,13 @@ export class AppDB extends Dexie {
       fillTests: "hanzi, updatedAt",
       disabledFillTests: "hanzi, updatedAt",
       flashcardContents: "key, character, pronunciation, updatedAt",
+    });
+    this.version(5).stores({
+      words: "id, hanzi, nextReviewAt, createdAt",
+      fillTests: "hanzi, updatedAt",
+      disabledFillTests: "hanzi, updatedAt",
+      flashcardContents: "key, character, pronunciation, updatedAt",
+      quizSessions: "id, createdAt",
     });
   }
 }
@@ -177,4 +186,35 @@ export async function putFlashcardContents(entries: Array<Omit<FlashcardContentE
       updatedAt: now,
     }))
   );
+}
+
+// ============= QUIZ SESSIONS =============
+
+export async function getAllQuizSessions(): Promise<QuizSession[]> {
+  try {
+    return await db.quizSessions.orderBy("createdAt").reverse().toArray();
+  } catch (error) {
+    console.error("getAllQuizSessions error:", error);
+    return [];
+  }
+}
+
+export async function createQuizSession(session: QuizSession): Promise<void> {
+  try {
+    console.log("createQuizSession called with:", session);
+    const result = await db.quizSessions.put(session);
+    console.log("createQuizSession result:", result);
+  } catch (error) {
+    console.error("createQuizSession error:", error);
+    throw error;
+  }
+}
+
+export async function clearAllQuizSessions(): Promise<void> {
+  try {
+    await db.quizSessions.clear();
+  } catch (error) {
+    console.error("clearAllQuizSessions error:", error);
+    throw error;
+  }
 }
