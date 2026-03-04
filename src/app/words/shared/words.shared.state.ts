@@ -12,6 +12,7 @@ import {
   getFlashcardContent,
   gradeWord,
   putFlashcardContent,
+  updateWallet,
 } from "@/lib/db";
 import { gradeFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -23,6 +24,7 @@ import {
 } from "@/lib/flashcardLlm";
 import { makeId } from "@/lib/id";
 import { calculateNextState, type Grade } from "@/lib/scheduler";
+import { calculateSessionCoins } from "@/lib/coins";
 import type { Word } from "@/lib/types";
 import type { QuizSession } from "@/app/words/results/results.types";
 import { getXinhuaFlashcardInfo } from "@/lib/xinhua";
@@ -283,6 +285,16 @@ const gradeLabels = getGradeLabels(str);
       },
       { again: 0, hard: 0, good: 0, easy: 0, correct: 0 }
     );
+  }, [quizHistory]);
+
+  // Calculate coins earned in current quiz session
+  const quizSessionCoins = useMemo(() => {
+    const gradeData = quizHistory.map((item) => ({
+      wordId: item.wordId,
+      hanzi: item.hanzi,
+      grade: item.tier,
+    }));
+    return calculateSessionCoins(gradeData);
   }, [quizHistory]);
 
   const flashcardSummary = useMemo(() => {
@@ -2460,6 +2472,14 @@ const gradeLabels = getGradeLabels(str);
           correctCount: result.correctCount,
         },
       ]);
+
+      // Trigger celebration for easy grades
+      if (result.tier === "easy") {
+        // Signal to component that an easy grade was achieved
+        // This allows the component to show animation and play sound
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).__quizEasyGradeEvent = Date.now();
+      }
     } catch (error) {
       console.error("Failed to grade fill test word", error);
       setQuizNotice(`Saved answer view, but failed to update schedule for "${currentQuizWord.hanzi}".`);
@@ -2508,6 +2528,9 @@ const gradeLabels = getGradeLabels(str);
             };
           });
 
+          // Calculate coins earned from grades
+          const coinsEarned = calculateSessionCoins(gradeData);
+
           const session: QuizSession = {
             id: makeId(),
             createdAt: sessionEndTime,
@@ -2518,12 +2541,21 @@ const gradeLabels = getGradeLabels(str);
             partiallyCorrectCount,
             totalGrades: quizHistory.length,
             durationSeconds,
-            coinsEarned: 0,
+            coinsEarned,
           };
 
           console.log("Saving quiz session:", session); // DEBUG
           await createQuizSession(session);
           console.log("Quiz session saved successfully"); // DEBUG
+
+          // Update wallet with earned coins
+          try {
+            await updateWallet(coinsEarned);
+            console.log(`Wallet updated with ${coinsEarned} coins`); // DEBUG
+          } catch (walletError) {
+            console.error("Failed to update wallet:", walletError);
+            // Don't block quiz completion if wallet update fails
+          }
         }
       } catch (error) {
         console.error("Failed to save quiz session:", error);
@@ -2531,13 +2563,8 @@ const gradeLabels = getGradeLabels(str);
       }
 
       stopQuizSession();
-      if (isFillTestReviewPage) {
-        await refreshAll();
-        router.push("/words/review");
-        return;
-      }
       setQuizCompleted(true);
-      setQuizNotice("Fill-test quiz complete.");
+      setQuizNotice(str.fillTest.completionMessage);
       await refreshAll();
       return;
     }
@@ -2625,6 +2652,7 @@ const gradeLabels = getGradeLabels(str);
     unansweredCount,
     moveQuizForward,
     quizSummary,
+    quizSessionCoins,
     calculateNextState,
     manualSelectionSet,
     toggleManualSelection,

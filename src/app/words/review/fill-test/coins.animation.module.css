@@ -1,0 +1,36 @@
+/**
+ * Coin Animation Styles
+ *
+ * CSS for animated floating coin effect.
+ * Uses GPU-accelerated transforms for smooth performance.
+ *
+ * Last updated: 2026-03-04
+ */
+
+.coinContainer {
+  position: fixed;
+  font-size: 24px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.coinEmoji {
+  display: inline-block;
+  line-height: 1;
+}
+
+/* Floating animation: move upward and fade out */
+@keyframes coinFloat {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-120px) scale(0.8);
+    opacity: 0;
+  }
+}

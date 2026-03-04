@@ -3,6 +3,7 @@ import type { Word } from "./types";
 import type { FillTest } from "./fillTest";
 import type { FlashcardLlmResponse } from "./flashcardLlm";
 import type { QuizSession } from "@/app/words/results/results.types";
+import type { Wallet } from "@/app/words/shared/coins.types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade } from "./scheduler";
 import type { GradeResult } from "./review";
@@ -32,6 +33,7 @@ export class AppDB extends Dexie {
   disabledFillTests!: Table<DisabledFillTestEntry, string>;
   flashcardContents!: Table<FlashcardContentEntry, string>;
   quizSessions!: Table<QuizSession, string>;
+  wallets!: Table<Wallet, string>;
 
   constructor() {
     super("cc_review_db");
@@ -59,6 +61,14 @@ export class AppDB extends Dexie {
       disabledFillTests: "hanzi, updatedAt",
       flashcardContents: "key, character, pronunciation, updatedAt",
       quizSessions: "id, createdAt",
+    });
+    this.version(6).stores({
+      words: "id, hanzi, nextReviewAt, createdAt",
+      fillTests: "hanzi, updatedAt",
+      disabledFillTests: "hanzi, updatedAt",
+      flashcardContents: "key, character, pronunciation, updatedAt",
+      quizSessions: "id, createdAt",
+      wallets: "id",
     });
   }
 }
@@ -215,6 +225,75 @@ export async function clearAllQuizSessions(): Promise<void> {
     await db.quizSessions.clear();
   } catch (error) {
     console.error("clearAllQuizSessions error:", error);
+    throw error;
+  }
+}
+
+// ============= WALLET =============
+
+/**
+ * Initializes wallet if it doesn't exist.
+ * Creates a new wallet with 0 coins.
+ */
+export async function initializeWallet(): Promise<Wallet> {
+  try {
+    let wallet = await db.wallets.get("wallet");
+    if (!wallet) {
+      wallet = {
+        id: "wallet",
+        totalCoins: 0,
+        lastUpdatedAt: Date.now(),
+        version: 1,
+      };
+      await db.wallets.put(wallet);
+    }
+    return wallet;
+  } catch (error) {
+    console.error("initializeWallet error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Retrieves the user's wallet.
+ * Returns the wallet, or creates one if missing.
+ */
+export async function getWallet(): Promise<Wallet> {
+  try {
+    const wallet = await db.wallets.get("wallet");
+    if (!wallet) {
+      return initializeWallet();
+    }
+    return wallet;
+  } catch (error) {
+    console.error("getWallet error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Updates wallet with earned coins.
+ * Increments totalCoins by the amount earned.
+ */
+export async function updateWallet(coinsEarned: number): Promise<Wallet> {
+  try {
+    let wallet = await db.wallets.get("wallet");
+    if (!wallet) {
+      wallet = {
+        id: "wallet",
+        totalCoins: coinsEarned,
+        lastUpdatedAt: Date.now(),
+        version: 1,
+      };
+    } else {
+      wallet.totalCoins += coinsEarned;
+      wallet.lastUpdatedAt = Date.now();
+    }
+    await db.wallets.put(wallet);
+    console.log("Wallet updated:", wallet);
+    return wallet;
+  } catch (error) {
+    console.error("updateWallet error:", error);
     throw error;
   }
 }

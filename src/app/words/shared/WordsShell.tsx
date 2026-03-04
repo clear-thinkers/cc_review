@@ -2,9 +2,24 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { getSessionData, clearAllAuthData } from "@/lib/auth";
 import type { WordsWorkspaceVM } from "./WordsWorkspaceVM";
+import { AVATAR_OPTIONS } from "@/app/login/LoginForm";
 
 export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; children: ReactNode }) {
+  const router = useRouter();
+  const session = getSessionData();
+  
+  const selectedAvatar = session 
+    ? AVATAR_OPTIONS.find(a => a.id === session.selectedAvatarId)
+    : null;
+
+  const handleLogout = () => {
+    clearAllAuthData();
+    router.push('/login');
+  };
+
   return (
     <main className="kids-page mx-auto max-w-7xl p-6">
       <h1 className="text-2xl font-semibold">{vm.str.nav.appTitle}</h1>
@@ -12,6 +27,23 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
         <section className="space-y-3 rounded-lg border px-4 pt-4 pb-6 lg:self-start">
           <h2 className="font-medium">{vm.str.nav.menu}</h2>
           <p className="text-sm text-gray-700">{vm.str.nav.navigateBetweenPages}</p>
+          
+          {selectedAvatar && (
+            <div className="flex flex-col items-center gap-2 border-t pt-3">
+              <img
+                src={`/avatar/${selectedAvatar.filename}.png`}
+                alt={selectedAvatar.filename}
+                className="h-12 w-12"
+              />
+              <button
+                onClick={handleLogout}
+                className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-100"
+              >
+                {vm.str.nav.logout ?? 'Logout'}
+              </button>
+            </div>
+          )}
+          
           <div className="flex flex-col gap-2">
             {vm.navItems.map((item) => (
               <Link

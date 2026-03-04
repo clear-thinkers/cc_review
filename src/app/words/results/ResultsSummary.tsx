@@ -31,7 +31,7 @@ export function ResultsSummary({ stats, strings }: ResultsSummaryProps) {
       <Card label={strings.summary.partiallyCorrectPercent} value={`${stats.partiallyCorrectPercent}%`} />
       <Card label={strings.summary.totalCharactersTested} value={stats.totalCharactersTested} />
       <Card label={strings.summary.totalDuration} value={formatDuration(stats.totalDurationSeconds)} />
-      <Card label={strings.summary.totalCoinsEarned} value={stats.totalCoinsEarned} />
+      <Card label={strings.summary.totalCoinsEarned} value={`🪙 ${stats.totalCoinsEarned}`} />
     </div>
   );
 }

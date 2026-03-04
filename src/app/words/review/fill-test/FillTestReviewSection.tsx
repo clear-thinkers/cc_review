@@ -1,7 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
+import { CoinAnimation } from "./coins.animation";
+import { playCelebrationSound } from "../../shared/coins.sound";
 
 export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
   const router = useRouter();
@@ -45,6 +48,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     unansweredCount,
     moveQuizForward,
     quizSummary,
+    quizSessionCoins,
     gradeLabels,
     calculateNextState,
     manualSelectionSet,
@@ -53,12 +57,56 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     getFamiliarity,
   } = vm;
 
+  // Celebration animation state
+  const [animationKey, setAnimationKey] = useState<number>(0);
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Listen for easy grade events to trigger celebration
+  useEffect(() => {
+    const handleEasyGrade = () => {
+      // Play celebration sound (not muted by default)
+      playCelebrationSound(false);
+
+      // Trigger animation from submit button
+      if (submitButtonRef.current) {
+        const rect = submitButtonRef.current.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        // Trigger animation by updating key
+        setAnimationKey((prev) => prev + 1);
+      }
+    };
+
+    // Check for easy grade event every 100ms
+    const pollInterval = setInterval(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lastEvent = (window as any).__quizEasyGradeEvent;
+      if (lastEvent && lastEvent > ((window as any).__lastProcessedEasyGradeEvent ?? 0)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).__lastProcessedEasyGradeEvent = lastEvent;
+        handleEasyGrade();
+      }
+    }, 100);
+
+    return () => clearInterval(pollInterval);
+  }, []);
+
   if (!isFillTestReviewPage) {
     return null;
   }
 
   return (
     <section className="space-y-3 rounded-lg border p-4">
+      {/* Coin celebration animations */}
+      {submitButtonRef.current && (
+        <CoinAnimation
+          key={`coin-${animationKey}`}
+          x={submitButtonRef.current.getBoundingClientRect().left + submitButtonRef.current.getBoundingClientRect().width / 2}
+          y={submitButtonRef.current.getBoundingClientRect().top + submitButtonRef.current.getBoundingClientRect().height / 2}
+          duration={300}
+        />
+      )}
+
       <h2 className="font-medium">{str.fillTest.pageTitle}</h2>
       <p className="text-sm text-gray-700">
         {str.fillTest.dueNowLabel} {fillTestDueWords.length}
@@ -71,97 +119,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
       {quizNotice ? <p className="text-sm text-blue-700">{quizNotice}</p> : null}
 
       {!quizInProgress ? (
-        <div className="space-y-3 rounded-md border p-3">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {QUIZ_SELECTION_MODES.map((mode) => (
-              <label key={mode} className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="quiz-selection-mode"
-                  checked={quizSelectionMode === mode}
-                  onChange={() => setQuizSelectionMode(mode)}
-                />
-                <span>{getSelectionModeLabel(mode, str)}</span>
-              </label>
-            ))}
-          </div>
-
-          {quizSelectionMode === "manual" ? (
-            <p className="text-sm text-gray-600">
-              {str.fillTest.selectedLabel} <strong>{plannedQuizWords.length}</strong>
-            </p>
-          ) : null}
-
-          {quizSelectionMode === "manual" ? (
-            <div className="space-y-2 overflow-x-auto rounded-md border p-2">
-              <p className="text-sm font-medium">{str.fillTest.allCharactersSelection}</p>
-              <table className="min-w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.test}</th>
-                    <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.hanzi}</th>
-                    <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.dateAdded}</th>
-                    <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.dateDue}</th>
-                    <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.nextReviewDate}</th>
-                    <th className="px-2 py-1 text-left">{str.fillTest.manualTableHeaders.familiarity}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fillTestDueWords.map((word) => {
-                    const projected = calculateNextState(word, "good", Date.now()).nextReviewAt;
-                    return (
-                      <tr key={word.id} className="border-b align-top">
-                        <td className="px-2 py-1">
-                          <input
-                            type="checkbox"
-                            checked={manualSelectionSet.has(word.id)}
-                            onChange={(event) =>
-                              toggleManualSelection(word.id, event.currentTarget.checked)
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-1">{word.hanzi}</td>
-                        <td className="px-2 py-1">{formatDateTime(word.createdAt)}</td>
-                        <td className="px-2 py-1">{formatDateTime(word.nextReviewAt)}</td>
-                        <td className="px-2 py-1">{formatDateTime(projected)}</td>
-                        <td className="px-2 py-1">
-                          {getFamiliarity(word)} (rep {word.repetitions})
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
-              disabled={plannedQuizWords.length === 0}
-              onClick={startQuizSession}
-            >
-              {str.fillTest.startButton}
-            </button>
-            <button
-              type="button"
-              className="rounded-full border-4 border-amber-500 bg-amber-50 px-8 py-2 text-lg font-semibold text-amber-900 transition-colors hover:bg-amber-100"
-              onClick={() => router.push("/words/review")}
-            >
-              {str.results.goToReviewPage}
-            </button>
-            {quizCompleted && quizHistory.length > 0 ? (
-              <button
-                type="button"
-                className="rounded-md border px-4 py-2"
-                onClick={() => setQuizCompleted(false)}
-              >
-                {str.fillTest.hideLastSummary}
-              </button>
-            ) : null}
-          </div>
-        </div>
+        null
       ) : (
         <div className="space-y-3 rounded-md border p-3">
           {!currentQuizWord ? (
@@ -316,6 +274,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
               {!quizResult ? (
                 <div className="flex items-center gap-3">
                   <button
+                    ref={submitButtonRef}
                     type="button"
                     className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
                     disabled={quizSubmitting}
@@ -378,16 +337,57 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
       )}
 
       {quizCompleted && quizHistory.length > 0 ? (
-        <div className="space-y-2 rounded-md border p-3">
-          <h3 className="font-medium">{str.fillTest.summary.title}</h3>
-          <p className="text-sm text-gray-700">
-            {str.fillTest.summary.charactersReviewed} {quizHistory.length}
-            {` ${str.fillTest.summary.correctBlanks} `} {quizSummary.correct}/{quizHistory.length * 3}
-          </p>
-          <p className="text-sm text-gray-700">
-            {gradeLabels.again} {quizSummary.again} | {gradeLabels.hard} {quizSummary.hard} |{" "}
-            {gradeLabels.good} {quizSummary.good} | {gradeLabels.easy} {quizSummary.easy}
-          </p>
+        <div className="space-y-3">
+          <div className="space-y-3 rounded-md border bg-amber-50 p-4">
+            <h3 className="text-lg font-semibold">{str.fillTest.summary.title}</h3>
+            <div className="space-y-2">
+              <p className="text-base font-semibold text-gray-900">
+                {str.fillTest.summary.charactersReviewed} <span className="text-xl text-amber-700">{quizHistory.length}</span>
+              </p>
+              <p className="text-base font-semibold text-gray-900">
+                {str.fillTest.summary.correctBlanks} <span className="text-xl text-amber-700">{quizSummary.correct}/{quizHistory.length * 3}</span>
+              </p>
+            </div>
+            
+            <div className="border-t border-amber-200 pt-3 space-y-2">
+              {(() => {
+                const fullyCorrect = quizHistory.filter((item) => item.correctCount === 3);
+                const partiallyCorrect = quizHistory.filter((item) => item.correctCount === 1 || item.correctCount === 2);
+                const fullyWrong = quizHistory.filter((item) => item.correctCount === 0);
+
+                return (
+                  <>
+                    {fullyCorrect.length > 0 && (
+                      <p className="text-sm text-green-700">
+                        <span className="font-semibold">全部正确：</span>{fullyCorrect.length}  （{fullyCorrect.map((item) => item.hanzi).join("")}）
+                      </p>
+                    )}
+                    {partiallyCorrect.length > 0 && (
+                      <p className="text-sm text-amber-700">
+                        <span className="font-semibold">部分正确：</span>{partiallyCorrect.length}  （{partiallyCorrect.map((item) => item.hanzi).join("")}）
+                      </p>
+                    )}
+                    {fullyWrong.length > 0 && (
+                      <p className="text-sm text-red-700">
+                        <span className="font-semibold">全部错误：</span>{fullyWrong.length}  （{fullyWrong.map((item) => item.hanzi).join("")}）
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            <p className="text-sm font-semibold text-amber-700 border-t border-amber-200 pt-2">
+              🪙 {str.fillTest.summary.coinsEarned} {quizSessionCoins}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="rounded-full border-4 border-amber-500 bg-amber-50 px-8 py-2 text-lg font-semibold text-amber-900 transition-colors hover:bg-amber-100"
+            onClick={() => router.push("/words/review")}
+          >
+            {str.results.goToReviewPage}
+          </button>
         </div>
       ) : null}
     </section>

@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-02-27_
+_Last updated: 2026-03-04_ (wallet table schema added)
 
 ---
 
@@ -144,6 +144,47 @@ These rules govern the results/history view for session data reporting:
    - Table and summary cards clear immediately upon successful deletion
 8. **Empty state:** When no sessions exist, display a placeholder message directing users to start a review session; hide all table and summary UI elements.
 
+### Login & Avatar Protection Rules (`/login`)
+
+These rules govern the login and session protection gate for early-feedback deployment:
+
+1. Login page (`/login`) is **not protected by session guard** — it is always accessible for setup and authentication flows.
+2. All other pages and routes require a valid session token to access; unauthenticated requests redirect to `/login`.
+3. **First-visit setup flow:**
+   - User creates a 4-digit numeric PIN (0000–9999)
+   - User selects one of 3 avatars: bubble_tea, cake, or donut (images stored in `/public/avatar/`)
+   - PIN is hashed using SHA-256 (client-side); plaintext PIN is never stored
+   - Session token and avatar selection are stored in localStorage
+   - User is redirected to `/words` (main app)
+4. **Subsequent-visit login flow:**
+   - User enters their 4-digit PIN
+   - System compares hashed input with stored PIN hash
+   - If match, user selects avatar (pre-populated with last-selected avatar for UX)
+   - New session token is generated and stored in localStorage
+   - User is redirected to `/words`
+5. **Invalid PIN handling:**
+   - Incorrect PIN shows error message; user can retry unlimited times
+   - No lockout or attempt throttling in Phase 1 (early-feedback only)
+   - No "forgot PIN" recovery — user must clear browser cache and create new PIN
+6. **Session persistence:**
+   - Session tokens stored in localStorage persist across browser restarts
+   - No expiration in Phase 1; sessions valid indefinitely until logout or cache clear
+   - Session data includes: `sessionToken`, `selectedAvatarId`, creation timestamp
+7. **Logout flow:**
+   - Logout button available in main app nav bar
+   - Logout clears all auth data (session token + PIN hash + avatar selection)
+   - User is redirected to `/login` setup wizard (no PIN stored, appears as new user)
+8. **Avatar persistence:**
+   - Last-selected avatar stored in localStorage for UX convenience (pre-populated on next login)
+   - User can change avatar each time they log in
+   - Avatar emoji/image displayed in nav bar when logged in
+9. **Security notes (early-feedback, not production-grade):**
+   - PIN strength: 10,000 possible combinations; weak but sufficient for early feedback on trusted device
+   - localStorage can be inspected in DevTools; PIN is hashed (not plaintext) but hash could theoretically be brute-forced
+   - No server-side validation; all auth is client-side localStorage-based
+   - Intended for 1–3 early-feedback users on single iPad; not for production multi-user deployment
+   - Phase 2+ can upgrade to stronger auth or server-side session validation if feedback warrants
+
 ---
 
 ## 2) Layer Boundaries
@@ -215,11 +256,32 @@ This describes how layers are wired — the actual call and import relationships
 | `partiallyCorrectCount` | number | Count of grades === "good" or "hard" |
 | `totalGrades` | number | Sum of all grade counts (fullyCorrect + failed + partiallyCorrect) |
 | `durationSeconds` | number | Elapsed time in seconds from session start to completion |
-| `coinsEarned` | number | Initially `0`; updated by Rewards System (Phase 3) |
+| `coinsEarned` | number | Coins earned in this session; calculated per grade at completion |
+
+**`wallets` table** — cumulative rewards tracking (singleton record)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | Fixed value: `"wallet"` (singleton pattern) |
+| `totalCoins` | number | Cumulative coins earned across all sessions |
+| `lastUpdatedAt` | number | Unix timestamp (milliseconds) of last wallet update |
+| `version` | number | Schema version for future upgrades; currently `1` |
+
+---
 
 ### Static Data
 
 - **Pronunciation candidates:** `public/data/char_detail.json` — loaded via `src/lib/xinhua.ts`
+
+### localStorage Schema (Session & Login Data)
+
+| Key | Type | Purpose | Notes |
+|---|---|---|---|
+| `sessionToken` | string | Session authentication | Opaque token persists across browser restarts; cleared on logout |
+| `selectedAvatarId` | string | Selected avatar (0–2) | Converted to/from number in code; stored as string in localStorage |
+| `sessionCreatedAt` | string | Session creation timestamp | Unix milliseconds; used for session validity checks |
+| `storedPinHash` | string | Hashed 4-digit PIN | SHA-256 hex hash; never plaintext; persistent until logout |
+| `lastSelectedAvatarId` | string | Last-selected avatar ID | UX convenience; pre-populates avatar grid on next login |
 
 ---
 

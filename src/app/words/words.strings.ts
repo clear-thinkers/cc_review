@@ -20,6 +20,7 @@ export const wordsStrings = {
       contentAdmin: "Content Admin",
       dueReview: "Due Review",
       quizResults: "Quiz Results",
+      logout: "Logout",
     },
 
     // ============= GRADING LABELS =============
@@ -162,6 +163,7 @@ export const wordsStrings = {
         title: "Last Fill-Test Summary",
         charactersReviewed: "Characters reviewed:",
         correctBlanks: "correct blanks: ",
+        coinsEarned: "Coins Earned:",
       },
       completionMessage: "Fill-test quiz complete.",
     },
@@ -376,6 +378,7 @@ export const wordsStrings = {
       contentAdmin: "内容管理",
       dueReview: "待复习",
       quizResults: "测验结果",
+      logout: "登出",
     },
 
     // ============= GRADING LABELS =============
@@ -516,6 +519,7 @@ export const wordsStrings = {
         title: "上次填空总结",
         charactersReviewed: "已测试汉字:",
         correctBlanks: "填空正确: ",
+        coinsEarned: "获得金币:",
       },
       completionMessage: "填空测试已完成",
     },

@@ -1,6 +1,6 @@
 ﻿# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-03-03_
+_Last updated: 2026-03-04_
 
 ---
 
@@ -55,7 +55,7 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
 | 6 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | 📋 Planned | — |
-| 7 | **Rewards System — Bakery MVP** | Coins earned per quiz (accuracy + completion based). Virtual bakery shop: purchase furniture, display items, decorations. New tables: `wallet`, `inventory`, `shopState`. No real money, no scheduler impact. | `docs/feature-specs/` | 📋 Planned | — |
+| 7 | **Rewards System — Bakery MVP** | Coins earned per quiz (accuracy + completion based). Virtual bakery shop: purchase furniture, display items, decorations. New tables: `wallet`, `inventory`, `shopState`. No real money, no scheduler impact. | [`docs/feature-specs/2026-03-04-coin-rewards-system.md`](../../feature-specs/2026-03-04-coin-rewards-system.md) | ✅ Done | 2026-03-04 |
 
 ---
 
