@@ -1,6 +1,6 @@
 ﻿# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-03-05_
+_Last updated: 2026-03-05_ (Feature 5 deployed; Feature 4 next)
 
 ---
 
@@ -41,8 +41,8 @@ Features now include a “Last touched” timestamp and a broader set of status 
 |---|---|---|---|---|---|
 | 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | `docs/architecture/2026-03-03-grading-logic-model.md` | ✅ Done | 2026-03-03 |
 | 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. Per-character pinyin ruby alignment, phrase-example pairing, pinyin toggle. | `docs/feature-specs/2026-03-03-flashcard-ui-redesign.md` | ✅ Done | 2026-03-04 |
-| 4 | **Multi-Tenant Auth & User Model** | Replace localStorage PIN with Supabase Auth. Parent registers with email + password. Parent creates child profiles with PIN. Role model: parent / child / platform_admin. Family-scoped data isolation via Row Level Security. | `docs/feature-specs/2026-03-05-auth-and-user-model.md` | 📋 Planned | 2026-03-05 |
-| 5 | **Supabase Schema & RLS Policies** | Retire IndexedDB entirely. Migrate all data (words, review_history, quiz_sessions, wallet, inventory) to Supabase Postgres. Define tables, foreign keys, and RLS policies enforcing family_id scoping. Platform admin bypasses RLS. | `docs/feature-specs/2026-03-05-supabase-schema-rls.md` | 📋 Planned | 2026-03-05 |
+| 4 | **Multi-Tenant Auth & User Model** | Replace localStorage PIN with Supabase Auth. Parent registers with email + password. Parent creates child profiles with PIN. Role model: parent / child / platform_admin. Family-scoped data isolation via Row Level Security. | `docs/feature-specs/2026-03-05-auth-and-user-model.md` | � In Progress | 2026-03-05 |
+| 5 | **Supabase Schema & RLS Policies** | Retire IndexedDB entirely. Migrate all data (words, review_history, quiz_sessions, wallet, inventory) to Supabase Postgres. Define tables, foreign keys, and RLS policies enforcing family_id scoping. Platform admin bypasses RLS. | `docs/feature-specs/2026-03-05-supabase-schema-rls.md` | ✅ Done | 2026-03-05 |
 | 6 | **Role-Based Routing** | RouteGuard enforces permission matrix by session role. Blocked routes invisible in nav (not 403). Child: no add/edit/admin. Parent: no fill-test quiz. Platform admin: full access. | `docs/feature-specs/2026-03-05-role-based-routing.md` | 📋 Planned | 2026-03-05 |
 | 8 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | [`docs/feature-specs/2026-03-04-quiz-results-summary.md`](../feature-specs/2026-03-04-quiz-results-summary.md) | ✅ Done | 2026-03-04 |
 | 9 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | ✅ Done | 2026-03-05 |
@@ -157,7 +157,92 @@ If any answer undermines Tier 1 stability, the feature is deferred.
 
 ---
 
-## 8. Long-Term Evolution Path
+## 8. Next Implementation Sequence
+
+### Blocker Analysis (as of 2026-03-05)
+
+**Feature 5 ✅ Done:**
+- Supabase schema + RLS policies deployed
+- Service layer refactor deferred until Feature 4 completes
+
+**Feature 4 🔄 In Progress (NEXT):**
+- Spec drafted; implementation ready to start
+- **Blocks:** Feature 6 (role-based routing depends on auth context), RLS integration tests (need JWT enrichment)
+- **Unlocks:** End-to-end auth flow, JWT claim injection, session management
+- **Estimated completion:** 2026-03-10 (5 days)
+
+**Feature 6 📋 Planned (After Feature 4):**
+- Depends on Feature 4 auth layer + session context
+- `/api/auth/enrich-session` route implemented by Feature 4
+- Adds RouteGuard middleware to enforce role-based access control
+
+### Critical Path (Tier 1 Completion)
+
+```
+Feature 4 (Auth & User Model)
+  ├─ Supabase Auth integration
+  ├─ JWT enrichment (family_id, user_id claims)
+  ├─ Child PIN-based login
+  └─ Session persistence + auto-refresh
+         ↓
+Feature 6 (Role-Based Routing)
+  ├─ RouteGuard middleware
+  ├─ Route matrix by role (parent/child/admin)
+  └─ Nav visibility filtering
+         ↓
+Service Layer Refactor
+  ├─ Create src/lib/supabase.ts
+  ├─ Retire src/lib/db.ts (IndexedDB)
+  └─ Migrate all service calls
+         ↓
+Tier 1 Completion + Multi-Family Pilot
+  ├─ End-to-end testing (3 families)
+  ├─ RLS isolation verification
+  └─ Prod Supabase deployment
+```
+
+### Recommended Action Plan
+
+1. **Immediately (next PR):** Implement Feature 4 (Auth & User Model)
+   - Copy spec from `docs/feature-specs/2026-03-05-auth-and-user-model.md`
+   - Implement Supabase Auth signup/login flows
+   - Add JWT enrichment route `/api/auth/enrich-session`
+   - Test with both parent (email) and child (PIN) login paths
+   - Target: 2026-03-10
+
+2. **After Feature 4 ships:** Implement Feature 6 (Role-Based Routing)
+   - Create RouteGuard middleware using Feature 4 session context
+   - Build permission matrix for parent/child/admin roles
+   - Hide blocked routes from nav (don't show 403)
+   - Integration test: verify child cannot navigate to `/words/add` or `/words/admin`
+   - Target: 2026-03-12
+
+3. **After Feature 6 ships:** Service Layer Refactor
+   - Create `src/lib/supabase.ts` with domain-scoped service functions
+   - Translate all `src/lib/db.ts` calls to Supabase equivalents
+   - Convert camelCase (TypeScript) ↔ snake_case (Postgres) in service layer
+   - Retire `src/lib/db.ts` (IndexedDB)
+   - Functional equivalence test: verify same data shape in reads
+   - Target: 2026-03-14
+
+4. **Multi-Family Pilot (final Tier 1 step):**
+   - Create 3 test families in prod Supabase
+   - Verify RLS isolation (Family A user cannot read Family B words)
+   - Parent + child login flow with PIN entry
+   - Admin platform account bypass (can read/write all families)
+
+### Risks & Dependencies
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Auth spec incomplete | Blocks Features 4, 6, RLS tests | Confirm auth spec ready before Feature 4 starts |
+| JWT claims not injected | RLS policies cannot evaluate | Feature 4 must implement `/api/auth/enrich-session` |
+| Service layer not updated | App still reads from IndexedDB | Plan refactor immediately after Feature 6 |
+| Pilot families not set up | Cannot test prod RLS isolation | Manual setup via Supabase console or seed script |
+
+---
+
+## 9. Long-Term Evolution Path
 
 ```
 Character Review Tool
@@ -172,7 +257,7 @@ The goal is to build a compounding language system.
 
 ---
 
-## 9. Identity Statement
+## 10. Identity Statement
 
 This product is a structured, compounding Chinese memory engine.
 
