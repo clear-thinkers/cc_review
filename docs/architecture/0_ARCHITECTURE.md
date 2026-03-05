@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-03-04_ (wallet table schema added)
+_Last updated: 2026-03-05_ (Supabase schema deployed; IndexedDB retired)
 
 ---
 
@@ -214,7 +214,7 @@ These rules govern the login and session protection gate for early-feedback depl
 |---|---|---|
 | UI | `src/app/...`, `WordsWorkspace` | Interaction, view state, locale rendering |
 | Domain | `src/lib/scheduler.ts`, `src/lib/fillTest.ts`, `src/lib/flashcardLlm.ts` | Pure logic: scheduling, grading, normalization |
-| Service | `src/lib/db.ts`, `src/lib/xinhua.ts` | IO: IndexedDB reads/writes, static data loading |
+| Service | `src/lib/supabaseClient.ts`, `src/lib/xinhua.ts` | IO: Supabase reads/writes, static data loading |
 | AI | `src/app/api/flashcard/generate/route.ts` | Prompt orchestration, provider calls |
 
 ### Call Graph (Structural)
@@ -223,10 +223,13 @@ This describes how layers are wired — the actual call and import relationships
 
 - `src/app/**` communicates with `src/app/api/**` via **fetch calls only** — no direct imports.
 - `src/app/api/**` is invoked only from admin authoring flows — never from review execution paths.
-- **API routes must never import from `src/lib/db.ts` or perform IndexedDB operations directly.** They should call service or domain functions instead, preserving the service-layer abstraction.
+- **All database operations use `src/lib/supabaseClient.ts`** — this is the single point of contact for all Supabase reads and writes.
+  - Browser components import `supabase` (anon key, respects RLS)
+  - API routes import `getServerSupabaseClient()` (service role, for admin operations only)
+  - **No direct Dexie/IndexedDB operations** — IndexedDB is fully retired
 - `src/lib/scheduler.ts` has no dependency on UI or API layers — it is a pure domain module.
-- AI output flows through normalization in `src/lib/flashcardLlm.ts` before reaching `src/lib/db.ts`.
-- `src/lib/db.ts` is the single point of contact for all IndexedDB reads and writes.
+- AI output flows through normalization in `src/lib/flashcardLlm.ts` before reaching Supabase writes.
+- `src/lib/db.ts` (IndexedDB) is **deprecated** — all new code uses Supabase via `src/lib/supabaseClient.ts`
 
 > For the agent rules that enforce these boundaries (what to never do), see `AI_CONTRACT.md §2`.
 
@@ -234,57 +237,122 @@ This describes how layers are wired — the actual call and import relationships
 
 ## 3) Data Schema
 
-### IndexedDB Tables
+### Supabase Postgres Tables (GitHub Copilot Note: IndexedDB fully retired)
 
-**`words` table** — one row per character added by the user
+The application stores all persistent data in Supabase Postgres. Row Level Security (RLS) policies enforce family-scoped data isolation. All tables include RLS enabled.
 
-| Field | Type | Initial Value | Notes |
-|---|---|---|---|
-| `id` | string | `makeId()` | Generated unique ID |
-| `hanzi` | string | input character | Single Hanzi character |
-| `pinyin` | string \| undefined | `undefined` | Optional; not set by `/words/add` |
-| `meaning` | string \| undefined | `undefined` | Optional; not set by `/words/add` |
-| `createdAt` | number | `Date.now() + index offset` | Timestamp; offset preserves insertion order |
-| `repetitions` | number | `0` | SRS repetition count |
-| `intervalDays` | number | `0` | Current SRS interval in days |
-| `ease` | number | `21` | Scheduler stability/ease value |
-| `nextReviewAt` | number | `0` | Unix timestamp — drives due queue; 0 = immediately due |
-| `reviewCount` | number \| undefined | `0` at creation | Total flashcard review attempts |
-| `testCount` | number \| undefined | `0` at creation | Total fill-test attempts |
-| `fillTest` | `FillTest` \| undefined | `undefined` | Populated only after Content Admin curation/manual assignment |
-
-**`flashcardContents` table** — curated content per character
+**`families` table** — one row per tenant (one family = one tenant)
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | `character\|pronunciation` composite key |
-| `meanings` | string[] | Definition list |
-| `phrases` | Phrase[] | Each: `{ zh, pinyin, en, include_in_fill_test }` |
-| `examples` | Example[] | Each: `{ zh, pinyin, en, include_in_fill_test }` |
+| `id` | uuid | Primary key |
+| `name` | text | Family display name (e.g., "Nora's Family") |
+| `created_at` | timestamptz | Server timestamp |
 
-**`quizSessions` table** — completed fill-test session records (view-only, reporting interface)
-
-| Field | Type | Notes |
-|---|---|---|
-| `id` | string | Unique session ID — generated as `makeId()` or UUID |
-| `createdAt` | number | Unix timestamp (milliseconds) when session ended |
-| `sessionType` | string | Currently "fill-test"; reserved for future quiz types (Phase 3+) |
-| `gradeData` | SessionGradeData[] | Individual word grades: `{ wordId, hanzi, grade, timestamp }` |
-| `fullyCorrectCount` | number | Count of grades === "easy" |
-| `failedCount` | number | Count of grades === "again" |
-| `partiallyCorrectCount` | number | Count of grades === "good" or "hard" |
-| `totalGrades` | number | Sum of all grade counts (fullyCorrect + failed + partiallyCorrect) |
-| `durationSeconds` | number | Elapsed time in seconds from session start to completion |
-| `coinsEarned` | number | Coins earned in this session; calculated per grade at completion |
-
-**`wallets` table** — cumulative rewards tracking (singleton record)
+**`users` table** — all human users (parents and children)
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | Fixed value: `"wallet"` (singleton pattern) |
-| `totalCoins` | number | Cumulative coins earned across all sessions |
-| `lastUpdatedAt` | number | Unix timestamp (milliseconds) of last wallet update |
-| `version` | number | Schema version for future upgrades; currently `1` |
+| `id` | uuid | Primary key |
+| `family_id` | uuid | Foreign key → `families.id` |
+| `auth_user_id` | uuid (nullable) | Links to Supabase Auth user (non-null for parents, null for children) |
+| `name` | text | User display name |
+| `role` | text | Either `'parent'` or `'child'` |
+| `pin_hash` | text (nullable) | SHA-256 hash of 4-digit PIN; null for parents (use Supabase Auth PASSWORD) |
+| `is_platform_admin` | boolean | True only for Chengyuan (platform admin); bypasses RLS on all tables |
+| `failed_pin_attempts` | integer | Incremented on wrong PIN; reset on success; application locks at 5 attempts |
+| `avatar_id` | text (nullable) | Filename stem; valid values: `bubble_tea_excited_1`, `cake_sleep_1`, `donut_wink_1`, `rice_ball_sleep_1`, `zongzi_smile_1`, `ramen_excited_1`, `babaorice_smile_1`, `bun_wink_1` |
+| `created_at` | timestamptz | Server timestamp |
+
+**`words` table** — one row per Hanzi character, scoped to family
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | text | Primary key; preserves existing `makeId()` pattern |
+| `family_id` | uuid | Foreign key → `families.id` |
+| `hanzi` | text | Single Hanzi character |
+| `pinyin` | text (nullable) | Optional pronunciation |
+| `meaning` | text (nullable) | Optional translation |
+| `repetitions` | integer | SRS repetition count (default: 0) |
+| `interval_days` | numeric | Current SRS interval in days (default: 0) |
+| `ease` | numeric | Scheduler stability/ease value (default: 21) |
+| `next_review_at` | bigint | Unix timestamp in milliseconds; 0 means immediately due |
+| `review_count` | integer | Count of flashcard review attempts (default: 0) |
+| `test_count` | integer | Count of fill-test attempts (default: 0) |
+| `fill_test` | jsonb (nullable) | FillTest object; populated only after Content Admin curation |
+| `created_at` | timestamptz | Server timestamp |
+| **Unique constraint** | | `(family_id, hanzi)` — prevents duplicate characters per family |
+
+**`flashcard_contents` table** — curated content per character+pronunciation pair, scoped to family
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | text | Composite value: `{character}\|{pronunciation}` |
+| `family_id` | uuid | Foreign key → `families.id` |
+| `meanings` | jsonb | String array of definitions |
+| `phrases` | jsonb | Array of Phrase objects: `{ zh, pinyin, en, include_in_fill_test }` |
+| `examples` | jsonb | Array of Example objects: `{ zh, pinyin, en, include_in_fill_test }` |
+| `updated_at` | timestamptz | Server timestamp |
+| **Primary key** | | `(id, family_id)` — composite key enforces scoped uniqueness |
+
+**`quiz_sessions` table** — completed fill-test session records, immutable audit
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | text | Primary key; unique session ID |
+| `user_id` | uuid | Foreign key → `users.id` |
+| `family_id` | uuid | Foreign key → `families.id` (denormalized for RLS efficiency) |
+| `created_at` | timestamptz | Server timestamp when session was completed |
+| `session_type` | text | Currently `'fill-test'`; reserved for future quiz types |
+| `grade_data` | jsonb | Array of SessionGradeData: `{ wordId, hanzi, grade, timestamp }` |
+| `fully_correct_count` | integer | Count of grades === `'easy'` (default: 0) |
+| `failed_count` | integer | Count of grades === `'again'` (default: 0) |
+| `partially_correct_count` | integer | Count of grades === `'good'` or `'hard'` (default: 0) |
+| `total_grades` | integer | Sum of all grades (default: 0) |
+| `duration_seconds` | integer | Elapsed time in seconds from session start to completion (default: 0) |
+| `coins_earned` | integer | Coins earned in this session (default: 0) |
+| **RLS Guarantee** | | Insert-only for non-admins (no update); immutable audit record |
+
+**`wallets` table** — cumulative coin balance, one row per user
+
+| Field | Type | Notes |
+|---|---|---|
+| `user_id` | uuid | Primary key → `users.id` (singleton pattern per user) |
+| `family_id` | uuid | Foreign key → `families.id` (denormalized for RLS efficiency) |
+| `total_coins` | integer | Cumulative coins earned across all sessions (default: 0) |
+| `last_updated_at` | timestamptz | Server timestamp of last wallet update |
+| `version` | integer | Schema version for future upgrades (currently 1) |
+
+---
+
+### Row Level Security Policies
+
+All tables have RLS enabled. Policies are applied based on JWT claims `family_id` and `user_id` from the session.
+
+**Helper functions (used by all RLS policies):**
+- `current_family_id()` — extracts `family_id` JWT claim
+- `current_user_id()` — extracts `user_id` JWT claim
+- `is_platform_admin()` — returns true if current user has `is_platform_admin=true`
+
+**Policy patterns:**
+- **Family-scoped read:** Users can read all rows where `family_id = current_family_id()`, OR if `is_platform_admin() = true`
+- **User-scoped write:** Users can insert/update only when `family_id = current_family_id()` AND (for wallet/sessions) `user_id = current_user_id()`
+- **Immutable records:** `quiz_sessions` cannot be updated or deleted by non-admins; only platform admin can delete for data management
+- **Platform admin bypass:** When `is_platform_admin() = true`, user can read/write/delete all rows on all tables
+
+---
+
+### Supabase Client Initialization
+
+**Browser client** (`src/lib/supabaseClient.ts`):
+- Initialized with anon key (public, scoped by RLS)
+- Automatically passes session JWT if user is authenticated
+- All database operations automatically respect RLS policies
+
+**Server client** (API routes only):
+- Initialized with service role key (admin, bypasses RLS)
+- Only for platform admin operations (seeding, bulk deletes)
+- Never exposed to browser
 
 ---
 
@@ -292,7 +360,9 @@ This describes how layers are wired — the actual call and import relationships
 
 - **Pronunciation candidates:** `public/data/char_detail.json` — loaded via `src/lib/xinhua.ts`
 
-### localStorage Schema (Session & Login Data)
+### localStorage Schema (Session & Auth Data — Phase Out Scheduled)
+
+**Current Phase 1 authentication uses localStorage.** This is deferred to be replaced by Supabase Auth as part of Feature 4 (Auth & User Model). The following keys are active during Phase 1 only:
 
 | Key | Type | Purpose | Notes |
 |---|---|---|---|
@@ -302,6 +372,8 @@ This describes how layers are wired — the actual call and import relationships
 | `storedPinHash` | string | Hashed 4-digit PIN | SHA-256 hex hash; never plaintext; persistent until logout |
 | `lastSelectedAvatarId` | string | Last-selected avatar ID | UX convenience; pre-populates avatar grid on next login |
 | `migration_completed` | string | Migration flag | Set to `'true'` after legacy data migrates to PIN-scoped database; prevents re-migration |
+
+**After Feature 4 (Supabase Auth) ships:** Supabase Auth manages session tokens via encrypted secure cookies (server-set, httpOnly). localStorage will no longer store auth data.
 
 ### Database State Management (In-Memory)
 
