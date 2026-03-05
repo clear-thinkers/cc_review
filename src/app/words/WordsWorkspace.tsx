@@ -3,6 +3,7 @@
 import AddSection from "./add/AddSection";
 import AdminSection from "./admin/AdminSection";
 import AllWordsSection from "./all/AllWordsSection";
+import ResultsSection from "./results/ResultsSection";
 import DueReviewSection from "./review/DueReviewSection";
 import FillTestReviewSection from "./review/fill-test/FillTestReviewSection";
 import FlashcardReviewSection from "./review/flashcard/FlashcardReviewSection";
@@ -27,6 +28,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
       <FillTestReviewSection vm={vm} />
       <AdminSection vm={vm} />
       <AllWordsSection vm={vm} />
+      <ResultsSection vm={vm} />
     </WordsShell>
   );
 }

@@ -5,12 +5,14 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useXinhuaFlashcardInfo } from "@/hooks/useXinhuaFlashcardInfo";
 import {
   db,
+  createQuizSession,
   deleteFlashcardContent,
   getAllFlashcardContents,
   getDueWords,
   getFlashcardContent,
   gradeWord,
   putFlashcardContent,
+  updateWallet,
 } from "@/lib/db";
 import { gradeFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -22,7 +24,9 @@ import {
 } from "@/lib/flashcardLlm";
 import { makeId } from "@/lib/id";
 import { calculateNextState, type Grade } from "@/lib/scheduler";
+import { calculateSessionCoins } from "@/lib/coins";
 import type { Word } from "@/lib/types";
+import type { QuizSession } from "@/app/words/results/results.types";
 import { getXinhuaFlashcardInfo } from "@/lib/xinhua";
 import {
   QUIZ_PHRASE_DRAG_MIME,
@@ -189,6 +193,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setQuizDraggingPhraseIndex,
     quizDropSentenceIndex,
     setQuizDropSentenceIndex,
+    quizSessionStartTime,
+    setQuizSessionStartTime,
   } = fillTestState;
 
   const {
@@ -279,6 +285,16 @@ const gradeLabels = getGradeLabels(str);
       },
       { again: 0, hard: 0, good: 0, easy: 0, correct: 0 }
     );
+  }, [quizHistory]);
+
+  // Calculate coins earned in current quiz session
+  const quizSessionCoins = useMemo(() => {
+    const gradeData = quizHistory.map((item) => ({
+      wordId: item.wordId,
+      hanzi: item.hanzi,
+      grade: item.tier,
+    }));
+    return calculateSessionCoins(gradeData);
   }, [quizHistory]);
 
   const flashcardSummary = useMemo(() => {
@@ -776,7 +792,7 @@ const gradeLabels = getGradeLabels(str);
   }
 
   function resetFlashcardWordState() {
-    setFlashcardRevealed(false);
+    setFlashcardRevealed(true);
     setFlashcardLlmLoading(false);
     setFlashcardLlmError(null);
   }
@@ -811,6 +827,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizInProgress(false);
     setQuizQueue([]);
     setQuizIndex(0);
+    setQuizSessionStartTime(null);
     resetQuizWordState();
   }
 
@@ -2327,6 +2344,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizHistory([]);
     setQuizCompleted(false);
     setQuizInProgress(true);
+    setQuizSessionStartTime(Date.now());
     setQuizNotice(null);
   }
 
@@ -2360,7 +2378,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizDropSentenceIndex(null);
     setFlashcardQueue(wordsForSession.map(cloneWord));
     setFlashcardIndex(0);
-    setFlashcardRevealed(false);
+    setFlashcardRevealed(true);
     setFlashcardLlmLoading(false);
     setFlashcardLlmError(null);
     setFlashcardHistory([]);
@@ -2408,6 +2426,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizHistory([]);
     setQuizCompleted(false);
     setQuizInProgress(true);
+    setQuizSessionStartTime(Date.now());
     setQuizNotice(null);
   }, [
     fillTestDueWords,
@@ -2453,6 +2472,14 @@ const gradeLabels = getGradeLabels(str);
           correctCount: result.correctCount,
         },
       ]);
+
+      // Trigger celebration for easy grades
+      if (result.tier === "easy") {
+        // Signal to component that an easy grade was achieved
+        // This allows the component to show animation and play sound
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).__quizEasyGradeEvent = Date.now();
+      }
     } catch (error) {
       console.error("Failed to grade fill test word", error);
       setQuizNotice(`Saved answer view, but failed to update schedule for "${currentQuizWord.hanzi}".`);
@@ -2468,14 +2495,76 @@ const gradeLabels = getGradeLabels(str);
 
     const isLastWord = quizIndex >= quizQueue.length - 1;
     if (isLastWord) {
-      stopQuizSession();
-      if (isFillTestReviewPage) {
-        await refreshAll();
-        router.push("/words/review");
-        return;
+      // Create and save the quiz session before finishing
+      try {
+        if (quizSessionStartTime !== null) {
+          const sessionEndTime = Date.now();
+          const durationSeconds = Math.floor((sessionEndTime - quizSessionStartTime) / 1000);
+
+          // Calculate grade counts from quizHistory
+          let fullyCorrectCount = 0;
+          let failedCount = 0;
+          let partiallyCorrectCount = 0;
+
+          console.log("Quiz completion - quizHistory:", quizHistory); // DEBUG
+
+          // Build gradeData array from quizHistory
+          const gradeData = quizHistory.map((item) => {
+            const grade: "again" | "hard" | "good" | "easy" = item.tier;
+            
+            if (grade === "easy") {
+              fullyCorrectCount += 1;
+            } else if (grade === "again") {
+              failedCount += 1;
+            } else {
+              partiallyCorrectCount += 1;
+            }
+
+            return {
+              wordId: item.wordId,
+              hanzi: item.hanzi,
+              grade,
+              timestamp: sessionEndTime, // Use session end time as approximation
+            };
+          });
+
+          // Calculate coins earned from grades
+          const coinsEarned = calculateSessionCoins(gradeData);
+
+          const session: QuizSession = {
+            id: makeId(),
+            createdAt: sessionEndTime,
+            sessionType: "fill-test",
+            gradeData,
+            fullyCorrectCount,
+            failedCount,
+            partiallyCorrectCount,
+            totalGrades: quizHistory.length,
+            durationSeconds,
+            coinsEarned,
+          };
+
+          console.log("Saving quiz session:", session); // DEBUG
+          await createQuizSession(session);
+          console.log("Quiz session saved successfully"); // DEBUG
+
+          // Update wallet with earned coins
+          try {
+            await updateWallet(coinsEarned);
+            console.log(`Wallet updated with ${coinsEarned} coins`); // DEBUG
+          } catch (walletError) {
+            console.error("Failed to update wallet:", walletError);
+            // Don't block quiz completion if wallet update fails
+          }
+        }
+      } catch (error) {
+        console.error("Failed to save quiz session:", error);
+        // Don't block quiz completion if session save fails
       }
+
+      stopQuizSession();
       setQuizCompleted(true);
-      setQuizNotice("Fill-test quiz complete.");
+      setQuizNotice(str.fillTest.completionMessage);
       await refreshAll();
       return;
     }
@@ -2509,6 +2598,7 @@ const gradeLabels = getGradeLabels(str);
     flashcardInProgress,
     currentFlashcardWord,
     flashcardIndex,
+    setFlashcardIndex,
     flashcardQueue,
     handleStopFlashcardSession,
     setFlashcardRevealed,
@@ -2562,6 +2652,7 @@ const gradeLabels = getGradeLabels(str);
     unansweredCount,
     moveQuizForward,
     quizSummary,
+    quizSessionCoins,
     calculateNextState,
     manualSelectionSet,
     toggleManualSelection,

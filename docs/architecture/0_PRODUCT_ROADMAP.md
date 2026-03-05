@@ -1,6 +1,6 @@
 ﻿# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-02-27_
+_Last updated: 2026-03-04_
 
 ---
 
@@ -40,22 +40,22 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
 | 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in IndexedDB. Separated by generation type (full / phrase / example / pinyin). | `docs/feature-specs/` | 📋 Planned | — |
-| 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | — | 📋 Planned | — |
-| 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. | `docs/feature-specs/` | 📋 Planned | — |
+| 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | `docs/architecture/2026-03-03-grading-logic-model.md` | ✅ Done | 2026-03-03 |
+| 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. Per-character pinyin ruby alignment, phrase-example pairing, pinyin toggle. | `docs/feature-specs/2026-03-03-flashcard-ui-redesign.md` | ✅ Done | 2026-03-04 |
 
 ### Phase 2 — Structure & Visibility
 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
 | 4 | **Character Level Tagging** | Add `level` field to `Word` (e.g., Grade 1, Grade 2). Assign and filter on All Characters page. Review scope can be filtered by level. Scheduler unaffected. | `docs/feature-specs/` | 📋 Planned | — |
-| 5 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | `docs/feature-specs/` | 📋 Planned | — |
+| 5 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | [`docs/feature-specs/2026-03-04-quiz-results-summary.md`](../feature-specs/2026-03-04-quiz-results-summary.md) | ✅ Shipped | 2026-03-04 |
 
 ### Phase 3 — Motivation Layer
 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
 | 6 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | 📋 Planned | — |
-| 7 | **Rewards System — Bakery MVP** | Coins earned per quiz (accuracy + completion based). Virtual bakery shop: purchase furniture, display items, decorations. New tables: `wallet`, `inventory`, `shopState`. No real money, no scheduler impact. | `docs/feature-specs/` | 📋 Planned | — |
+| 7 | **Rewards System — Bakery MVP** | Coins earned per quiz (accuracy + completion based). Virtual bakery shop: purchase furniture, display items, decorations. New tables: `wallet`, `inventory`, `shopState`. No real money, no scheduler impact. | [`docs/feature-specs/2026-03-04-coin-rewards-system.md`](../../feature-specs/2026-03-04-coin-rewards-system.md) | ✅ Done | 2026-03-04 |
 
 ---
 

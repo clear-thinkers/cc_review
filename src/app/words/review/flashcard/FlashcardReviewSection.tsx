@@ -1,9 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { buildFlashcardLlmRequestKey } from "@/lib/flashcardLlm";
+import FlashcardCard from "./FlashcardCard";
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 
 export default function FlashcardReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
+  const [showPinyin, setShowPinyin] = useState(false);
+
   const {
     isFlashcardReviewPage,
     str,
@@ -13,20 +17,15 @@ export default function FlashcardReviewSection({ vm }: { vm: WordsWorkspaceVM })
     flashcardIndex,
     flashcardQueue,
     handleStopFlashcardSession,
-    setFlashcardRevealed,
-    flashcardRevealed,
     flashcardInfoLoading,
     flashcardInfoError,
     flashcardLlmLoading,
     flashcardLlmError,
     pronunciationEntries,
     flashcardLlmData,
-    gradeLabels,
-    submitFlashcardGrade,
-    flashcardSubmitting,
     flashcardCompleted,
     flashcardHistory,
-    flashcardSummary,
+    setFlashcardIndex,
   } = vm;
 
   if (!isFlashcardReviewPage) {
@@ -48,166 +47,96 @@ export default function FlashcardReviewSection({ vm }: { vm: WordsWorkspaceVM })
             <p className="text-sm text-gray-600">{str.flashcard.noCharacterLoaded}</p>
           ) : (
             <>
+              {/* Progress and stop button */}
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">
-                    {str.flashcard.progress
-                      .replace("{current}", String(flashcardIndex + 1))
-                      .replace("{total}", String(flashcardQueue.length))}
-                  </p>
-                  <p className="text-5xl font-semibold">{currentFlashcardWord.hanzi}</p>
+                <p className="text-sm text-gray-600">
+                  {str.flashcard.progress
+                    .replace("{current}", String(flashcardIndex + 1))
+                    .replace("{total}", String(flashcardQueue.length))}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border-2 border-blue-500 bg-blue-50 px-3 py-2 text-blue-800"
+                    onClick={() => setShowPinyin((previous: boolean) => !previous)}
+                  >
+                    {showPinyin ? str.flashcard.hideButton : str.flashcard.revealButton}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border-2 border-red-500 bg-red-50 px-3 py-2 text-red-800"
+                    onClick={handleStopFlashcardSession}
+                  >
+                    {str.flashcard.stopButton}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="rounded-md border px-3 py-2"
-                  onClick={handleStopFlashcardSession}
-                >
-                  {str.flashcard.stopButton}
-                </button>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border px-3 py-2"
-                  onClick={() => setFlashcardRevealed((previous: boolean) => !previous)}
-                >
-                  {flashcardRevealed ? str.flashcard.hideButton : str.flashcard.revealButton}
-                </button>
-              </div>
-
-              {flashcardRevealed ? (
-                <div className="space-y-3">
-                  {flashcardInfoLoading ? (
-                    <p className="text-sm text-gray-600">{str.flashcard.loadingDict}</p>
-                  ) : null}
-                  {flashcardInfoError ? (
-                    <p className="text-sm text-amber-700">{str.flashcard.noDictData}</p>
-                  ) : null}
-                  {!flashcardInfoLoading && !flashcardInfoError && flashcardLlmLoading ? (
-                    <p className="text-sm text-gray-600">{str.flashcard.loadingContent}</p>
-                  ) : null}
-                  {flashcardLlmError ? <p className="text-sm text-amber-700">{flashcardLlmError}</p> : null}
-                  {pronunciationEntries.length > 0 ? (
-                    <div className="max-h-80 overflow-y-auto">
-                      <ul className="space-y-3 text-sm">
-                        {pronunciationEntries.map((entry, index) => (
-                          <li
-                            key={`${currentFlashcardWord.id}-pronunciation-${entry.pinyin}-${index}`}
-                            className="rounded-md border p-3"
-                          >
-                            <p className="text-2xl font-semibold">
-                              {str.flashcard.pronounciation.prefix}
-                              {index + 1}: {entry.pinyin || str.flashcard.pronounciation.notAvailable}
-                            </p>
-                            {(() => {
-                              if (!entry.pinyin) {
-                                return (
-                                  <p className="mt-2 text-gray-600">{str.flashcard.pronounciation.noMeanings}</p>
-                                );
-                              }
-
-                              const requestKey = buildFlashcardLlmRequestKey({
-                                character: currentFlashcardWord.hanzi,
-                                pronunciation: entry.pinyin,
-                              });
-                              const llmResponse = flashcardLlmData[requestKey];
-
-                              if (!llmResponse) {
-                                return (
-                                  <p className="mt-2 text-gray-600">
-                                    {str.flashcard.pronounciation.noSavedContent}
-                                  </p>
-                                );
-                              }
-
-                              if (llmResponse.meanings.length === 0) {
-                                return <p className="mt-2 text-gray-600">{str.flashcard.noPronunciations}</p>;
-                              }
-
-                              return (
-                                <ul className="mt-2 grid grid-cols-1 gap-2 text-gray-700 sm:grid-cols-2">
-                                  {llmResponse.meanings.map((meaning, meaningIndex: number) => (
-                                    <li
-                                      key={`${currentFlashcardWord.id}-pronunciation-${entry.pinyin}-meaning-${meaningIndex}`}
-                                      className="rounded-md border bg-gray-50 p-3"
-                                    >
-                                      <p className="text-sm font-semibold text-gray-600">
-                                        {str.flashcard.meaning.prefix} {meaningIndex + 1}
-                                      </p>
-                                      <p className="whitespace-pre-wrap text-base font-semibold">
-                                        {meaning.definition}
-                                      </p>
-                                      {meaning.definition_en ? (
-                                        <p className="mt-1 text-xs text-gray-500">{meaning.definition_en}</p>
-                                      ) : null}
-
-                                      <div className="mt-2 space-y-2">
-                                        {meaning.phrases.map((phrase, phraseIndex: number) => (
-                                          <div
-                                            key={`${currentFlashcardWord.id}-pronunciation-${entry.pinyin}-meaning-${meaningIndex}-phrase-${phraseIndex}`}
-                                            className="rounded border border-dashed p-2"
-                                          >
-                                            <p className="text-sm font-semibold text-gray-900">
-                                              {phrase.phrase} ({phrase.pinyin})
-                                            </p>
-                                            <p className="mt-1 text-sm text-gray-700">
-                                              {str.flashcard.meaning.examplePrefix} {phrase.example}
-                                            </p>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              );
-                            })()}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-600">{str.flashcard.noPronunciations}</p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-600">{str.flashcard.revealPrompt}</p>
+              {/* Loading states */}
+              {flashcardInfoLoading && (
+                <p className="text-sm text-gray-600">{str.flashcard.loadingDict}</p>
+              )}
+              {flashcardInfoError && (
+                <p className="text-sm text-amber-700">{str.flashcard.noDictData}</p>
+              )}
+              {flashcardLlmLoading && !flashcardInfoLoading && (
+                <p className="text-sm text-gray-600">{str.flashcard.loadingContent}</p>
+              )}
+              {flashcardLlmError && (
+                <p className="text-sm text-amber-700">{flashcardLlmError}</p>
               )}
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border px-3 py-2"
-                  disabled={!flashcardRevealed || flashcardSubmitting}
-                  onClick={() => submitFlashcardGrade("again")}
-                >
-                  {gradeLabels.again}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border px-3 py-2"
-                  disabled={!flashcardRevealed || flashcardSubmitting}
-                  onClick={() => submitFlashcardGrade("hard")}
-                >
-                  {gradeLabels.hard}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border px-3 py-2"
-                  disabled={!flashcardRevealed || flashcardSubmitting}
-                  onClick={() => submitFlashcardGrade("good")}
-                >
-                  {gradeLabels.good}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md bg-black px-3 py-2 text-white disabled:opacity-50"
-                  disabled={!flashcardRevealed || flashcardSubmitting}
-                  onClick={() => submitFlashcardGrade("easy")}
-                >
-                  {gradeLabels.easy}
-                </button>
-              </div>
+              {/* Flashcard Card - displays character, meaning, phrase-example pairs */}
+              {!flashcardInfoLoading && !flashcardInfoError && pronunciationEntries.length > 0 && !flashcardLlmLoading ? (
+                (() => {
+                  const cards = pronunciationEntries
+                    .map((entry, index) => {
+                      if (!entry.pinyin) {
+                        return null;
+                      }
+
+                      const requestKey = buildFlashcardLlmRequestKey({
+                        character: currentFlashcardWord.hanzi,
+                        pronunciation: entry.pinyin,
+                      });
+                      const llmResponse = flashcardLlmData[requestKey];
+
+                      // Only render card if data exists; otherwise show placeholder
+                      if (!llmResponse) {
+                        return (
+                          <div
+                            key={`${currentFlashcardWord.id}-pronunciation-${entry.pinyin}-${index}`}
+                            className="rounded-md border p-3 text-center text-sm text-gray-600"
+                          >
+                            {str.flashcard.pronounciation.noSavedContent}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <FlashcardCard
+                          key={`${currentFlashcardWord.id}-pronunciation-${entry.pinyin}-${index}`}
+                          word={currentFlashcardWord}
+                          flashcardContent={llmResponse}
+                          str={str}
+                          pronunciationLabel={entry.pinyin}
+                          showPinyin={showPinyin}
+                        />
+                      );
+                    })
+                    .filter(Boolean);
+
+                  return cards.length > 0 ? (
+                    <div className="space-y-2">{cards}</div>
+                  ) : (
+                    <p className="text-sm text-gray-600">
+                      {str.flashcard.pronounciation.noSavedContent}
+                    </p>
+                  );
+                })()
+              ) : !flashcardInfoLoading && !flashcardInfoError ? (
+                <p className="text-sm text-gray-600">{str.flashcard.noPronunciations}</p>
+              ) : null}
             </>
           )}
         </div>
@@ -219,10 +148,43 @@ export default function FlashcardReviewSection({ vm }: { vm: WordsWorkspaceVM })
           <p className="text-sm text-gray-700">
             {str.flashcard.summary.charactersReviewed} {flashcardHistory.length}
           </p>
-          <p className="text-sm text-gray-700">
-            {gradeLabels.again} {flashcardSummary.again} | {gradeLabels.hard} {flashcardSummary.hard} |{" "}
-            {gradeLabels.good} {flashcardSummary.good} | {gradeLabels.easy} {flashcardSummary.easy}
-          </p>
+        </div>
+      ) : null}
+
+      {flashcardInProgress ? (
+        <div className="flex justify-center flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded-md border-2 border-green-600 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 disabled:opacity-50"
+            disabled={flashcardIndex === 0}
+            onClick={() => setFlashcardIndex(0)}
+          >
+            {str.flashcard.navigation.first}
+          </button>
+          <button
+            type="button"
+            className="rounded-md border-2 border-green-600 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 disabled:opacity-50"
+            disabled={flashcardIndex === 0}
+            onClick={() => setFlashcardIndex((prev) => Math.max(0, prev - 1))}
+          >
+            {str.flashcard.navigation.previous}
+          </button>
+          <button
+            type="button"
+            className="rounded-md border-2 border-green-600 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 disabled:opacity-50"
+            disabled={flashcardIndex >= flashcardQueue.length - 1}
+            onClick={() => setFlashcardIndex((prev) => Math.min(prev + 1, flashcardQueue.length - 1))}
+          >
+            {str.flashcard.navigation.next}
+          </button>
+          <button
+            type="button"
+            className="rounded-md border-2 border-green-600 bg-green-50 px-3 py-2 text-sm font-medium text-green-800 disabled:opacity-50"
+            disabled={flashcardIndex >= flashcardQueue.length - 1}
+            onClick={() => setFlashcardIndex(flashcardQueue.length - 1)}
+          >
+            {str.flashcard.navigation.end}
+          </button>
         </div>
       ) : null}
     </section>

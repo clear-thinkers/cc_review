@@ -76,6 +76,7 @@ export function getNavItems(str: WordsLocaleStrings): NavItem[] {
     { href: "/words/add", label: `${str.nav.addCharacters}`, page: "add" },
     { href: "/words/all", label: `${str.nav.allCharacters}`, page: "all" },
     { href: "/words/admin", label: `${str.nav.contentAdmin}`, page: "admin" },
+    { href: "/words/results", label: `${str.nav.quizResults}`, page: "results" },
     { href: "/words/review", label: `${str.nav.dueReview}`, page: "review" },
   ];
 }
@@ -160,9 +161,29 @@ export function getMemorizationProbability(word: Word, now = Date.now()): number
 
   const stabilityDays = Math.max(0.5, word.ease || 0.5);
   const intervalDays = Math.max(1, word.intervalDays || 1);
+
+  // Calculate retention probability as of EOD today (current moment).
+  // This metric refreshes continuously and shows natural memory decay over time using the forgetting curve.
+  //
+  // Example progression for a word graded "hard" on day 0:
+  //   - Day 0 (just reviewed): 99% retention
+  //   - Day 1: ~95% retention (some decay from stability)
+  //   - Day 2 (scheduled review): ~91% retention (scheduler's target)
+  //   - Day 3 (if missed): ~87% retention
+  //   - Day 5 (if really missed): ~78% retention
+  //
+  // This provides meaningful variation users can act on:
+  // - Words approaching their due date show declining retention
+  // - Words past due show significant drops (visual urgency)
+  // - Just-reviewed words start high, giving positive feedback
+  //
+  // The metric is recalculated on each page load/refresh, so variation emerges naturally
+  // as time passes and memory decays according to the forgetting curve.
   const lastReviewAt = word.nextReviewAt - intervalDays * DAY_MS;
   const elapsedDays = Math.max(0, (now - lastReviewAt) / DAY_MS);
   const probability = Math.exp(-elapsedDays / stabilityDays);
+
+  // Clamp to [0.01, 0.99] to keep values in a reasonable display range
   return Math.min(0.99, Math.max(0.01, probability));
 }
 

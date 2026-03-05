@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Chinese Review App - Words Module Strings
  *
  * All user-facing text for the words feature (add, review, admin, all pages).
@@ -19,6 +19,8 @@ export const wordsStrings = {
       allCharacters: "All Characters",
       contentAdmin: "Content Admin",
       dueReview: "Due Review",
+      quizResults: "Quiz Results",
+      logout: "Logout",
     },
 
     // ============= GRADING LABELS =============
@@ -77,9 +79,9 @@ export const wordsStrings = {
       progress: "Character {current} of {total}",
       stopButton: "Stop flashcards",
       noActiveSession: "Please start a flashcard review from the due-character actions above.",
-      revealButton: "Reveal details",
-      hideButton: "Hide details",
-      revealPrompt: "Reveal details before grading this card.",
+      revealButton: "Show Pinyin",
+      hideButton: "Hide Pinyin",
+      revealPrompt: "Show pinyin before grading this card.",
       loadingDict: "Loading dictionary details...",
       noDictData:
         "Could not load dictionary data for this card. You can still grade the review.",
@@ -96,6 +98,17 @@ export const wordsStrings = {
       meaning: {
         prefix: "Meaning",
         examplePrefix: "Example: ",
+      },
+      card: {
+        showDetailsButton: "Show Details",
+        hideDetailsButton: "Hide Details",
+        noPhraseIncluded: "No phrases included for testing",
+      },
+      navigation: {
+        first: "First",
+        previous: "Previous",
+        next: "Next",
+        end: "End",
       },
       summary: {
         title: "Last Flashcard Summary",
@@ -150,8 +163,53 @@ export const wordsStrings = {
         title: "Last Fill-Test Summary",
         charactersReviewed: "Characters reviewed:",
         correctBlanks: "correct blanks: ",
+        coinsEarned: "Coins Earned:",
       },
       completionMessage: "Fill-test quiz complete.",
+    },
+
+    // ============= QUIZ RESULTS PAGE =============
+    results: {
+      locale: "en",
+      pageTitle: "Quiz Results",
+      noSessions: "No quiz sessions yet.",
+      goToReviewPage: "Go to Review Page",
+      summary: {
+        totalSessions: "Total Sessions",
+        fullyCorrectPercent: "Fully Correct %",
+        failedPercent: "Failed %",
+        partiallyCorrectPercent: "Partially Correct %",
+        totalCharactersTested: "Total Characters Tested",
+        totalDuration: "Total Duration",
+        totalCoinsEarned: "Total Coins Earned",
+      },
+      table: {
+        headers: {
+          date: "Date",
+          fullyCorrectPercent: "Fully Correct %",
+          failedPercent: "Failed %",
+          partiallyCorrectPercent: "Partially Correct %",
+          duration: "Duration",
+          testedCount: "Tested Count",
+          testedCharacters: "Tested Characters",
+          failedCount: "Failed Count",
+          failedCharacters: "Failed Characters",
+          coinsEarned: "Coins Earned",
+        },
+        noCharacters: "—",
+      },
+      clearHistory: {
+        button: "Clear History",
+        title: "Delete all history?",
+        message: "This action cannot be undone. All quiz results will be permanently deleted.",
+        confirmButton: "Delete All",
+        cancelButton: "Cancel",
+      },
+      emptyState: {
+        heading: "No Results Yet",
+        message: "Start a quiz to see your results here.",
+        action: "Go to Review Page",
+      },
     },
 
     // ============= CONTENT ADMIN PAGE =============
@@ -319,6 +377,8 @@ export const wordsStrings = {
       allCharacters: "全部汉字",
       contentAdmin: "内容管理",
       dueReview: "待复习",
+      quizResults: "测验结果",
+      logout: "登出",
     },
 
     // ============= GRADING LABELS =============
@@ -376,9 +436,9 @@ export const wordsStrings = {
       progress: "第 {current} 个，共 {total} 个",
       stopButton: "停止闪卡",
       noActiveSession: "请先从上方待复习区域开始闪卡复习。",
-      revealButton: "显示详情",
-      hideButton: "隐藏详情",
-      revealPrompt: "评分前请先显示详情。",
+      revealButton: "显示拼音",
+      hideButton: "隐藏拼音",
+      revealPrompt: "评分前请先显示拼音。",
       loadingDict: "正在加载词典详情...",
       noDictData: "无法加载该闪卡的词典数据，但仍可以继续评分。",
       loadingContent: "正在读取已保存内容...",
@@ -394,6 +454,17 @@ export const wordsStrings = {
       meaning: {
         prefix: "释义",
         examplePrefix: "例句：",
+      },
+      card: {
+        showDetailsButton: "显示详情",
+        hideDetailsButton: "隐藏详情",
+        noPhraseIncluded: "未包含任何用于测试的短语",
+      },
+      navigation: {
+        first: "第一个",
+        previous: "上一个",
+        next: "下一个",
+        end: "最后一个",
       },
       summary: {
         title: "上次闪卡总结",
@@ -448,8 +519,53 @@ export const wordsStrings = {
         title: "上次填空总结",
         charactersReviewed: "已测试汉字:",
         correctBlanks: "填空正确: ",
+        coinsEarned: "获得金币:",
       },
       completionMessage: "填空测试已完成",
+    },
+
+    // ============= 测验结果页面 =============
+    results: {
+      locale: "zh",
+      pageTitle: "测验结果",
+      noSessions: "还没有测验记录。",
+      goToReviewPage: "前往复习页面",
+      summary: {
+        totalSessions: "总测验次数",
+        fullyCorrectPercent: "全对 %",
+        failedPercent: "失败 %",
+        partiallyCorrectPercent: "部分正确 %",
+        totalCharactersTested: "总共测试汉字",
+        totalDuration: "总用时",
+        totalCoinsEarned: "总获得金币",
+      },
+      table: {
+        headers: {
+          date: "日期",
+          fullyCorrectPercent: "全对 %",
+          failedPercent: "失败 %",
+          partiallyCorrectPercent: "部分正确 %",
+          duration: "用时",
+          testedCount: "测试数量",
+          testedCharacters: "测试汉字",
+          failedCount: "失败数量",
+          failedCharacters: "失败汉字",
+          coinsEarned: "获得金币",
+        },
+        noCharacters: "—",
+      },
+      clearHistory: {
+        button: "清除历史",
+        title: "删除所有测验记录?",
+        message: "此操作无法撤销。所有测验结果将被永久删除。",
+        confirmButton: "删除全部",
+        cancelButton: "取消",
+      },
+      emptyState: {
+        heading: "还没有测验结果",
+        message: "开始一次测验来查看您的结果。",
+        action: "前往复习页面",
+      },
     },
 
     // ============= CONTENT ADMIN PAGE =============
@@ -606,3 +722,4 @@ export const wordsStrings = {
     },
   },
 };
+

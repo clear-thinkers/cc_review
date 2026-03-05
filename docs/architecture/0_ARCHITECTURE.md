@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-02-27_
+_Last updated: 2026-03-04_ (wallet table schema added)
 
 ---
 
@@ -83,18 +83,6 @@ These rules govern content curation at `/words/admin`:
 9. Preload generation skips targets that already have persisted content and continues non-fatally on per-target failures.
 10. Characters with no dictionary pronunciation are skipped with notice; this is not a fatal load error.
 
-### Extension Guardrails (promoted from companion docs)
-
-These additional invariants were previously recorded only in dated flow documents; they are now authoritative and any change must trigger an update here:
-
-- Persisted content must always follow the pipeline: **draft → normalize → persist**. No direct writes of unnormalized data.
-- The `flashcardContents` primary key is fixed as `character|pronunciation`. Changing this composite key requires an architecture review and explicit doc update.
-- If fill-test semantics change, both the admin status definitions above **and** the due-review derivation rules (§1 Due Review Queue Rules) must be updated in sync.
-- Preload behaviour is sequential by default; converting to parallel or batched execution demands a documented rate‑limit, retry, and error policy before implementation.
-- Any feature touching fill-test inclusion or derivation must consider both admin and review layers simultaneously.
-
-
-
 ### Due Review Queue Rules
 
 These rules govern the due queue view at `/words/review`:
@@ -110,6 +98,111 @@ These rules govern the due queue view at `/words/review`:
 7. Due-table sorting is client-side; default due ordering uses `nextReviewAt` then `createdAt` as tie-breaker.
 8. Fill-test start/action controls are enabled only when a due row has a usable derived `fillTest`.
 9. Any change to fill-test eligibility or semantics must be reflected here and in the Content Admin Curation Rules (§1) concurrently. Failure to update both documents is a documentation gap.
+
+### Flashcard Review Rules (`/words/review/flashcard`)
+
+These rules govern the flashcard review screen for memory consolidation:
+
+1. Flashcard is **review-only** — it does not award grades or update scheduling. Grading happens exclusively in dedicated test interfaces (`/words/review/fill-test` or other test modes).
+2. Flashcard displays:
+   - **Always visible:** Character (Hanzi) with pinyin support, meaning(s), and a pinyin toggle button
+   - **Conditionally visible:** Phrase-example pairs marked with `include_in_fill_test: true`
+   - **Placeholder when empty:** If no phrases are marked for testing, display "No phrases included for testing" instead of blank space
+3. Character and meaning are always displayed; only phrases are conditionally rendered based on the `include_in_fill_test` flag.
+4. Pinyin toggle (`showPinyin` state in parent `FlashcardReviewSection`) controls visibility of pinyin spans across all text (character, phrases, examples). When toggled off, pinyin is removed from DOM (not hidden via CSS).
+5. Parent component manages session-level state (toggle, word sequence); individual cards are stateless display components.
+6. No grading buttons, no progress tracking, no scheduler mutations on this screen.
+7. Any change to how flashcard content is displayed (phrases, pinyin, layout) must be codified here before implementation.
+
+### Quiz Results Rules (`/words/results`)
+
+These rules govern the results/history view for session data reporting:
+
+1. Results page is **view-only and read-only** — no modifications to `quizSessions` are performed here except for the explicit "Clear History" action.
+2. The page displays all completed fill-test sessions in a table/list sorted by `createdAt` (newest first).
+3. Each session row displays: Session Date, % Fully Correct, % Failed, % Partial, Duration, Tested Count, Tested Characters, Failed Count, Failed Characters, Coins Earned.
+4. **Accuracy calculation rules:**
+   - `% Fully Correct = (fullyCorrectCount / totalGrades) × 100`, rounded to nearest integer
+   - `% Failed = (failedCount / totalGrades) × 100`, rounded to nearest integer
+   - `% Partial = (partiallyCorrectCount / totalGrades) × 100`, rounded to nearest integer
+   - Only `grade="easy"` counts as fully correct for accuracy; `grade="hard"` and `grade="again"` do not contribute to accuracy
+   - The three percentages must sum to 100% (within ±1% rounding tolerance)
+5. **Character list derivation:**
+   - Tested characters = unique hanzi from all grade entries in `gradeData`, deduplicated and ordered by first appearance
+   - Failed characters = unique hanzi from grade entries where `grade="again"` only; excludes `grade="hard"` or `grade="easy"`
+   - Character lists are displayed as comma-separated Hanzi with truncation to first 8–10 characters plus "…" if longer
+6. **Summary card calculations:** When multiple sessions exist, compute weighted averages across all sessions:
+   - Total Sessions = count of all records
+   - Overall % Fully Correct = (sum of fullyCorrectCounts across all sessions / sum of totalGrades across all sessions) × 100
+   - Overall % Failed and Overall % Partial calculated similarly
+   - Total Characters Tested = sum of unique character counts across all sessions
+   - Total Duration = sum of durationSeconds across all sessions, displayed in human-readable format (hh:mm:ss)
+7. **Clear History action:**
+   - Single destructive action button available only when sessions exist
+   - Requires confirmation dialog before deletion
+   - On confirmation, all records in `quizSessions` table are deleted permanently with no undo
+   - Table and summary cards clear immediately upon successful deletion
+8. **Empty state:** When no sessions exist, display a placeholder message directing users to start a review session; hide all table and summary UI elements.
+
+### Login & Avatar Protection Rules (`/login`)
+
+These rules govern the login and session protection gate for early-feedback deployment:
+
+1. Login page (`/login`) is **not protected by session guard** — it is always accessible for setup and authentication flows.
+2. All other pages and routes require a valid session token to access; unauthenticated requests redirect to `/login`.
+3. **First-visit setup flow:**
+   - User creates a 4-digit numeric PIN (0000–9999)
+   - User selects one of 3 avatars: bubble_tea, cake, or donut (images stored in `/public/avatar/`)
+   - PIN is hashed using SHA-256 (client-side); plaintext PIN is never stored
+   - Session token and avatar selection are stored in localStorage
+   - **PIN-scoped IndexedDB database is initialized** with PIN hash prefix (see Data Isolation below)
+   - If legacy unscoped database exists and migration has not yet run, legacy data is migrated once to the new PIN-scoped database
+   - User is redirected to `/words` (main app)
+4. **Subsequent-visit login flow:**
+   - User enters their 4-digit PIN
+   - System compares hashed input with stored PIN hash
+   - If match, user selects avatar (pre-populated with last-selected avatar for UX)
+   - New session token is generated and stored in localStorage
+   - **PIN-scoped IndexedDB database is initialized** for the logged-in PIN (automatic database switch)
+   - User is redirected to `/words`
+5. **Invalid PIN handling:**
+   - Incorrect PIN shows error message; user can retry unlimited times
+   - No lockout or attempt throttling in Phase 1 (early-feedback only)
+   - No "forgot PIN" recovery — user must clear browser cache and create new PIN
+6. **Session persistence:**
+   - Session tokens stored in localStorage persist across browser restarts
+   - No expiration in Phase 1; sessions valid indefinitely until logout or cache clear
+   - Session data includes: `sessionToken`, `selectedAvatarId`, creation timestamp
+7. **Database lifecycle:**
+   - **On login:** `initializeDatabaseForPin(pinHash)` is called to set the current PIN-scoped database
+   - **SessionGuard check:** When a returning user loads the app, SessionGuard validates the session token and calls `initializeDatabaseForPin()` to reinitialize the correct database for that user
+   - **Smart reinitialization:** If the same PIN is already initialized, reinitialization is skipped to prevent unnecessary database closures
+   - **On logout:** `clearDatabaseState()` closes the database and clears PIN state before redirecting to `/login`
+8. **Logout flow:**
+   - Logout button available in main app nav bar
+   - Logout closes the current PIN-scoped database
+   - Logout clears all auth data (session token + PIN hash + avatar selection)
+   - User is redirected to `/login` setup wizard (no PIN stored, appears as new user)
+9. **Avatar persistence:**
+   - Last-selected avatar stored in localStorage for UX convenience (pre-populated on next login)
+   - User can change avatar each time they log in
+   - Avatar emoji/image displayed in nav bar when logged in
+10. **Data isolation (critical):**
+    - Each PIN has its own isolated IndexedDB database with a PIN-scoped name: `cc_review_db_{PINHASH_PREFIX}` (first 12 characters of PIN's SHA-256 hash)
+    - Words, flashcard content, quiz sessions, wallet, and all learning data are **never shared** across PINs
+    - Clean separation ensures up to 3 users (Nora + siblings) can have completely independent learning progress on the same device
+    - No cross-user data leakage even if localStorage is inspected
+11. **Migration (one-time only):**
+    - Legacy unscoped database (`cc_review_db`) is checked for data when the first PIN is set up
+    - If legacy data exists and `localStorage.migration_completed` is not set, all tables are migrated to the new PIN-scoped database
+    - After migration completes, `localStorage.migration_completed` is set to prevent future migrations
+    - Subsequent new PINs start with fresh, empty databases
+12. **Security notes (early-feedback, not production-grade):**
+    - PIN strength: 10,000 possible combinations; weak but sufficient for early feedback on trusted device
+    - localStorage can be inspected in DevTools; PIN is hashed (not plaintext) but hash could theoretically be brute-forced
+    - No server-side validation; all auth is client-side localStorage-based and IndexedDB-based
+    - Intended for 1–3 early-feedback users on single iPad; not for production multi-user deployment
+    - Phase 2+ can upgrade to stronger auth or server-side session validation if feedback warrants
 
 ---
 
@@ -169,9 +262,59 @@ This describes how layers are wired — the actual call and import relationships
 | `phrases` | Phrase[] | Each: `{ zh, pinyin, en, include_in_fill_test }` |
 | `examples` | Example[] | Each: `{ zh, pinyin, en, include_in_fill_test }` |
 
+**`quizSessions` table** — completed fill-test session records (view-only, reporting interface)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | Unique session ID — generated as `makeId()` or UUID |
+| `createdAt` | number | Unix timestamp (milliseconds) when session ended |
+| `sessionType` | string | Currently "fill-test"; reserved for future quiz types (Phase 3+) |
+| `gradeData` | SessionGradeData[] | Individual word grades: `{ wordId, hanzi, grade, timestamp }` |
+| `fullyCorrectCount` | number | Count of grades === "easy" |
+| `failedCount` | number | Count of grades === "again" |
+| `partiallyCorrectCount` | number | Count of grades === "good" or "hard" |
+| `totalGrades` | number | Sum of all grade counts (fullyCorrect + failed + partiallyCorrect) |
+| `durationSeconds` | number | Elapsed time in seconds from session start to completion |
+| `coinsEarned` | number | Coins earned in this session; calculated per grade at completion |
+
+**`wallets` table** — cumulative rewards tracking (singleton record)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | Fixed value: `"wallet"` (singleton pattern) |
+| `totalCoins` | number | Cumulative coins earned across all sessions |
+| `lastUpdatedAt` | number | Unix timestamp (milliseconds) of last wallet update |
+| `version` | number | Schema version for future upgrades; currently `1` |
+
+---
+
 ### Static Data
 
 - **Pronunciation candidates:** `public/data/char_detail.json` — loaded via `src/lib/xinhua.ts`
+
+### localStorage Schema (Session & Login Data)
+
+| Key | Type | Purpose | Notes |
+|---|---|---|---|
+| `sessionToken` | string | Session authentication | Opaque token persists across browser restarts; cleared on logout |
+| `selectedAvatarId` | string | Selected avatar (0–2) | Converted to/from number in code; stored as string in localStorage |
+| `sessionCreatedAt` | string | Session creation timestamp | Unix milliseconds; used for session validity checks |
+| `storedPinHash` | string | Hashed 4-digit PIN | SHA-256 hex hash; never plaintext; persistent until logout |
+| `lastSelectedAvatarId` | string | Last-selected avatar ID | UX convenience; pre-populates avatar grid on next login |
+| `migration_completed` | string | Migration flag | Set to `'true'` after legacy data migrates to PIN-scoped database; prevents re-migration |
+
+### Database State Management (In-Memory)
+
+The following state is maintained in memory (not localStorage) to manage PIN-scoped database lifecycle:
+
+| State | Type | Purpose | Notes |
+|---|---|---|---|
+| `currentDb` | AppDB \| null | Current PIN-scoped database | Initialized on login; cleared on logout |
+| `currentPinHash` | string \| null | Current PIN hash | Tracks which PIN's database is open; prevents double-initialization of same PIN |
+
+**Database initialization flow:**
+- `initializeDatabaseForPin(pinHash, shouldMigrate)` — Opens a new PIN-scoped database; skips reinitialization if same PIN already open
+- `clearDatabaseState()` — Closes the current database and resets `currentDb` and `currentPinHash` to null (called on logout)
 
 ---
 
@@ -198,6 +341,17 @@ These are the technical behaviors the system upholds. They are the factual basis
 1. **Review screens read only from `flashcardContents`.** No path from `/words/review/*` reaches `/api/flashcard/generate`.
 2. **Every value written to `flashcardContents` has been normalized.** Schema shape is enforced before any IndexedDB write.
 3. **Normalization drops bad content — it does not pass it through.** Invalid phrases/examples are removed; the rest of the payload proceeds.
+4. **Pinyin rendering on review screens uses per-character ruby alignment (not inline or line-level pinyin):**
+   - Each Hanzi character displays its pinyin token on a separate line directly above the character.
+   - Pinyin is mapped only to Hanzi code points (CJK #3400–#4DBF, #4E00–#9FFF, #F900–#FAFF); non-Hanzi characters (punctuation, spaces, English) do not consume pinyin tokens.
+   - Pinyin tokens are cleaned (punctuation removed via regex `/[^\p{L}\p{M}0-9]/gu`) and normalized to lowercase before display.
+   - Pinyin appears italicized and in gray (#888) at a smaller font size than the associated Hanzi.
+   - This alignment applies to character, phrase, and example text in flashcard review (`/words/review/flashcard`).
+5. **Flashcard review conditionally displays phrases based on `include_in_fill_test` flag:**
+   - Only phrases marked `include_in_fill_test: true` in `flashcardContents` are rendered as visible blocks on the flashcard.
+   - If no phrases are marked for testing, a placeholder message ("No phrases included for testing") is displayed in place of the phrase-example blocks.
+   - Character and meaning remain visible regardless of phrase-test inclusion; phrases are the only conditional element.
+   - Parent component (`FlashcardReviewSection`) controls visibility toggle via `showPinyin` state (boolean); when `false`, pinyin spans are removed from DOM entirely (not hidden via CSS).
 4. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists.
 5. **Due review pages wrap `WordsWorkspace` in `<Suspense>`.** Required for correct search-param handling in Next.js.
 

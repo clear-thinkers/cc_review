@@ -4,6 +4,7 @@ import LanguageToggle from "./LanguageToggle";
 import { appStrings } from "./app.strings";
 import "./globals.css";
 import { LocaleProvider } from "./shared/locale";
+import { SessionGuard } from "./SessionGuard";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -36,8 +37,10 @@ export default function RootLayout({
         className={`${nunito.variable} ${balooDisplay.variable} ${geistMono.variable} antialiased`}
       >
         <LocaleProvider>
-          <LanguageToggle />
-          {children}
+          <SessionGuard>
+            <LanguageToggle />
+            {children}
+          </SessionGuard>
         </LocaleProvider>
       </body>
     </html>

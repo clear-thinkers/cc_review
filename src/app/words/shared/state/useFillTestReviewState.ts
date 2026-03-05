@@ -21,6 +21,7 @@ export function useFillTestReviewState() {
   const [quizActivePhraseIndex, setQuizActivePhraseIndex] = useState<0 | 1 | 2 | null>(null);
   const [quizDraggingPhraseIndex, setQuizDraggingPhraseIndex] = useState<0 | 1 | 2 | null>(null);
   const [quizDropSentenceIndex, setQuizDropSentenceIndex] = useState<0 | 1 | 2 | null>(null);
+  const [quizSessionStartTime, setQuizSessionStartTime] = useState<number | null>(null);
 
   return {
     quizSelectionMode,
@@ -49,5 +50,7 @@ export function useFillTestReviewState() {
     setQuizDraggingPhraseIndex,
     quizDropSentenceIndex,
     setQuizDropSentenceIndex,
+    quizSessionStartTime,
+    setQuizSessionStartTime,
   };
 }

@@ -1,0 +1,411 @@
+/* Flashcard Card Styles - Responsive Design */
+
+.flashcard-card {
+  position: relative;
+  width: 100%;
+  background-color: #fefffa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Toggle button container and button */
+.flashcard-toggle-button-container {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+}
+
+.flashcard-toggle-button {
+  background-color: transparent;
+  border: none;
+  color: #1976d2;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+  min-width: 48px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.flashcard-toggle-button:hover {
+  background-color: rgba(25, 118, 210, 0.08);
+}
+
+.flashcard-toggle-button:active {
+  background-color: rgba(25, 118, 210, 0.12);
+}
+
+/* Character section - centered, prominent */
+.flashcard-character-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.flashcard-ruby-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  row-gap: 2px;
+  column-gap: 0.14em;
+}
+
+.flashcard-ruby-line-character {
+  justify-content: center;
+}
+
+.flashcard-ruby-line-phrase {
+  justify-content: flex-start;
+}
+
+.flashcard-ruby-line-example {
+  justify-content: flex-start;
+  column-gap: 0.14em;
+}
+
+.flashcard-card.hide-pinyin .flashcard-ruby-line-example {
+  column-gap: 0;
+}
+
+.flashcard-ruby-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 1em;
+}
+
+.flashcard-ruby-unit-hanzi {
+  padding-inline: 0.06em;
+}
+
+.flashcard-ruby-unit-plain {
+  min-width: auto;
+}
+
+.flashcard-ruby-pinyin {
+  color: #888888;
+  font-style: normal;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.flashcard-ruby-pinyin-placeholder {
+  visibility: hidden;
+  line-height: 1.2;
+  font-size: inherit;
+}
+
+.flashcard-ruby-pinyin-character {
+  font-size: 12px;
+}
+
+.flashcard-ruby-pinyin-phrase,
+.flashcard-ruby-pinyin-example {
+  font-size: 15px;
+}
+
+.flashcard-ruby-pinyin-example {
+  font-size: 14px;
+}
+
+.flashcard-ruby-text {
+  color: #333333;
+  line-height: 1;
+  margin: 0;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+
+.flashcard-ruby-text-character {
+  font-size: 39px;
+  font-weight: normal;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.flashcard-ruby-text-phrase {
+  font-size: 19px;
+  font-weight: bold;
+}
+
+.flashcard-ruby-text-example {
+  font-size: 18px;
+  font-weight: normal;
+}
+
+/* Meanings container - groups all meaning sub-blocks */
+.flashcard-meanings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Individual meaning sub-block */
+.flashcard-meaning-block {
+  background-color: #e3f1e3;
+  border: 1px solid #b3e3b3;
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Meaning section - supporting information */
+.flashcard-meaning-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flashcard-meaning-text {
+  font-size: 20px;
+  font-style: normal;
+  color: #14852f;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Details section - phrase-example blocks */
+.flashcard-details-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.flashcard-blocks-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Phrase-example block - grouped visual block */
+.flashcard-phrase-example-block {
+  background-color: #ffffff;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Gap between phrase and example within block */
+.flashcard-block-gap {
+  height: 8px;
+}
+
+/* No content placeholder */
+.flashcard-no-content {
+  text-align: center;
+  padding: 16px;
+  color: #999999;
+  font-size: 14px;
+  font-style: italic;
+}
+
+.flashcard-loading {
+  text-align: center;
+  padding: 16px;
+  color: #666666;
+  font-size: 14px;
+}
+
+/* ============= RESPONSIVE BREAKPOINTS ============= */
+
+/* Mobile: 320–480px */
+@media (max-width: 480px) {
+  .flashcard-card {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .flashcard-toggle-button-container {
+    top: 12px;
+    right: 12px;
+  }
+
+  .flashcard-ruby-text-character {
+    font-size: 32px;
+  }
+
+  .flashcard-ruby-pinyin-character {
+    font-size: 10px;
+  }
+
+  .flashcard-ruby-pinyin-phrase,
+  .flashcard-ruby-pinyin-example {
+    font-size: 12px;
+  }
+
+  .flashcard-ruby-pinyin-example {
+    font-size: 11px;
+  }
+
+  .flashcard-ruby-text-phrase,
+  .flashcard-ruby-text-example {
+    font-size: 19px;
+  }
+
+  .flashcard-ruby-text-example {
+    font-size: 18px;
+  }
+
+  .flashcard-phrase-example-block {
+    padding: 12px;
+    gap: 0;
+  }
+
+  .flashcard-blocks-container {
+    gap: 12px;
+  }
+
+  .flashcard-meaning-text {
+    font-size: 14px;
+  }
+
+  .flashcard-meaning-block {
+    padding: 10px;
+    gap: 10px;
+  }
+}
+
+/* Tablet: 480–960px */
+@media (min-width: 481px) and (max-width: 959px) {
+  .flashcard-card {
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .flashcard-ruby-text-character {
+    font-size: 45px;
+  }
+
+  .flashcard-ruby-pinyin-character {
+    font-size: 14px;
+  }
+
+  .flashcard-ruby-pinyin-phrase,
+  .flashcard-ruby-pinyin-example {
+    font-size: 17px;
+  }
+
+  .flashcard-ruby-pinyin-example {
+    font-size: 16px;
+  }
+
+  .flashcard-ruby-text-phrase,
+  .flashcard-ruby-text-example {
+    font-size: 21px;
+  }
+
+  .flashcard-ruby-text-example {
+    font-size: 20px;
+  }
+
+  .flashcard-meaning-text {
+    font-size: 15px;
+  }
+
+  .flashcard-phrase-example-block {
+    padding: 14px;
+  }
+
+  .flashcard-meaning-block {
+    padding: 14px;
+    gap: 12px;
+  }
+}
+
+/* Desktop: 960px+ */
+@media (min-width: 960px) {
+  .flashcard-card {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 24px;
+    gap: 18px;
+  }
+
+  .flashcard-ruby-text-character {
+    font-size: 54px;
+  }
+
+  .flashcard-ruby-pinyin-character {
+    font-size: 17px;
+  }
+
+  .flashcard-ruby-pinyin-phrase,
+  .flashcard-ruby-pinyin-example {
+    font-size: 17px;
+  }
+
+  .flashcard-ruby-pinyin-example {
+    font-size: 16px;
+  }
+
+  .flashcard-ruby-text-phrase,
+  .flashcard-ruby-text-example {
+    font-size: 23px;
+  }
+
+  .flashcard-ruby-text-example {
+    font-size: 22px;
+  }
+
+  .flashcard-meaning-text {
+    font-size: 16px;
+  }
+
+  .flashcard-phrase-example-block {
+    padding: 16px;
+  }
+
+  .flashcard-blocks-container {
+    gap: 18px;
+  }
+
+  .flashcard-meaning-block {
+    padding: 16px;
+    gap: 14px;
+  }
+}
+
+/* Landscape orientation - slightly reduced vertical spacing for mobile */
+@media (orientation: landscape) and (max-height: 500px) {
+  .flashcard-card {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .flashcard-ruby-text-character {
+    font-size: 29px;
+  }
+
+  .flashcard-ruby-pinyin-character {
+    font-size: 9px;
+  }
+
+  .flashcard-ruby-pinyin-phrase,
+  .flashcard-ruby-pinyin-example {
+    font-size: 11px;
+  }
+
+  .flashcard-ruby-pinyin-example {
+    font-size: 10px;
+  }
+
+  .flashcard-phrase-example-block {
+    padding: 8px;
+  }
+}

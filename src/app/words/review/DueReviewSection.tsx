@@ -33,14 +33,14 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className="rounded-md bg-black px-4 py-2 text-white"
+            className="rounded-md border-2 border-green-500 bg-green-100 px-4 py-2 font-medium text-green-900 disabled:opacity-50"
             onClick={() => openFlashcardReview()}
           >
             {str.due.startFlashcard}
           </button>
           <button
             type="button"
-            className="rounded-md border px-4 py-2 disabled:opacity-50"
+            className="rounded-md border-2 border-amber-500 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
             disabled={fillTestDueWords.length === 0}
             onClick={() => openFillTestReview()}
           >
@@ -99,14 +99,14 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        className="rounded-md border px-2 py-1 text-sm"
+                        className="rounded border-2 border-green-500 bg-green-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-green-900 disabled:opacity-50"
                         onClick={() => openFlashcardReview(word.id)}
                       >
                         {str.due.table.flashcard}
                       </button>
                       <button
                         type="button"
-                        className="rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                        className="rounded border-2 border-amber-500 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
                         disabled={!hasFillTest(word)}
                         onClick={() => openFillTestReview(word.id)}
                       >
