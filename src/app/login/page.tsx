@@ -13,7 +13,9 @@ import {
   hasPinSet,
   setLastSelectedAvatarId,
   getLastSelectedAvatarId,
+  hasMigrationCompleted,
 } from '@/lib/auth';
+import { initializeDatabaseForPin } from '@/lib/db';
 import { loginStrings } from './login.strings';
 import { useLocale } from '@/app/shared/locale';
 
@@ -42,6 +44,10 @@ export default function LoginPage() {
         const pinHash = await hashPin(pin);
         setPinHash(pinHash);
 
+        // Initialize PIN-scoped database and migrate legacy data only once
+        const shouldMigrate = !hasMigrationCompleted();
+        await initializeDatabaseForPin(pinHash, shouldMigrate);
+
         // Create and store session token
         const token = createSessionToken();
         setSessionData(token, avatarId);
@@ -62,6 +68,9 @@ export default function LoginPage() {
           setError(str.incorrectPin);
           return;
         }
+
+        // Initialize PIN-scoped database (no migration for returning users)
+        await initializeDatabaseForPin(storedHash);
 
         // PIN is correct: create session
         const token = createSessionToken();

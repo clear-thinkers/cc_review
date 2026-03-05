@@ -155,12 +155,15 @@ These rules govern the login and session protection gate for early-feedback depl
    - User selects one of 3 avatars: bubble_tea, cake, or donut (images stored in `/public/avatar/`)
    - PIN is hashed using SHA-256 (client-side); plaintext PIN is never stored
    - Session token and avatar selection are stored in localStorage
+   - **PIN-scoped IndexedDB database is initialized** with PIN hash prefix (see Data Isolation below)
+   - If legacy unscoped database exists and migration has not yet run, legacy data is migrated once to the new PIN-scoped database
    - User is redirected to `/words` (main app)
 4. **Subsequent-visit login flow:**
    - User enters their 4-digit PIN
    - System compares hashed input with stored PIN hash
    - If match, user selects avatar (pre-populated with last-selected avatar for UX)
    - New session token is generated and stored in localStorage
+   - **PIN-scoped IndexedDB database is initialized** for the logged-in PIN (automatic database switch)
    - User is redirected to `/words`
 5. **Invalid PIN handling:**
    - Incorrect PIN shows error message; user can retry unlimited times
@@ -170,20 +173,36 @@ These rules govern the login and session protection gate for early-feedback depl
    - Session tokens stored in localStorage persist across browser restarts
    - No expiration in Phase 1; sessions valid indefinitely until logout or cache clear
    - Session data includes: `sessionToken`, `selectedAvatarId`, creation timestamp
-7. **Logout flow:**
+7. **Database lifecycle:**
+   - **On login:** `initializeDatabaseForPin(pinHash)` is called to set the current PIN-scoped database
+   - **SessionGuard check:** When a returning user loads the app, SessionGuard validates the session token and calls `initializeDatabaseForPin()` to reinitialize the correct database for that user
+   - **Smart reinitialization:** If the same PIN is already initialized, reinitialization is skipped to prevent unnecessary database closures
+   - **On logout:** `clearDatabaseState()` closes the database and clears PIN state before redirecting to `/login`
+8. **Logout flow:**
    - Logout button available in main app nav bar
+   - Logout closes the current PIN-scoped database
    - Logout clears all auth data (session token + PIN hash + avatar selection)
    - User is redirected to `/login` setup wizard (no PIN stored, appears as new user)
-8. **Avatar persistence:**
+9. **Avatar persistence:**
    - Last-selected avatar stored in localStorage for UX convenience (pre-populated on next login)
    - User can change avatar each time they log in
    - Avatar emoji/image displayed in nav bar when logged in
-9. **Security notes (early-feedback, not production-grade):**
-   - PIN strength: 10,000 possible combinations; weak but sufficient for early feedback on trusted device
-   - localStorage can be inspected in DevTools; PIN is hashed (not plaintext) but hash could theoretically be brute-forced
-   - No server-side validation; all auth is client-side localStorage-based
-   - Intended for 1–3 early-feedback users on single iPad; not for production multi-user deployment
-   - Phase 2+ can upgrade to stronger auth or server-side session validation if feedback warrants
+10. **Data isolation (critical):**
+    - Each PIN has its own isolated IndexedDB database with a PIN-scoped name: `cc_review_db_{PINHASH_PREFIX}` (first 12 characters of PIN's SHA-256 hash)
+    - Words, flashcard content, quiz sessions, wallet, and all learning data are **never shared** across PINs
+    - Clean separation ensures up to 3 users (Nora + siblings) can have completely independent learning progress on the same device
+    - No cross-user data leakage even if localStorage is inspected
+11. **Migration (one-time only):**
+    - Legacy unscoped database (`cc_review_db`) is checked for data when the first PIN is set up
+    - If legacy data exists and `localStorage.migration_completed` is not set, all tables are migrated to the new PIN-scoped database
+    - After migration completes, `localStorage.migration_completed` is set to prevent future migrations
+    - Subsequent new PINs start with fresh, empty databases
+12. **Security notes (early-feedback, not production-grade):**
+    - PIN strength: 10,000 possible combinations; weak but sufficient for early feedback on trusted device
+    - localStorage can be inspected in DevTools; PIN is hashed (not plaintext) but hash could theoretically be brute-forced
+    - No server-side validation; all auth is client-side localStorage-based and IndexedDB-based
+    - Intended for 1–3 early-feedback users on single iPad; not for production multi-user deployment
+    - Phase 2+ can upgrade to stronger auth or server-side session validation if feedback warrants
 
 ---
 
@@ -282,6 +301,20 @@ This describes how layers are wired — the actual call and import relationships
 | `sessionCreatedAt` | string | Session creation timestamp | Unix milliseconds; used for session validity checks |
 | `storedPinHash` | string | Hashed 4-digit PIN | SHA-256 hex hash; never plaintext; persistent until logout |
 | `lastSelectedAvatarId` | string | Last-selected avatar ID | UX convenience; pre-populates avatar grid on next login |
+| `migration_completed` | string | Migration flag | Set to `'true'` after legacy data migrates to PIN-scoped database; prevents re-migration |
+
+### Database State Management (In-Memory)
+
+The following state is maintained in memory (not localStorage) to manage PIN-scoped database lifecycle:
+
+| State | Type | Purpose | Notes |
+|---|---|---|---|
+| `currentDb` | AppDB \| null | Current PIN-scoped database | Initialized on login; cleared on logout |
+| `currentPinHash` | string \| null | Current PIN hash | Tracks which PIN's database is open; prevents double-initialization of same PIN |
+
+**Database initialization flow:**
+- `initializeDatabaseForPin(pinHash, shouldMigrate)` — Opens a new PIN-scoped database; skips reinitialization if same PIN already open
+- `clearDatabaseState()` — Closes the current database and resets `currentDb` and `currentPinHash` to null (called on logout)
 
 ---
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { getSessionData, clearAllAuthData } from "@/lib/auth";
+import { clearDatabaseState } from "@/lib/db";
 import type { WordsWorkspaceVM } from "./WordsWorkspaceVM";
 import { AVATAR_OPTIONS } from "@/app/login/LoginForm";
 
@@ -15,7 +16,14 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
     ? AVATAR_OPTIONS.find(a => a.id === session.selectedAvatarId)
     : null;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Close the database before clearing auth data
+    try {
+      await clearDatabaseState();
+    } catch (error) {
+      console.error('Error clearing database state on logout:', error);
+    }
+    
     clearAllAuthData();
     router.push('/login');
   };

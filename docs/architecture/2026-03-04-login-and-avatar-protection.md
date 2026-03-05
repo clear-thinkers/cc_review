@@ -80,6 +80,29 @@ The current app is single-user and accessed globally — anyone visiting the URL
 6. **Biometric auth** — Fingerprint or face ID not in Phase 1
 7. **Session expiration** — No timeout in Phase 1 (will be added if feedback warrants)
 
+### Data Isolation
+
+**Critical rule:** Each PIN has its own isolated IndexedDB database.
+
+- **Scoped database names:** When a user logs in with a PIN, the system initializes an IndexedDB database named `cc_review_db_{PINHASH_PREFIX}` (12-char PIN hash prefix)
+  - Example: PIN 0720 → hash `a1b2c3d4e5f6...` → database `cc_review_db_a1b2c3d4e5f6`
+  - Separate PINs get separate databases; up to 3 users × multiple logins = up to 12 simultaneous databases
+- **Separate data:** Words, flashcard content, quiz sessions, and wallet coins are **not shared** across PINs
+- **Clean boundaries:** User A's PIN accesses User A's IndexedDB; User B's PIN accesses User B's IndexedDB
+- **Database lifecycle:**
+  - **Initialization:** On login or SessionGuard check, `initializeDatabaseForPin(pinHash)` opens the correct PIN-scoped database
+  - **Smart reinitialization:** If the same PIN is already initialized, reinitialization is skipped (prevents unnecessary database closures)
+  - **Cleanup:** On logout, `clearDatabaseState()` closes the database and resets in-memory state (`currentDb`, `currentPinHash`)
+- **Logout behavior:** Logging out closes the current database; logging in with a different PIN opens a different database (automatic)
+- **No cross-user access:** Even if localStorage is inspected, PINs guarantee data isolation at the IndexedDB layer
+- **One-time migration:**
+  - On first PIN setup, if a legacy unscoped database (`cc_review_db`) contains data and `localStorage.migration_completed` is not set, all tables are migrated to the new PIN-scoped database
+  - After migration, `localStorage.migration_completed` flag is set to prevent future migrations
+  - Subsequent new PINs start fresh with empty databases
+  - This allows users to preserve pre-login dev data when PIN-scoped isolation is first deployed
+
+This ensures that 3 users (Nora + 2 siblings) can each have separate learning progress on the same device without interfering with each other's data.
+
 ---
 
 ## Proposed Behavior
@@ -251,9 +274,9 @@ Redirect to /login
    - Display selected avatar emoji + simple label (e.g., "⭐ Nora")
    - Add logout link to nav or user menu
 
-### Service Layer (`src/lib/auth.ts` — new module)
+### Service Layer (`src/lib/auth.ts` and `src/lib/db.ts` — refactored)
 
-**New functions:**
+**`src/lib/auth.ts` functions:**
 
 1. **`hashPin(pin: string): Promise<string>`**
    - Hash 4-digit PIN using SHA-256 (crypto.subtle)
@@ -276,12 +299,61 @@ Redirect to /login
 
 6. **`clearSessionData(): void`**
    - Remove session token + PIN hash + avatar from localStorage
+   - Note: preserves `migration_completed` flag to prevent re-migration
 
 7. **`getPinHash(): string | null`**
    - Read stored PIN hash from localStorage (if exists)
 
 8. **`setPinHash(hash: string): void`**
    - Store PIN hash in localStorage
+
+9. **`getPinScopedDatabaseName(pinHash: string | null): string`**
+   - Convert PIN hash to database name: `cc_review_db_{pinHash.substring(0, 12)}` if hash provided, else `cc_review_db`
+   - Used internally by `AppDB` constructor to set the correct database name
+
+10. **`hasMigrationCompleted(): boolean`**
+    - Check if `localStorage.migration_completed` is set
+    - Returns true if one-time migration has already run
+
+11. **`setMigrationCompleted(): void`**
+    - Set `localStorage.migration_completed` flag to prevent re-migration
+    - Called after successful migration from legacy database
+
+12. **`getCurrentPinHash(): string | null`**
+    - Return stored PIN hash from localStorage (the user's current PIN)
+
+**`src/lib/db.ts` functions (refactored for PIN-scoped databases):**
+
+1. **`export const db`** — Lazy proxy forwarding to `getDb()`
+   - Maintains backward compatibility with existing code
+   - Prevents auto-initialization before login
+
+2. **`getDb(): AppDB`**
+   - Returns current PIN-scoped database instance
+   - Throws error if not initialized (prevents accidental auto-init)
+
+3. **`initializeDatabaseForPin(pinHash: string, shouldMigrate: boolean = false): Promise<void>`**
+   - Initialize the PIN-scoped IndexedDB database
+   - Detects if same PIN already initialized; skips if so (prevents double-closure errors)
+   - If `shouldMigrate=true` and legacy database exists with data, calls `migrateFromLegacyDatabase()`
+   - Sets `currentDb` and `currentPinHash` state
+
+4. **`clearDatabaseState(): void`**
+   - Close the current PIN-scoped database
+   - Reset `currentDb` and `currentPinHash` to null
+   - Called on logout before `clearSessionData()`
+
+5. **`migrateFromLegacyDatabase(newDb: AppDB): Promise<void>`**
+   - Copy all data from legacy unscoped database (`cc_review_db`) to new PIN-scoped database
+   - Iterates through all tables: `words`, `flashcardContents`, `quizSessions`, `wallets`, `fillTests`, `disabledFillTests`
+   - Logs migration progress to console
+   - Calls `setMigrationCompleted()` after successful migration
+   - **One-time only:** migration is skipped if `localStorage.migration_completed` is already set
+
+6. **`AppDB` constructor refactor**
+   - Now accepts optional `databaseName` parameter for PIN-scoped naming
+   - Defaults to `cc_review_db` if no parameter provided
+   - Dexie.js handles the database connection internally
 
 ### Domain Layer
 
@@ -452,6 +524,37 @@ localStorage.setItem('lastSelectedAvatarId', '2');
    - Verify PIN is NOT stored as plaintext (should be hash)
    - Verify session token is present
 
+11. **PIN-scoped database isolation** (IndexedDB)
+   - Login with PIN 1234
+   - Add a character (e.g., 好) in `/words/add`
+   - Open DevTools → Application → IndexedDB
+   - Verify database named `cc_review_db_[HASH_PREFIX]` exists and contains the character
+   - Logout
+   - Login with different PIN 5678
+   - Open DevTools → Application → IndexedDB
+   - Verify new database `cc_review_db_[DIFFERENT_HASH]` exists (separate from first)
+   - Verify `/words/all` shows 0 characters (fresh database for new PIN)
+   - Verify first PIN's database still has the character
+   - Login with PIN 1234 again
+   - Verify the character from first login is still accessible (data persisted)
+
+12. **Data isolation across multiple PINs**
+   - Create 3 test PINs (0101, 0202, 0303)
+   - For each PIN: add characters, complete a quiz session, check wallet balance
+   - Verify each PIN's data is completely separate (no cross-contamination)
+   - Verify opening DevTools shows 3 separate IndexedDB databases
+
+13. **One-time migration from legacy database**
+   - Setup: delete all IndexedDB databases and localStorage
+   - Add characters with first PIN setup
+   - Logout
+   - Simulate legacy app state: create `cc_review_db` (unscoped) with test characters
+   - Login with same PIN 1234
+   - Verify: data from legacy database is migrated to new PIN-scoped database
+   - Verify: `localStorage.migration_completed` flag is set
+   - Logout and login with new PIN 9999
+   - Verify: new PIN starts with empty database (no migration occurs again)
+
 ### Automated Testing
 
 1. **Types file**: `login.types.test.ts`
@@ -492,6 +595,12 @@ localStorage.setItem('lastSelectedAvatarId', '2');
 - [ ] **Login page mobile-optimized** (large touch targets, responsive layout)
 - [ ] **No console errors** on login/logout/session check
 - [ ] **Session persists across page refresh** and browser restarts (until logout or cache clear)
+- [ ] **PIN-scoped IndexedDB databases created** with naming convention `cc_review_db_{PINHASH_PREFIX}`
+- [ ] **Data isolation verified** — different PINs access different databases, no cross-user data leakage
+- [ ] **One-time migration executed** — legacy unscoped database migrated to PIN-scoped on first PIN setup
+- [ ] **Migration flag set** — `localStorage.migration_completed` prevents re-migration
+- [ ] **Database state tracked** — `currentDb` and `currentPinHash` prevent double-initialization errors
+- [ ] **Database lifecycle correct** — database opened on login, closed on logout, reinitialized on SessionGuard check
 
 ---
 

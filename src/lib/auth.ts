@@ -171,7 +171,56 @@ export function clearAllAuthData(): void {
     localStorage.removeItem('sessionCreatedAt');
     localStorage.removeItem('storedPinHash');
     localStorage.removeItem('lastSelectedAvatarId');
+    // Note: DO NOT clear 'migration_completed' flag - we only migrate once per app instance
   } catch (e) {
     console.error('Failed to clear all auth data:', e);
   }
+}
+
+/**
+ * Check if data migration from legacy database has already been completed
+ * @returns boolean - True if migration has run before on this device
+ */
+export function hasMigrationCompleted(): boolean {
+  try {
+    return localStorage.getItem('migration_completed') === 'true';
+  } catch (e) {
+    console.error('Failed to check migration status:', e);
+    return false;
+  }
+}
+
+/**
+ * Mark migration as completed (set in localStorage)
+ * Prevents multiple migrations of the same legacy data
+ */
+export function setMigrationCompleted(): void {
+  try {
+    localStorage.setItem('migration_completed', 'true');
+  } catch (e) {
+    console.error('Failed to set migration flag:', e);
+  }
+}
+
+/**
+ * Get the currently stored PIN hash (for database scoping)
+ * @returns string | null - Current PIN hash, or null if not set
+ */
+export function getCurrentPinHash(): string | null {
+  return getPinHash();
+}
+
+/**
+ * Build a PIN-scoped database name
+ * @param pinHash - PIN hash from localStorage
+ * @returns string - Database name scoped to PIN (e.g., "cc_review_db_a1b2c3...")
+ */
+export function getPinScopedDatabaseName(pinHash: string | null): string {
+  if (!pinHash) {
+    // Fallback for unscoped access (should not happen in normal flow)
+    return 'cc_review_db';
+  }
+  // Use first 12 chars of PIN hash to keep database name reasonable
+  const pinSuffix = pinHash.substring(0, 12);
+  return `cc_review_db_${pinSuffix}`;
 }

@@ -7,6 +7,7 @@ import type { Wallet } from "@/app/words/shared/coins.types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade } from "./scheduler";
 import type { GradeResult } from "./review";
+import { getPinScopedDatabaseName, setMigrationCompleted } from "./auth";
 
 export type FillTestOverride = {
   hanzi: string;
@@ -35,8 +36,8 @@ export class AppDB extends Dexie {
   quizSessions!: Table<QuizSession, string>;
   wallets!: Table<Wallet, string>;
 
-  constructor() {
-    super("cc_review_db");
+  constructor(databaseName: string = "cc_review_db") {
+    super(databaseName);
     this.version(1).stores({
       words: "id, hanzi, nextReviewAt, createdAt",
     });
@@ -73,7 +74,163 @@ export class AppDB extends Dexie {
   }
 }
 
-export const db = new AppDB();
+/**
+ * Current database instance, scoped to the logged-in user's PIN.
+ * Initialized with the PIN hash to ensure data isolation.
+ * IMPORTANT: Do NOT auto-initialize. Only set via initializeDatabaseForPin().
+ */
+let currentDb: AppDB | null = null;
+let currentPinHash: string | null = null;
+
+/**
+ * Get the current database (scoped to current PIN)
+ * @returns AppDB instance for the current user
+ * @throws Error if database has not been initialized (user not logged in)
+ */
+export function getDb(): AppDB {
+  if (!currentDb) {
+    throw new Error('Database not initialized. User must log in first.');
+  }
+  return currentDb;
+}
+
+/**
+ * Initialize database for a specific PIN (called on successful login)
+ * Skips reinitialization if the same PIN is already initialized.
+ * @param pinHash - PIN hash from localStorage
+ * @param shouldMigrate - Whether to migrate data from legacy database
+ */
+export async function initializeDatabaseForPin(pinHash: string, shouldMigrate: boolean = false): Promise<void> {
+  // Skip if already initialized for this PIN
+  if (currentPinHash === pinHash && currentDb) {
+    console.log('Database already initialized for this PIN, skipping reinitialization');
+    return;
+  }
+
+  // Close previous database if it exists
+  if (currentDb) {
+    await currentDb.close();
+  }
+  
+  // Create new database with PIN-scoped name
+  const databaseName = getPinScopedDatabaseName(pinHash);
+  currentDb = new AppDB(databaseName);
+  currentPinHash = pinHash;
+
+  // Migrate data from legacy database if requested
+  if (shouldMigrate) {
+    await migrateFromLegacyDatabase(currentDb);
+  }
+}
+
+/**
+ * Clear the current database state (called on logout)
+ * Closes the database and resets the PIN reference
+ */
+export async function clearDatabaseState(): Promise<void> {
+  if (currentDb) {
+    try {
+      await currentDb.close();
+    } catch (error) {
+      console.error('Error closing database during logout:', error);
+    }
+  }
+  currentDb = null;
+  currentPinHash = null;
+}
+
+/**
+ * Open the legacy (unscoped) database
+ * @returns AppDB instance for the legacy database
+ */
+async function openLegacyDatabase(): Promise<AppDB> {
+  return new AppDB("cc_review_db");
+}
+
+/**
+ * Migrate all data from the legacy database to the current scoped database
+ * @param newDb - The target PIN-scoped database
+ */
+export async function migrateFromLegacyDatabase(newDb: AppDB): Promise<void> {
+  try {
+    const legacyDb = await openLegacyDatabase();
+    
+    // Check if legacy database has any data
+    const legacyWordsCount = await legacyDb.words.count();
+    const legacySessionsCount = await legacyDb.quizSessions.count();
+    const legacyContentCount = await legacyDb.flashcardContents.count();
+    const legacyWalletCount = await legacyDb.wallets.count();
+    
+    const hasAnyData = legacyWordsCount > 0 || legacySessionsCount > 0 || legacyContentCount > 0 || legacyWalletCount > 0;
+    
+    if (!hasAnyData) {
+      console.log('Legacy database is empty, skipping migration');
+      await legacyDb.close();
+      return;
+    }
+
+    console.log(`Migrating data from legacy database: ${legacyWordsCount} words, ${legacySessionsCount} sessions, ${legacyContentCount} contents, ${legacyWalletCount} wallets`);
+
+    // Migrate words
+    if (legacyWordsCount > 0) {
+      const words = await legacyDb.words.toArray();
+      await newDb.words.bulkPut(words);
+      console.log(`✓ Migrated ${words.length} words`);
+    }
+
+    // Migrate fillTests
+    const fillTests = await legacyDb.fillTests.toArray();
+    if (fillTests.length > 0) {
+      await newDb.fillTests.bulkPut(fillTests);
+      console.log(`✓ Migrated ${fillTests.length} fill test overrides`);
+    }
+
+    // Migrate disabledFillTests
+    const disabledFillTests = await legacyDb.disabledFillTests.toArray();
+    if (disabledFillTests.length > 0) {
+      await newDb.disabledFillTests.bulkPut(disabledFillTests);
+      console.log(`✓ Migrated ${disabledFillTests.length} disabled fill tests`);
+    }
+
+    // Migrate flashcardContents
+    if (legacyContentCount > 0) {
+      const contents = await legacyDb.flashcardContents.toArray();
+      await newDb.flashcardContents.bulkPut(contents);
+      console.log(`✓ Migrated ${contents.length} flashcard contents`);
+    }
+
+    // Migrate quiz sessions
+    if (legacySessionsCount > 0) {
+      const sessions = await legacyDb.quizSessions.toArray();
+      await newDb.quizSessions.bulkPut(sessions);
+      console.log(`✓ Migrated ${sessions.length} quiz sessions`);
+    }
+
+    // Migrate wallet
+    if (legacyWalletCount > 0) {
+      const wallets = await legacyDb.wallets.toArray();
+      await newDb.wallets.bulkPut(wallets);
+      console.log(`✓ Migrated wallet data`);
+    }
+
+    console.log('✓ Migration complete! All data moved to PIN-scoped database');
+    setMigrationCompleted(); // Mark that migration has happened (only migrate once)
+    await legacyDb.close();
+  } catch (error) {
+    console.error('Migration error:', error);
+    throw new Error(`Failed to migrate data: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Lazy proxy for backward compatibility
+ * Returns the current database instance
+ */
+export const db = new Proxy({} as AppDB, {
+  get(target, prop) {
+    return (getDb() as any)[prop];
+  },
+});
 
 export async function getDueWords(now = Date.now()): Promise<Word[]> {
   const indexedDue = await db.words.where("nextReviewAt").belowOrEqual(now).toArray();

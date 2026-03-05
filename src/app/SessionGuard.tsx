@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { getSessionData } from '@/lib/auth';
+import { getSessionData, getPinHash } from '@/lib/auth';
+import { initializeDatabaseForPin } from '@/lib/db';
 
 /**
  * Session Guard Wrapper
@@ -27,8 +28,32 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     // Check for valid session
     const session = getSessionData();
     if (session) {
-      setIsLoggedIn(true);
-      setIsLoading(false);
+      // Session is valid - initialize database for this PIN (returning user)
+      const pinHash = getPinHash();
+      if (pinHash) {
+        // Only initialize if not already done (check if currentDb is ready)
+        // This prevents double-initialization when redirecting from login
+        try {
+          initializeDatabaseForPin(pinHash).then(() => {
+            setIsLoggedIn(true);
+            setIsLoading(false);
+          }).catch((error) => {
+            console.error('Failed to initialize database:', error);
+            // On database init failure, redirect to login
+            router.push('/login');
+            setIsLoading(false);
+          });
+        } catch (error) {
+          console.error('Database initialization error:', error);
+          router.push('/login');
+          setIsLoading(false);
+        }
+      } else {
+        // Session exists but no PIN hash - inconsistent state, redirect to login
+        console.warn('Session token exists but no PIN hash found');
+        router.push('/login');
+        setIsLoading(false);
+      }
     } else {
       // No valid session, redirect to login
       router.push('/login');
