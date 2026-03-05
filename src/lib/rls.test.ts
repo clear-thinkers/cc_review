@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -23,11 +23,12 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const skipIfNoSupabase = !supabaseUrl || !serviceRoleKey ? 'skip' : 'run';
 
 describe.skip('RLS Integration Tests', async () => {
-  let adminClient = null;
-  let familyAId = null;
-  let familyBId = null;
-  let userAId = null;
-  let userBId = null;
+  // Definite assignment: set in beforeAll before any test runs
+  let adminClient!: SupabaseClient;
+  let familyAId!: string;
+  let familyBId!: string;
+  let userAId!: string;
+  let userBId!: string;
 
   beforeAll(async () => {
     if (!supabaseUrl || !serviceRoleKey) {
@@ -43,14 +44,14 @@ describe.skip('RLS Integration Tests', async () => {
       .insert([{ name: `Test Family A ${Date.now()}` }])
       .select('id')
       .single();
-    familyAId = familyA.id;
+    familyAId = familyA!.id;
 
     const { data: familyB } = await adminClient
       .from('families')
       .insert([{ name: `Test Family B ${Date.now()}` }])
       .select('id')
       .single();
-    familyBId = familyB.id;
+    familyBId = familyB!.id;
 
     // Create test users from each family
     const { data: userA } = await adminClient
@@ -65,7 +66,7 @@ describe.skip('RLS Integration Tests', async () => {
       ])
       .select('id')
       .single();
-    userAId = userA.id;
+    userAId = userA!.id;
 
     const { data: userB } = await adminClient
       .from('users')
@@ -79,14 +80,12 @@ describe.skip('RLS Integration Tests', async () => {
       ])
       .select('id')
       .single();
-    userBId = userB.id;
+    userBId = userB!.id;
   });
 
   afterAll(async () => {
     // Clean up test data
-    if (adminClient && familyAId && familyBId) {
-      await adminClient.from('families').delete().in('id', [familyAId, familyBId]);
-    }
+    await adminClient.from('families').delete().in('id', [familyAId, familyBId]);
   });
 
   describe('RLS: families table', () => {
@@ -95,7 +94,7 @@ describe.skip('RLS Integration Tests', async () => {
 
       expect(error).toBeNull();
       expect(Array.isArray(data)).toBe(true);
-      expect(data.length).toBeGreaterThan(0);
+      expect(data!.length).toBeGreaterThan(0);
     });
 
     it('platform admin can insert families', async () => {
@@ -106,10 +105,10 @@ describe.skip('RLS Integration Tests', async () => {
         .single();
 
       expect(error).toBeNull();
-      expect(data.id).toBeDefined();
+      expect(data!.id).toBeDefined();
 
       // Clean up
-      await adminClient.from('families').delete().eq('id', data.id);
+      await adminClient.from('families').delete().eq('id', data!.id);
     });
   });
 
@@ -234,7 +233,7 @@ describe.skip('RLS Integration Tests', async () => {
       const { error: updateError } = await adminClient
         .from('quiz_sessions')
         .update({ coins_earned: 100 })
-        .eq('id', session.id);
+        .eq('id', session!.id);
 
       // Should fail due to no update policy
       expect(updateError).toBeDefined();
