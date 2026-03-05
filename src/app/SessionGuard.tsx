@@ -1,81 +1,65 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { getSessionData, getPinHash } from '@/lib/auth';
-import { initializeDatabaseForPin } from '@/lib/db';
+import { useAuth } from '@/lib/authContext';
 
 /**
- * Session Guard Wrapper
- * 
- * Checks for valid session token on mount.
- * If invalid/missing, redirects to /login.
- * Allows /login page to bypass this check.
+ * Session Guard Wrapper — Two-Layer Auth
+ *
+ * Route access rules:
+ *   /login, /register          → always accessible (no auth required)
+ *   /profile-select, /pin-entry → require Layer 1 (Supabase session) only
+ *   all other routes            → require both Layer 1 AND Layer 2 (PIN verified)
+ *
+ * AuthContext isLayer1Ready / session are populated by the Supabase
+ * onAuthStateChange listener in AuthProvider, so this guard is reactive
+ * to session changes without needing to check localStorage manually.
  */
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { isLayer1Ready, session } = useAuth();
+
+  // Routes that need no authentication at all
+  const isPublicRoute = pathname === '/login' || pathname === '/register';
+
+  // Routes that need only Layer 1 (Supabase Auth session)
+  const isLayer1Route =
+    pathname === '/profile-select' || pathname.startsWith('/pin-entry');
 
   useEffect(() => {
-    // Skip session check on login page
-    if (pathname === '/login') {
-      setIsLoading(false);
+    if (isPublicRoute) return;
+
+    if (isLayer1Route) {
+      if (!isLayer1Ready) {
+        router.replace('/login');
+      }
       return;
     }
 
-    // Check for valid session
-    const session = getSessionData();
-    if (session) {
-      // Session is valid - initialize database for this PIN (returning user)
-      const pinHash = getPinHash();
-      if (pinHash) {
-        // Only initialize if not already done (check if currentDb is ready)
-        // This prevents double-initialization when redirecting from login
-        try {
-          initializeDatabaseForPin(pinHash).then(() => {
-            setIsLoggedIn(true);
-            setIsLoading(false);
-          }).catch((error) => {
-            console.error('Failed to initialize database:', error);
-            // On database init failure, redirect to login
-            router.push('/login');
-            setIsLoading(false);
-          });
-        } catch (error) {
-          console.error('Database initialization error:', error);
-          router.push('/login');
-          setIsLoading(false);
-        }
-      } else {
-        // Session exists but no PIN hash - inconsistent state, redirect to login
-        console.warn('Session token exists but no PIN hash found');
-        router.push('/login');
-        setIsLoading(false);
-      }
-    } else {
-      // No valid session, redirect to login
-      router.push('/login');
-      setIsLoading(false);
+    // Protected route — requires full session (both layers)
+    if (!isLayer1Ready) {
+      router.replace('/login');
+      return;
     }
-  }, [pathname, router]);
 
-  // Show nothing while checking (avoid flash of unauthorized content)
-  if (isLoading && pathname !== '/login') {
-    return null;
-  }
+    if (!session) {
+      // Layer 1 done but Layer 2 not yet completed
+      router.replace('/profile-select');
+    }
+  }, [isPublicRoute, isLayer1Route, isLayer1Ready, session, router]);
 
-  // Allow login page to render without session
-  if (pathname === '/login') {
+  // Public routes always render
+  if (isPublicRoute) return <>{children}</>;
+
+  // Layer 1 routes: render once Layer 1 is ready
+  if (isLayer1Route) {
+    if (!isLayer1Ready) return null;
     return <>{children}</>;
   }
 
-  // Show children only if logged in
-  if (isLoggedIn) {
-    return <>{children}</>;
-  }
-
-  // Waiting for redirect
-  return null;
+  // Protected routes: render only when full session exists
+  if (!session) return null;
+  return <>{children}</>;
 }

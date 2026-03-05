@@ -3,28 +3,16 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { getSessionData, clearAllAuthData } from "@/lib/auth";
-import { clearDatabaseState } from "@/lib/db";
+import { useSession, useAuth } from "@/lib/authContext";
 import type { WordsWorkspaceVM } from "./WordsWorkspaceVM";
-import { AVATAR_OPTIONS } from "@/app/login/LoginForm";
 
 export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; children: ReactNode }) {
   const router = useRouter();
-  const session = getSessionData();
-  
-  const selectedAvatar = session 
-    ? AVATAR_OPTIONS.find(a => a.id === session.selectedAvatarId)
-    : null;
+  const session = useSession();
+  const { clearSession } = useAuth();
 
   const handleLogout = async () => {
-    // Close the database before clearing auth data
-    try {
-      await clearDatabaseState();
-    } catch (error) {
-      console.error('Error clearing database state on logout:', error);
-    }
-    
-    clearAllAuthData();
+    await clearSession();
     router.push('/login');
   };
 
@@ -36,11 +24,11 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
           <h2 className="font-medium">{vm.str.nav.menu}</h2>
           <p className="text-sm text-gray-700">{vm.str.nav.navigateBetweenPages}</p>
           
-          {selectedAvatar && (
+          {session?.avatarId && (
             <div className="flex flex-col items-center gap-2 border-t pt-3">
               <img
-                src={`/avatar/${selectedAvatar.filename}.png`}
-                alt={selectedAvatar.filename}
+                src={`/avatar/${session.avatarId}.png`}
+                alt={session.userName}
                 className="h-12 w-12"
               />
               <button
