@@ -11,9 +11,12 @@
     "typecheck": "tsc --noEmit",
     "download-dictionary-data": "node scripts/download-xinhua-data.mjs",
     "download-xinhua-data": "npm run download-dictionary-data",
-    "check:encoding": "node scripts/check-mojibake.mjs"
+    "check:encoding": "node scripts/check-mojibake.mjs",
+    "verify:rls": "tsx scripts/verify-rls.ts",
+    "seed:admin": "node scripts/seed-platform-admin.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.98.0",
     "dexie": "^4.3.0",
     "next": "16.1.6",
     "react": "19.2.3",
@@ -26,7 +29,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "supabase": "^2.76.17",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^3.2.4"
   }
