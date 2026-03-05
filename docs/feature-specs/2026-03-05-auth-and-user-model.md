@@ -1,6 +1,6 @@
 # Feature Spec — 2026-03-05 — Auth & User Model
 
-_Status: Draft — Awaiting human review before implementation_
+_Status: ✅ Implemented — 2026-03-05 (feat/phase3)_
 
 > This spec supersedes `docs/architecture/2026-03-04-login-and-avatar-protection.md`.
 > That doc should be moved to `docs/archive/2026-03/` once this spec is approved.
@@ -366,21 +366,21 @@ No changes. Scheduler remains a pure function.
 
 ## Acceptance Criteria
 
-- [ ] `/register` creates family, parent user, and at least one child user in Supabase
-- [ ] `/login` Layer 1 validates email + password via Supabase Auth
-- [ ] `/profile-select` renders correct profiles for the authenticated family
-- [ ] `/pin-entry` verifies PIN server-side via `/api/auth/pin-verify`
-- [ ] Correct PIN sets `AuthContext` with `family_id`, `user_id`, `role`
-- [ ] 5 failed PIN attempts triggers lockout screen
-- [ ] SessionGuard redirects unauthenticated users to `/login`
-- [ ] SessionGuard redirects Layer-1-only users to `/profile-select`
-- [ ] Page reload restores full session without re-entering credentials
-- [ ] Logout clears Supabase session and `AuthContext`, redirects to `/login`
-- [ ] No PIN hash stored in localStorage or client-side state
-- [ ] All strings in `auth.strings.ts` (EN + ZH)
-- [ ] All new types in `auth.types.ts`
-- [ ] Old localStorage PIN auth code fully removed
-- [ ] Old IndexedDB Dexie auth code fully removed
+- [x] `/register` creates family, parent user, and at least one child user in Supabase
+- [x] `/login` Layer 1 validates email + password via Supabase Auth
+- [x] `/profile-select` renders correct profiles for the authenticated family
+- [x] `/pin-entry` verifies PIN server-side via `/api/auth/pin-verify`
+- [x] Correct PIN sets `AuthContext` with `family_id`, `user_id`, `role`
+- [x] 5 failed PIN attempts triggers lockout screen
+- [x] SessionGuard redirects unauthenticated users to `/login`
+- [x] SessionGuard redirects Layer-1-only users to `/profile-select`
+- [x] Page reload restores full session without re-entering credentials
+- [x] Logout clears Supabase session and `AuthContext`, redirects to `/login`
+- [x] No PIN hash stored in localStorage or client-side state
+- [x] All strings in `auth.strings.ts` (EN + ZH)
+- [x] All new types in `auth.types.ts`
+- [x] Old localStorage PIN auth code fully removed
+- [x] Old IndexedDB Dexie auth code fully removed
 
 ---
 
