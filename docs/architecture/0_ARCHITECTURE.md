@@ -236,7 +236,7 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 |---|---|---|
 | UI | `src/app/...`, `WordsWorkspace` | Interaction, view state, locale rendering |
 | Domain | `src/lib/scheduler.ts`, `src/lib/fillTest.ts`, `src/lib/flashcardLlm.ts` | Pure logic: scheduling, grading, normalization |
-| Service | `src/lib/supabaseClient.ts`, `src/lib/xinhua.ts` | IO: Supabase reads/writes, static data loading |
+| Service | `src/lib/supabase-service.ts`, `src/lib/supabaseClient.ts`, `src/lib/xinhua.ts` | IO: Supabase reads/writes (all data access), static data loading |
 | AI | `src/app/api/flashcard/generate/route.ts` | Prompt orchestration, provider calls |
 
 ### Call Graph (Structural)
@@ -245,13 +245,16 @@ This describes how layers are wired — the actual call and import relationships
 
 - `src/app/**` communicates with `src/app/api/**` via **fetch calls only** — no direct imports.
 - `src/app/api/**` is invoked only from admin authoring flows — never from review execution paths.
-- **All database operations use `src/lib/supabaseClient.ts`** — this is the single point of contact for all Supabase reads and writes.
-  - Browser components import `supabase` (anon key, respects RLS)
+- **All database operations use `src/lib/supabase-service.ts`** — this is the single service module for all data access.
+  - `src/lib/supabase-service.ts` uses the browser Supabase client (`supabase` from `supabaseClient.ts`), which passes the session JWT automatically.
+  - RLS policies scope all reads/writes to the current family/user via JWT `app_metadata` claims.
+  - Service functions handle camelCase (TypeScript) ↔ snake_case (Postgres) conversion.
+  - For inserts requiring `family_id`/`user_id`, the service layer reads these from the Supabase session `app_metadata`.
   - API routes import `getServerSupabaseClient()` (service role, for admin operations only)
-  - **No direct Dexie/IndexedDB operations** — IndexedDB is fully retired
+  - **No direct IndexedDB/Dexie operations** — IndexedDB is fully retired; `src/lib/db.ts` has been deleted
 - `src/lib/scheduler.ts` has no dependency on UI or API layers — it is a pure domain module.
 - AI output flows through normalization in `src/lib/flashcardLlm.ts` before reaching Supabase writes.
-- `src/lib/db.ts` (IndexedDB) is **deprecated** — all new code uses Supabase via `src/lib/supabaseClient.ts`
+- `src/lib/db.ts` (IndexedDB) has been **deleted** — all data access uses `src/lib/supabase-service.ts`
 
 > For the agent rules that enforce these boundaries (what to never do), see `AI_CONTRACT.md §2`.
 
@@ -382,33 +385,15 @@ All tables have RLS enabled. Policies are applied based on JWT claims `family_id
 
 - **Pronunciation candidates:** `public/data/char_detail.json` — loaded via `src/lib/xinhua.ts`
 
-### localStorage Schema (Session & Auth Data — Phase Out Scheduled)
+### localStorage Schema (Legacy — Fully Retired)
 
-**Current Phase 1 authentication uses localStorage.** This is deferred to be replaced by Supabase Auth as part of Feature 4 (Auth & User Model). The following keys are active during Phase 1 only:
+**Phase 1 localStorage authentication has been replaced by Supabase Auth (Feature 4).** The following keys are no longer in use. All auth state is managed by the Supabase client session and React context (`AuthProvider`).
 
-| Key | Type | Purpose | Notes |
-|---|---|---|---|
-| `sessionToken` | string | Session authentication | Opaque token persists across browser restarts; cleared on logout |
-| `selectedAvatarId` | string | Selected avatar (0–2) | Converted to/from number in code; stored as string in localStorage |
-| `sessionCreatedAt` | string | Session creation timestamp | Unix milliseconds; used for session validity checks |
-| `storedPinHash` | string | Hashed 4-digit PIN | SHA-256 hex hash; never plaintext; persistent until logout |
-| `lastSelectedAvatarId` | string | Last-selected avatar ID | UX convenience; pre-populates avatar grid on next login |
-| `migration_completed` | string | Migration flag | Set to `'true'` after legacy data migrates to PIN-scoped database; prevents re-migration |
+Retired keys: `sessionToken`, `selectedAvatarId`, `sessionCreatedAt`, `storedPinHash`, `lastSelectedAvatarId`, `migration_completed`.
 
-**After Feature 4 (Supabase Auth) ships:** Supabase Auth manages session tokens via encrypted secure cookies (server-set, httpOnly). localStorage will no longer store auth data.
+### Database State Management (Retired)
 
-### Database State Management (In-Memory)
-
-The following state is maintained in memory (not localStorage) to manage PIN-scoped database lifecycle:
-
-| State | Type | Purpose | Notes |
-|---|---|---|---|
-| `currentDb` | AppDB \| null | Current PIN-scoped database | Initialized on login; cleared on logout |
-| `currentPinHash` | string \| null | Current PIN hash | Tracks which PIN's database is open; prevents double-initialization of same PIN |
-
-**Database initialization flow:**
-- `initializeDatabaseForPin(pinHash, shouldMigrate)` — Opens a new PIN-scoped database; skips reinitialization if same PIN already open
-- `clearDatabaseState()` — Closes the current database and resets `currentDb` and `currentPinHash` to null (called on logout)
+PIN-scoped IndexedDB has been fully replaced by Supabase Postgres. The `currentDb` and `currentPinHash` in-memory state no longer exists. Data isolation is now enforced by Supabase RLS policies using JWT `app_metadata` claims (`family_id`, `user_id`).
 
 ---
 
@@ -459,7 +444,7 @@ Required error behaviors for each failure mode. Do not improvise alternatives.
 |---|---|
 | AI generation failure (`/api/flashcard/generate`) | Return error to admin UI. Do not fall back to cached or unvalidated output. Surface the error to the user. |
 | Normalization failure (malformed AI payload) | Log the failure. Drop the affected phrase/example. Continue with remaining valid content. Never write a partial payload. |
-| IndexedDB read failure (review screens) | Show a graceful error state in the UI. Do not re-fetch from AI. Session fails cleanly. |
+| Supabase read failure (review screens) | Show a graceful error state in the UI. Do not re-fetch from AI. Session fails cleanly. |
 | Missing `char_detail.json` entry | Return empty pronunciation candidates. Do not throw. UI handles the empty state. |
 
 ---

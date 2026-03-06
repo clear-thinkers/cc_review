@@ -178,6 +178,10 @@ function resolveDeepSeekEndpoint(rawEndpoint: string | undefined): string {
     return DEFAULT_DEEPSEEK_API_URL;
   }
 
+  if (!configured.startsWith("http://") && !configured.startsWith("https://")) {
+    return DEFAULT_DEEPSEEK_API_URL;
+  }
+
   if (configured.endsWith("/chat/completions")) {
     return configured;
   }

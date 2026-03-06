@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { QuizSession } from "./results.types";
-import { getAllQuizSessions } from "@/lib/db";
+import { getAllQuizSessions } from "@/lib/supabase-service";
 import { computeSessionDisplayData, calculateSummaryStats } from "@/lib/results";
 import { ResultsSummary } from "./ResultsSummary";
 import { SessionHistoryTable } from "./SessionHistoryTable";
@@ -48,7 +48,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
   const handleConfirmClear = async () => {
     setIsClearing(true);
     try {
-      const { clearAllQuizSessions } = await import("@/lib/db");
+      const { clearAllQuizSessions } = await import("@/lib/supabase-service");
       await clearAllQuizSessions();
       setSessions([]);
       setShowDialog(false);

@@ -169,5 +169,29 @@ export async function POST(request: NextRequest): Promise<NextResponse<PinVerify
     isPlatformAdmin: userRow.is_platform_admin as boolean,
   };
 
+  // ── 8. Enrich the Supabase JWT with family/user claims ───────────────
+  // Write family_id, user_id, role into app_metadata on the auth.users row.
+  // Supabase includes app_metadata in every JWT — claims persist across
+  // token refreshes without re-enrichment. The client must call
+  // supabase.auth.refreshSession() after this to receive the enriched token.
+  const { error: enrichError } = await adminClient.auth.admin.updateUserById(
+    user.id,  // auth.users.id (Layer 1 identity — the parent who authenticated)
+    {
+      app_metadata: {
+        family_id: profile.familyId,
+        user_id: profile.id,
+        role: profile.role,
+        is_platform_admin: profile.isPlatformAdmin,
+      },
+    }
+  );
+
+  if (enrichError) {
+    return NextResponse.json(
+      { success: false, error: 'Session enrichment failed' },
+      { status: 500 }
+    );
+  }
+
   return NextResponse.json({ success: true, profile }, { status: 200 });
 }

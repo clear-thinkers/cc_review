@@ -1,6 +1,6 @@
 ﻿# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-03-05_ (Feature 4 deployed; Feature 6 next)
+_Last updated: 2026-03-06_ (Service Layer Migration complete; IndexedDB fully retired)
 
 ---
 
@@ -47,6 +47,7 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | 8 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | [`docs/feature-specs/2026-03-04-quiz-results-summary.md`](../feature-specs/2026-03-04-quiz-results-summary.md) | ✅ Done | 2026-03-04 |
 | 9 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | ✅ Done | 2026-03-05 |
 | 11 | **Rewards System — Coins** | Coins earned per quiz session (accuracy + completion based). `wallet` table. Persistent, cumulative balance across sessions. Track coin history and milestones. | `docs/feature-specs/2026-03-04-coin-rewards-system.md` | ✅ Done | 2026-03-05 |
+| 12 | **Service Layer Migration** | Replace all IndexedDB (Dexie) reads/writes with Supabase client calls via `src/lib/supabase-service.ts`. Delete `db.ts`, `auth.ts`, `debugUtilities.ts`. Remove `dexie` dependency. camelCase ↔ snake_case conversion in service layer. | `docs/feature-specs/2026-03-05-service-layer-migration.md` | ✅ Done | 2026-03-06 |
 
 ### Phase 2 — Structure & Visibility
 
@@ -95,7 +96,7 @@ Tier 1 is complete when **all** of the following are true:
 - Parents and children can review session history, accuracy, and improvement over time
 
 **Auth and data are production-grade**
-- All user data stored in Supabase Postgres (IndexedDB fully retired)
+- All user data stored in Supabase Postgres (IndexedDB fully retired; `dexie` removed from dependencies)
 - Family data isolated via Row Level Security — no cross-tenant leakage possible
 - Parent account recoverable via email; child access controlled by parent-assigned PIN
 - Role-based routing enforced — blocked routes not visible to unauthorized roles

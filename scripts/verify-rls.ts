@@ -95,6 +95,70 @@ function skip(label: string, reason: string): void {
 const TEST_TAG = `rls_verify_${Date.now()}`;
 let testFamilyAId: string | null = null;
 let testFamilyBId: string | null = null;
+let testParentAUserId: string | null = null;
+let testChildAUserId: string | null = null;
+let testWordBId: string | null = null;
+let testAuthUserParentId: string | null = null;  // auth.users.id for cleanup
+let testAuthUserChildId: string | null = null;   // auth.users.id for cleanup
+
+// ─── Enriched client helper ────────────────────────────────────────────────
+//
+// Creates a real Supabase auth.users entry with the enriched app_metadata
+// (family_id, user_id, role) already set, signs in to get a real JWT, and
+// returns a Supabase client that sends that JWT on every request.
+//
+// This mirrors exactly what /api/auth/pin-verify does via updateUserById +
+// the client's subsequent refreshSession call.
+
+async function createTestAuthClient(opts: {
+  email: string;
+  familyId: string;
+  userId: string;
+  role: 'parent' | 'child';
+  isPlatformAdmin?: boolean;
+}): Promise<{ client: SupabaseClient; authUserId: string }> {
+  const TEST_PASSWORD = 'Test1234!Rls';
+
+  // Create the auth user with enriched app_metadata already embedded.
+  // Supabase includes app_metadata in every JWT it issues for this user.
+  const { data: authUser, error: createErr } = await admin.auth.admin.createUser({
+    email: opts.email,
+    password: TEST_PASSWORD,
+    email_confirm: true,
+    app_metadata: {
+      family_id: opts.familyId,
+      user_id: opts.userId,
+      role: opts.role,
+      is_platform_admin: opts.isPlatformAdmin ?? false,
+    },
+  });
+
+  if (createErr || !authUser.user) {
+    throw new Error(`Failed to create auth user ${opts.email}: ${createErr?.message ?? 'unknown'}`);
+  }
+
+  // Sign in to get a real Supabase-issued JWT that carries the app_metadata claims.
+  const signInClient = createClient(SUPABASE_URL, ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: signInData, error: signInErr } = await signInClient.auth.signInWithPassword({
+    email: opts.email,
+    password: TEST_PASSWORD,
+  });
+
+  if (signInErr || !signInData.session) {
+    throw new Error(`Failed to sign in as ${opts.email}: ${signInErr?.message ?? 'unknown'}`);
+  }
+
+  const jwt = signInData.session.access_token;
+
+  const client = createClient(SUPABASE_URL, ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+  });
+
+  return { client, authUserId: authUser.user.id };
+}
 
 // ─── Section 1: Table accessibility ───────────────────────────────────────
 async function section1_tableAccessibility(): Promise<void> {
@@ -163,6 +227,31 @@ async function section2_adminBypass(): Promise<void> {
     fail('service role INSERT into words', wordErr.message);
   } else {
     pass('service role INSERT into words');
+  }
+
+  // INSERT test users for Family A (parent + child) — needed for Section 4 tests
+  const { data: parentARow, error: parentAErr } = await admin
+    .from('users')
+    .insert({ family_id: testFamilyAId, name: `${TEST_TAG}_parent_a`, role: 'parent' })
+    .select('id')
+    .single();
+  if (parentAErr || !parentARow) {
+    fail('service role INSERT parent user for Family A', parentAErr?.message);
+  } else {
+    testParentAUserId = parentARow.id;
+    pass('service role INSERT parent user for Family A');
+  }
+
+  const { data: childARow, error: childAErr } = await admin
+    .from('users')
+    .insert({ family_id: testFamilyAId, name: `${TEST_TAG}_child_a`, role: 'child' })
+    .select('id')
+    .single();
+  if (childAErr || !childARow) {
+    fail('service role INSERT child user for Family A', childAErr?.message);
+  } else {
+    testChildAUserId = childARow.id;
+    pass('service role INSERT child user for Family A');
   }
 
   // SELECT — service role must see the inserted word (bypass confirmed)
@@ -238,22 +327,164 @@ async function section3_unenrichedIsolation(): Promise<void> {
   }
 }
 
-// ─── Section 4: JWT-enriched tests (SKIP — requires Phase 3) ──────────────
+// ─── Section 4: JWT-enriched tests ────────────────────────────────────────
 async function section4_enrichedTests(): Promise<void> {
-  console.log('\n■ Section 4: JWT-enriched RLS tests (Phase 3 required)');
+  console.log('\n■ Section 4: JWT-enriched RLS tests');
 
-  skip(
-    'cross-family isolation: Family A JWT cannot read Family B words',
-    'Requires Phase 3: /api/auth/pin-verify must inject family_id into JWT claims.'
-  );
-  skip(
-    'child write scope: child JWT cannot INSERT into words',
-    'Requires Phase 3: role claim in JWT; child role enforcement is application-layer.'
-  );
-  skip(
-    'quiz session immutability: no UPDATE allowed on quiz_sessions',
-    'Requires Phase 3: user_id claim in JWT to test user-scoped insert-only policy.'
-  );
+  if (!testFamilyAId || !testFamilyBId || !testParentAUserId || !testChildAUserId) {
+    fail(
+      'section4 setup incomplete — Section 2 must have succeeded',
+      'testFamilyAId, testFamilyBId, testParentAUserId, testChildAUserId must all be set'
+    );
+    return;
+  }
+
+  // Create real auth users with enriched app_metadata; failures are fatal for this section.
+  let clientA: SupabaseClient;
+  let childClient: SupabaseClient;
+  let parentClient: SupabaseClient;
+
+  try {
+    const parentResult = await createTestAuthClient({
+      email: `${TEST_TAG}-parent@test.invalid`,
+      familyId: testFamilyAId,
+      userId: testParentAUserId,
+      role: 'parent',
+    });
+    clientA = parentResult.client;
+    parentClient = parentResult.client;
+    testAuthUserParentId = parentResult.authUserId;
+
+    const childResult = await createTestAuthClient({
+      email: `${TEST_TAG}-child@test.invalid`,
+      familyId: testFamilyAId,
+      userId: testChildAUserId,
+      role: 'child',
+    });
+    childClient = childResult.client;
+    testAuthUserChildId = childResult.authUserId;
+  } catch (e: unknown) {
+    fail('section4 auth user setup failed', e instanceof Error ? e.message : String(e));
+    return;
+  }
+
+  // ── 4a. Cross-family isolation ───────────────────────────────────────
+  // Insert a word for Family B so there is data to (fail to) read
+  const { data: wordBRow, error: wordBErr } = await admin
+    .from('words')
+    .insert({ id: `${TEST_TAG}_word_b`, family_id: testFamilyBId, hanzi: '隔' })
+    .select('id')
+    .single();
+
+  if (wordBErr || !wordBRow) {
+    fail('section4 setup: admin INSERT word for Family B', wordBErr?.message);
+  } else {
+    testWordBId = wordBRow.id;
+  }
+
+  if (testWordBId) {
+    const { data: wordsSeenByA, error: crossErr } = await clientA
+      .from('words')
+      .select('id');
+
+    if (crossErr) {
+      fail('cross-family isolation: Family A client query failed', crossErr.message);
+    } else {
+      const seenIds = (wordsSeenByA ?? []).map((r: { id: string }) => r.id);
+      const familyAWordId = `${TEST_TAG}_word`;
+      if (!seenIds.includes(familyAWordId)) {
+        fail(
+          'cross-family isolation: Family A JWT cannot see its OWN words — JWT claims not being read',
+          `Expected to find ${familyAWordId} but got ids: ${seenIds.join(', ') || '(none)'}`
+        );
+      } else if (seenIds.includes(testWordBId)) {
+        fail(
+          'cross-family isolation: Family A JWT can read Family B words — RLS not enforcing!',
+          `Family B word id ${testWordBId} is visible to Family A client`
+        );
+      } else {
+        pass('cross-family isolation: Family A JWT cannot read Family B words');
+      }
+    }
+  }
+
+  // ── 4b. Child write scope ────────────────────────────────────────────
+  // Child JWT for Family A tries to INSERT a word — policy requires role='parent'
+  const { error: childInsertErr } = await childClient.from('words').insert({
+    id: `${TEST_TAG}_child_word`,
+    family_id: testFamilyAId,
+    hanzi: '童',
+  });
+
+  if (childInsertErr) {
+    pass(`child write scope: child JWT INSERT into words rejected by RLS: "${childInsertErr.message}"`);
+  } else {
+    // Also check whether a row was actually written (some RLS violations return no error but 0 rows)
+    const { data: leaked } = await admin
+      .from('words')
+      .select('id')
+      .eq('id', `${TEST_TAG}_child_word`);
+    if (leaked && leaked.length > 0) {
+      fail('child write scope: child JWT INSERT into words SUCCEEDED — role policy not enforced!');
+      // Clean up the leaked row
+      await admin.from('words').delete().eq('id', `${TEST_TAG}_child_word`);
+    } else {
+      pass('child write scope: child JWT INSERT into words rejected by RLS (0 rows written)');
+    }
+  }
+
+  // ── 4c. Quiz session immutability ────────────────────────────────────
+  // Parent inserts a quiz session (INSERT policy allows it), then tries UPDATE (no UPDATE policy)
+  const { data: sessionRow, error: sessionInsertErr } = await parentClient
+    .from('quiz_sessions')
+    .insert({
+      id: `${TEST_TAG}_session`,
+      user_id: testParentAUserId,
+      family_id: testFamilyAId,
+      session_type: 'fill-test',
+      grade_data: [],
+      fully_correct_count: 8,
+      failed_count: 2,
+      partially_correct_count: 0,
+      total_grades: 10,
+      duration_seconds: 60,
+      coins_earned: 5,
+    })
+    .select('id')
+    .single();
+
+  if (sessionInsertErr || !sessionRow) {
+    fail(
+      'quiz session immutability: parent JWT INSERT into quiz_sessions failed (setup step)',
+      sessionInsertErr?.message
+    );
+  } else {
+    // Now attempt UPDATE — no UPDATE policy exists, so this should silently affect 0 rows
+    const { data: updateData, error: updateErr } = await parentClient
+      .from('quiz_sessions')
+      .update({ coins_earned: 999 })
+      .eq('id', sessionRow.id)
+      .select('id');
+
+    if (updateErr) {
+      // An explicit RLS error is also correct immutability behaviour
+      pass(`quiz session immutability: UPDATE rejected with error: "${updateErr.message}"`);
+    } else if (!updateData || updateData.length === 0) {
+      pass('quiz session immutability: UPDATE on quiz_sessions silently affected 0 rows (immutable)');
+    } else {
+      // Rows were returned — confirm the value actually changed (vs selection artefact)
+      const { data: unchanged } = await admin
+        .from('quiz_sessions')
+        .select('coins_earned')
+        .eq('id', sessionRow.id)
+        .single();
+      if (unchanged && (unchanged as { coins_earned: number }).coins_earned === 999) {
+        fail('quiz session immutability: UPDATE on quiz_sessions SUCCEEDED — record was mutated!');
+      } else {
+        pass('quiz session immutability: UPDATE on quiz_sessions silently affected 0 rows (immutable)');
+      }
+    }
+  }
 }
 
 // ─── Cleanup ───────────────────────────────────────────────────────────────
@@ -276,6 +507,15 @@ async function cleanup(): Promise<void> {
     );
   } else {
     pass('synthetic test data deleted (cascade removed words, users, wallets)');
+  }
+
+  // Delete test auth users created in Section 4
+  const authIds = [testAuthUserParentId, testAuthUserChildId].filter((id): id is string => id !== null);
+  for (const authId of authIds) {
+    const { error: authDelErr } = await admin.auth.admin.deleteUser(authId);
+    if (authDelErr) {
+      console.error(`  ⚠️  Failed to delete auth user ${authId}: ${authDelErr.message}`);
+    }
   }
 }
 

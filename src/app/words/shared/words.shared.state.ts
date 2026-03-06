@@ -4,7 +4,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
 import { useXinhuaFlashcardInfo } from "@/hooks/useXinhuaFlashcardInfo";
 import {
-  db,
+  addWords,
+  getAllWords,
+  getExistingWordsByHanzi,
+  deleteWord as deleteWordFromDb,
+  putWord,
   createQuizSession,
   deleteFlashcardContent,
   getAllFlashcardContents,
@@ -13,7 +17,7 @@ import {
   gradeWord,
   putFlashcardContent,
   updateWallet,
-} from "@/lib/db";
+} from "@/lib/supabase-service";
 import { gradeFillTest, type Placement } from "@/lib/fillTest";
 import {
   buildFlashcardLlmRequestKey,
@@ -844,7 +848,7 @@ const gradeLabels = getGradeLabels(str);
   }
 
   const refreshWords = useCallback(async () => {
-    const all = await db.words.orderBy("createdAt").reverse().toArray();
+    const all = await getAllWords();
     setWords(all);
   }, []);
 
@@ -2120,7 +2124,7 @@ const gradeLabels = getGradeLabels(str);
       return;
     }
 
-    const existingWords = await db.words.where("hanzi").anyOf(parsedCharacters).toArray();
+    const existingWords = await getExistingWordsByHanzi(parsedCharacters);
     const existingHanziSet = new Set(existingWords.map((word) => word.hanzi));
     const hanziToAdd = parsedCharacters.filter((character) => !existingHanziSet.has(character));
 
@@ -2139,7 +2143,7 @@ const gradeLabels = getGradeLabels(str);
     }));
 
     if (newWords.length > 0) {
-      await db.words.bulkAdd(newWords);
+      await addWords(newWords);
     }
 
     clearForm();
@@ -2161,13 +2165,13 @@ const gradeLabels = getGradeLabels(str);
   }
 
   async function removeWord(id: string) {
-    await db.words.delete(id);
+    await deleteWordFromDb(id);
     await refreshAll();
   }
 
   async function resetWord(word: Word) {
     const now = Date.now();
-    await db.words.put({
+    await putWord({
       ...word,
       createdAt: now,
       repetitions: 0,
