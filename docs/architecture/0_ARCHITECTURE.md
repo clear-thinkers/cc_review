@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-03-05_ (Supabase schema deployed; IndexedDB retired)
+_Last updated: 2026-03-06_ (Login & auth rules updated to two-layer Supabase model; remaining IndexedDB references removed)
 
 ---
 
@@ -26,8 +26,8 @@ Tier 1 rules (active):
 - Unsafe content and malformed payloads are dropped during normalization before they can be persisted.
 
 Primary user flow:
-1. Add Hanzi → `/words/add` → IndexedDB `words` table.
-2. Curate content → `/words/admin` → `/api/flashcard/generate` + manual edits → `flashcardContents` table.
+1. Add Hanzi → `/words/add` → Supabase `words` table.
+2. Curate content → `/words/admin` → `/api/flashcard/generate` + manual edits → Supabase `flashcard_contents` table.
 3. Review → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test` → reads persisted data only.
 
 ### Ingestion Rules
@@ -57,8 +57,8 @@ These rules govern the inventory view at `/words/all`:
 5. Sort tie-breaker is `createdAt` ascending for deterministic ordering.
 6. `Next Review Date` shows `Now` when `nextReviewAt` is empty or `0`.
 7. `Reset` keeps the same `id` and `hanzi`, resets scheduling counters to baseline values, and updates `createdAt`.
-8. `Delete` removes the row from local IndexedDB immediately (no confirmation dialog).
-9. The page is local-only: it does not call AI generation routes and does not sync with a server.
+8. `Delete` removes the row from Supabase immediately (no confirmation dialog).
+9. The page does not call AI generation routes.
 10. The page does not generate or edit flashcard/admin content.
 11. The page does not deduplicate historical duplicate rows; it renders stored data as-is.
 12. The page does not paginate or virtualize large datasets.
@@ -146,63 +146,55 @@ These rules govern the results/history view for session data reporting:
 
 ### Login & Avatar Protection Rules (`/login`)
 
-These rules govern the login and session protection gate for early-feedback deployment:
+These rules govern the two-layer authentication and session protection system:
 
-1. Login page (`/login`) is **not protected by session guard** — it is always accessible for setup and authentication flows.
-2. All other pages and routes require a valid session token to access; unauthenticated requests redirect to `/login`.
-3. **First-visit setup flow:**
-   - User creates a 4-digit numeric PIN (0000–9999)
-   - User selects one of 3 avatars: bubble_tea, cake, or donut (images stored in `/public/avatar/`)
-   - PIN is hashed using SHA-256 (client-side); plaintext PIN is never stored
-   - Session token and avatar selection are stored in localStorage
-   - **PIN-scoped IndexedDB database is initialized** with PIN hash prefix (see Data Isolation below)
-   - If legacy unscoped database exists and migration has not yet run, legacy data is migrated once to the new PIN-scoped database
-   - User is redirected to `/words` (main app)
-4. **Subsequent-visit login flow:**
-   - User enters their 4-digit PIN
-   - System compares hashed input with stored PIN hash
-   - If match, user selects avatar (pre-populated with last-selected avatar for UX)
-   - New session token is generated and stored in localStorage
-   - **PIN-scoped IndexedDB database is initialized** for the logged-in PIN (automatic database switch)
-   - User is redirected to `/words`
-5. **Invalid PIN handling:**
-   - Incorrect PIN shows error message; user can retry unlimited times
-   - No lockout or attempt throttling in Phase 1 (early-feedback only)
-   - No "forgot PIN" recovery — user must clear browser cache and create new PIN
-6. **Session persistence:**
-   - Session tokens stored in localStorage persist across browser restarts
-   - No expiration in Phase 1; sessions valid indefinitely until logout or cache clear
-   - Session data includes: `sessionToken`, `selectedAvatarId`, creation timestamp
-7. **Database lifecycle:**
-   - **On login:** `initializeDatabaseForPin(pinHash)` is called to set the current PIN-scoped database
-   - **SessionGuard check:** When a returning user loads the app, SessionGuard validates the session token and calls `initializeDatabaseForPin()` to reinitialize the correct database for that user
-   - **Smart reinitialization:** If the same PIN is already initialized, reinitialization is skipped to prevent unnecessary database closures
-   - **On logout:** `clearDatabaseState()` closes the database and clears PIN state before redirecting to `/login`
-8. **Logout flow:**
-   - Logout button available in main app nav bar
-   - Logout closes the current PIN-scoped database
-   - Logout clears all auth data (session token + PIN hash + avatar selection)
-   - User is redirected to `/login` setup wizard (no PIN stored, appears as new user)
-9. **Avatar persistence:**
-   - Last-selected avatar stored in localStorage for UX convenience (pre-populated on next login)
-   - User can change avatar each time they log in
-   - Avatar emoji/image displayed in nav bar when logged in
-10. **Data isolation (critical):**
-    - Each PIN has its own isolated IndexedDB database with a PIN-scoped name: `cc_review_db_{PINHASH_PREFIX}` (first 12 characters of PIN's SHA-256 hash)
-    - Words, flashcard content, quiz sessions, wallet, and all learning data are **never shared** across PINs
-    - Clean separation ensures up to 3 users (Nora + siblings) can have completely independent learning progress on the same device
-    - No cross-user data leakage even if localStorage is inspected
-11. **Migration (one-time only):**
-    - Legacy unscoped database (`cc_review_db`) is checked for data when the first PIN is set up
-    - If legacy data exists and `localStorage.migration_completed` is not set, all tables are migrated to the new PIN-scoped database
-    - After migration completes, `localStorage.migration_completed` is set to prevent future migrations
-    - Subsequent new PINs start with fresh, empty databases
-12. **Security notes (early-feedback, not production-grade):**
-    - PIN strength: 10,000 possible combinations; weak but sufficient for early feedback on trusted device
-    - localStorage can be inspected in DevTools; PIN is hashed (not plaintext) but hash could theoretically be brute-forced
-    - No server-side validation; all auth is client-side localStorage-based and IndexedDB-based
-    - Intended for 1–3 early-feedback users on single iPad; not for production multi-user deployment
-    - Phase 2+ can upgrade to stronger auth or server-side session validation if feedback warrants
+1. Login page (`/login`) and registration page (`/register`) are **not protected by session guard** — they are always accessible for authentication flows.
+2. All other pages and routes require a valid Supabase session to access; unauthenticated requests redirect to `/login`.
+3. **Two-layer authentication model:**
+   - **Layer 1 — Family Authentication (Supabase Auth):** One Supabase Auth account per family. Standard email + password. Supabase handles token issuance, refresh, and recovery. This layer proves the person belongs to the family.
+   - **Layer 2 — Profile Selection + PIN (App Layer):** After Layer 1, the user sees their family's profile cards and taps a profile. A 4-digit PIN entry screen renders. The app hashes the PIN and compares it to `users.pin_hash` for the selected profile. On match, the app session context is set (`family_id`, `user_id`, `role`) and the JWT is enriched with these claims.
+4. **Registration flow:**
+   - User visits `/register` and enters family name, email, and password
+   - Supabase Auth creates the account
+   - App creates a `families` row and a parent `users` row (`role: 'parent'`)
+   - Parent sets their own 4-digit PIN
+   - Parent creates at least one child profile (name + PIN per child)
+   - User is redirected to `/login`
+5. **Login flow:**
+   - Layer 1: User enters email + password; Supabase Auth validates and issues JWT
+   - Layer 2: Profile picker renders all `users` rows for the authenticated `family_id`; user taps a profile and enters their PIN
+   - On PIN match: session context set, JWT enriched, redirect to `/words`
+   - On PIN mismatch: `failed_pin_attempts` incremented on the `users` row
+6. **PIN security:**
+   - PIN hashed with `scrypt` (N=16384, r=8, p=1, keylen=32); stored format: `{32-hex-salt}:{64-hex-hash}`
+   - Salt is 16 random bytes generated per hash; verification uses `crypto.timingSafeEqual`
+   - PIN verification is performed server-side via `/api/auth/pin-verify` — client never compares hashes directly
+   - Layer 2 PIN is a profile switcher, not the primary authentication gate; real security lives in Layer 1
+7. **Lockout rules:**
+   - After 5 consecutive failed PIN attempts, the profile is locked
+   - Locked message: "Too many attempts. Please ask a parent to unlock."
+   - Parent unlock: re-enter Layer 1 (email + password) to reset the failed attempt counter
+   - Successful PIN entry resets `failed_pin_attempts` to 0
+8. **Avatars:**
+   - 8 avatar options: `bubble_tea_excited_1`, `cake_sleep_1`, `donut_wink_1`, `rice_ball_sleep_1`, `zongzi_smile_1`, `ramen_excited_1`, `babaorice_smile_1`, `bun_wink_1` (images in `/public/avatar/`)
+   - Avatar stored as `avatar_id` on the `users` row
+   - Avatar displayed in nav bar when logged in
+9. **Session persistence:**
+   - Supabase Auth manages JWT lifecycle (issuance, refresh, expiration)
+   - App session context (`family_id`, `user_id`, `role`) is derived from JWT `app_metadata` claims
+   - `AuthProvider` React context exposes session state to all components
+   - `SessionGuard` wraps protected routes and redirects to `/login` when no valid session exists
+10. **Logout flow:**
+    - Logout button available in main app nav bar
+    - Logout calls `supabase.auth.signOut()` to invalidate the Supabase session
+    - App session context is cleared
+    - User is redirected to `/login`
+11. **Data isolation (critical):**
+    - All data is scoped by `family_id` in Supabase Postgres with Row Level Security policies
+    - Words, flashcard content, quiz sessions, wallet, and all learning data are **never shared** across families
+    - Within a family, `user_id`-scoped tables (wallet, quiz_sessions) isolate per-profile data
+    - Platform admin (`is_platform_admin = true`) bypasses RLS for data management
+    - No cross-tenant data leakage is possible at the database layer
 
 ### Role-Based Routing Rules (`/words/*`)
 
@@ -418,7 +410,7 @@ These rules are the authoritative definition of “bad content” referred to el
 These are the technical behaviors the system upholds. They are the factual basis behind the hard stops in `AI_CONTRACT.md §2` — refer there for agent-facing rules.
 
 1. **Review screens read only from `flashcardContents`.** No path from `/words/review/*` reaches `/api/flashcard/generate`.
-2. **Every value written to `flashcardContents` has been normalized.** Schema shape is enforced before any IndexedDB write.
+2. **Every value written to `flashcard_contents` has been normalized.** Schema shape is enforced before any Supabase write.
 3. **Normalization drops bad content — it does not pass it through.** Invalid phrases/examples are removed; the rest of the payload proceeds.
 4. **Pinyin rendering on review screens uses per-character ruby alignment (not inline or line-level pinyin):**
    - Each Hanzi character displays its pinyin token on a separate line directly above the character.
