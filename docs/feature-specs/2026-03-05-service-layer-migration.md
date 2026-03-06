@@ -182,9 +182,9 @@ For **inserts** into `quiz_sessions` and `wallets` (which require `user_id` and 
 
 1. ~~**JWT enrichment status**~~ **CLOSED.** JWT is enriched via `app_metadata` in `/api/auth/pin-verify/route.ts`. Browser Supabase client works directly with RLS. Path A confirmed — no `/api/data/*` fallback needed.
 
-2. **Wallet model change**: Current `Wallet.id` is `"wallet"` (singleton). Supabase schema keys on `user_id`. Should we update the `Wallet` type to remove `id` and use `userId` as the key, or keep `id` as an alias?
+2. ~~**Wallet model change**~~ **CLOSED.** Remove `id` from `Wallet` type entirely. Use `userId` as the natural key — maps directly to `wallets.user_id` in Postgres. The singleton `id = "wallet"` pattern was an IndexedDB workaround. `coins.types.ts` updated in this PR.
 
-3. **fillTests / disabledFillTests tables**: These IndexedDB tables exist in `db.ts` but have no Supabase equivalent. The `include_in_fill_test` flag on `flashcard_contents.phrases[].include_in_fill_test` appears to have replaced them. Confirm these are dead code and can be dropped without replacement.
+3. ~~**fillTests / disabledFillTests tables**~~ **CLOSED.** Confirmed dead code — zero references in active `src/` outside `db.ts`. The `include_in_fill_test` boolean on `flashcard_contents.phrases[]` and `examples[]` is the replacement. All 7 functions (`getCustomFillTest`, `getAllCustomFillTests`, `putCustomFillTest`, `deleteCustomFillTest`, `getAllDisabledFillTests`, `putDisabledFillTest`, `deleteDisabledFillTest`) and 2 types (`FillTestOverride`, `DisabledFillTestEntry`) dropped with no replacement.
 
 ---
 
