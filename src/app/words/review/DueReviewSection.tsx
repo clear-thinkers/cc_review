@@ -1,5 +1,7 @@
 "use client";
 
+import { useSession } from "@/lib/authContext";
+import { canAccessRoute } from "@/lib/permissions";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 
 export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
@@ -18,6 +20,13 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
     formatProbability,
     hasFillTest,
   } = vm;
+
+  const session = useSession();
+  const canAccessFillTest = canAccessRoute(
+    '/words/review/fill-test',
+    session?.role,
+    session?.isPlatformAdmin ?? false
+  );
 
   if (!isDueReviewPage) {
     return null;
@@ -38,14 +47,16 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
           >
             {str.due.startFlashcard}
           </button>
-          <button
-            type="button"
-            className="rounded-md border-2 border-amber-500 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
-            disabled={fillTestDueWords.length === 0}
-            onClick={() => openFillTestReview()}
-          >
-            {str.due.startFillTest}
-          </button>
+          {canAccessFillTest && (
+            <button
+              type="button"
+              className="rounded-md border-2 border-amber-500 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
+              disabled={fillTestDueWords.length === 0}
+              onClick={() => openFillTestReview()}
+            >
+              {str.due.startFillTest}
+            </button>
+          )}
         </div>
       ) : null}
 
@@ -102,14 +113,16 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                         className="rounded border-2 border-green-500 bg-green-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-green-900 disabled:opacity-50"
                         onClick={() => openFlashcardReview(word.id)}
                       >
-                        {str.due.table.flashcard}
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded border-2 border-amber-500 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
-                        disabled={!hasFillTest(word)}
-                        onClick={() => openFillTestReview(word.id)}
-                      >
+                      {canAccessFillTest && (
+                        <button
+                          type="button"
+                          className="rounded border-2 border-amber-500 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
+                          disabled={!hasFillTest(word)}
+                          onClick={() => openFillTestReview(word.id)}
+                        >
+                          {str.due.table.fillTest}
+                        </button>
+                      )}
                         {str.due.table.fillTest}
                       </button>
                     </div>

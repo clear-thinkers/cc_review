@@ -1,6 +1,6 @@
 ﻿# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-03-05_ (Feature 5 deployed; Feature 4 next)
+_Last updated: 2026-03-05_ (Feature 4 deployed; Feature 6 next)
 
 ---
 
@@ -41,9 +41,9 @@ Features now include a “Last touched” timestamp and a broader set of status 
 |---|---|---|---|---|---|
 | 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | `docs/architecture/2026-03-03-grading-logic-model.md` | ✅ Done | 2026-03-03 |
 | 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. Per-character pinyin ruby alignment, phrase-example pairing, pinyin toggle. | `docs/feature-specs/2026-03-03-flashcard-ui-redesign.md` | ✅ Done | 2026-03-04 |
-| 4 | **Multi-Tenant Auth & User Model** | Replace localStorage PIN with Supabase Auth. Parent registers with email + password. Parent creates child profiles with PIN. Role model: parent / child / platform_admin. Family-scoped data isolation via Row Level Security. | `docs/feature-specs/2026-03-05-auth-and-user-model.md` | � In Progress | 2026-03-05 |
+| 4 | **Multi-Tenant Auth & User Model** | Replace localStorage PIN with Supabase Auth. Parent registers with email + password. Parent creates child profiles with PIN. Role model: parent / child / platform_admin. Family-scoped data isolation via Row Level Security. | `docs/feature-specs/2026-03-05-auth-and-user-model.md` | ✅ Done | 2026-03-05 |
 | 5 | **Supabase Schema & RLS Policies** | Retire IndexedDB entirely. Migrate all data (words, review_history, quiz_sessions, wallet, inventory) to Supabase Postgres. Define tables, foreign keys, and RLS policies enforcing family_id scoping. Platform admin bypasses RLS. | `docs/feature-specs/2026-03-05-supabase-schema-rls.md` | ✅ Done | 2026-03-05 |
-| 6 | **Role-Based Routing** | RouteGuard enforces permission matrix by session role. Blocked routes invisible in nav (not 403). Child: no add/edit/admin. Parent: no fill-test quiz. Platform admin: full access. | `docs/feature-specs/2026-03-05-role-based-routing.md` | 📋 Planned | 2026-03-05 |
+| 6 | **Role-Based Routing** | RouteGuard enforces permission matrix by session role. Blocked routes invisible in nav (not 403). Child: no add/edit/admin, has fill-test. Parent: no fill-test. Platform admin: full access. | `docs/feature-specs/2026-03-05-role-based-routing.md` | ✅ Done | 2026-03-05 |
 | 8 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | [`docs/feature-specs/2026-03-04-quiz-results-summary.md`](../feature-specs/2026-03-04-quiz-results-summary.md) | ✅ Done | 2026-03-04 |
 | 9 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | ✅ Done | 2026-03-05 |
 | 11 | **Rewards System — Coins** | Coins earned per quiz session (accuracy + completion based). `wallet` table. Persistent, cumulative balance across sessions. Track coin history and milestones. | `docs/feature-specs/2026-03-04-coin-rewards-system.md` | ✅ Done | 2026-03-05 |
@@ -163,18 +163,24 @@ If any answer undermines Tier 1 stability, the feature is deferred.
 
 **Feature 5 ✅ Done:**
 - Supabase schema + RLS policies deployed
-- Service layer refactor deferred until Feature 4 completes
+- Service layer refactor deferred until Feature 6 completes
 
-**Feature 4 🔄 In Progress (NEXT):**
-- Spec drafted; implementation ready to start
-- **Blocks:** Feature 6 (role-based routing depends on auth context), RLS integration tests (need JWT enrichment)
-- **Unlocks:** End-to-end auth flow, JWT claim injection, session management
-- **Estimated completion:** 2026-03-10 (5 days)
+**Feature 4 ✅ Done (2026-03-05):**
+- `/register` → 3-step wizard → POST `/api/auth/register` (atomic; Auth account cleaned up on DB failure)
+- `/login` → Supabase `signInWithPassword()` → Layer 1 complete
+- `/profile-select` → renders family profiles from `useAuth().familyProfiles`
+- `/pin-entry` → on-screen PIN pad → POST `/api/auth/pin-verify` (scrypt + timingSafeEqual, server-side lockout at 5 attempts)
+- `SessionGuard` rewritten to use `useAuth()` — no localStorage reads
+- `AuthProvider` added to root layout
+- `WordsShell` reads avatar + logout from `useSession()` / `clearSession()`
+- Old `src/app/login/` folder (5 files) deleted
 
-**Feature 6 📋 Planned (After Feature 4):**
-- Depends on Feature 4 auth layer + session context
-- `/api/auth/enrich-session` route implemented by Feature 4
-- Adds RouteGuard middleware to enforce role-based access control
+**Feature 6 ✅ Done (2026-03-05):**
+- Permission matrix enforced: child cannot access add/admin; parent cannot access fill-test
+- RouteGuard component redirects blocked routes to `/words/review`
+- Navigation items filtered by role (blocked routes hidden from nav)
+- Fill-test buttons conditionally rendered (visible for children, hidden for parents)
+- All role checks use `canAccessRoute()` from `src/lib/permissions.ts`
 
 ### Critical Path (Tier 1 Completion)
 
@@ -203,19 +209,14 @@ Tier 1 Completion + Multi-Family Pilot
 
 ### Recommended Action Plan
 
-1. **Immediately (next PR):** Implement Feature 4 (Auth & User Model)
-   - Copy spec from `docs/feature-specs/2026-03-05-auth-and-user-model.md`
-   - Implement Supabase Auth signup/login flows
-   - Add JWT enrichment route `/api/auth/enrich-session`
-   - Test with both parent (email) and child (PIN) login paths
-   - Target: 2026-03-10
+1. **✅ Done (2026-03-05):** Feature 4 (Auth & User Model) shipped on `feat/phase3`.
 
-2. **After Feature 4 ships:** Implement Feature 6 (Role-Based Routing)
-   - Create RouteGuard middleware using Feature 4 session context
+2. **Immediately (next PR):** Implement Feature 6 (Role-Based Routing)
+   - Create RouteGuard component using `useSession().role` from Feature 4 auth context
    - Build permission matrix for parent/child/admin roles
    - Hide blocked routes from nav (don't show 403)
    - Integration test: verify child cannot navigate to `/words/add` or `/words/admin`
-   - Target: 2026-03-12
+   - Target: 2026-03-07
 
 3. **After Feature 6 ships:** Service Layer Refactor
    - Create `src/lib/supabase.ts` with domain-scoped service functions

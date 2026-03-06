@@ -5,7 +5,8 @@
  * Layer 1: Supabase Auth (email + password)
  * Layer 2: Profile selection + PIN verification (server-side)
  *
- * PIN hashing: scrypt N=32768/r=8/p=1/keylen=32
+ * PIN hashing: scrypt N=16384/r=8/p=1/keylen=32
+ * (N reduced from 32768 to fit within Node.js default maxmem on Windows)
  * Stored format: "{32-hex-salt}:{64-hex-hash}"
  * See: docs/feature-specs/2026-03-05-auth-and-user-model.md § Decisions Closed #4
  */
@@ -56,6 +57,7 @@ export interface AppSession {
   role: UserRole;
   userName: string;
   avatarId: AvatarId | null;
+  isPlatformAdmin: boolean;
 }
 
 // ─── API route contracts ───────────────────────────────────────────────────

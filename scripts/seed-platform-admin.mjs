@@ -69,11 +69,11 @@ if (!/^\d{4}$/.test(ADMIN_PIN)) {
 
 // ─── PIN hashing ───────────────────────────────────────────────────────────
 // Format: "{32-hex-salt}:{64-hex-hash}"
-// Algorithm: scrypt (N=32768, r=8, p=1, keylen=32)
-// Verified server-side in /api/auth/pin-verify using timingSafeEqual.
+// Algorithm: scrypt (N=16384, r=8, p=1, keylen=32)
+// Must match /api/auth/register and /api/auth/pin-verify exactly.
 function hashPin(pin) {
   const salt = randomBytes(16).toString('hex');
-  const hash = scryptSync(pin, salt, 32).toString('hex');
+  const hash = scryptSync(pin, salt, 32, { N: 16384, r: 8, p: 1 }).toString('hex');
   return `${salt}:${hash}`;
 }
 
