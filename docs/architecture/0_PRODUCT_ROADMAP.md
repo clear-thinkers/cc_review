@@ -43,7 +43,7 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. Per-character pinyin ruby alignment, phrase-example pairing, pinyin toggle. | `docs/feature-specs/2026-03-03-flashcard-ui-redesign.md` | ✅ Done | 2026-03-04 |
 | 4 | **Multi-Tenant Auth & User Model** | Replace localStorage PIN with Supabase Auth. Parent registers with email + password. Parent creates child profiles with PIN. Role model: parent / child / platform_admin. Family-scoped data isolation via Row Level Security. | `docs/feature-specs/2026-03-05-auth-and-user-model.md` | ✅ Done | 2026-03-05 |
 | 5 | **Supabase Schema & RLS Policies** | Retire IndexedDB entirely. Migrate all data (words, review_history, quiz_sessions, wallet, inventory) to Supabase Postgres. Define tables, foreign keys, and RLS policies enforcing family_id scoping. Platform admin bypasses RLS. | `docs/feature-specs/2026-03-05-supabase-schema-rls.md` | ✅ Done | 2026-03-05 |
-| 6 | **Role-Based Routing** | RouteGuard enforces permission matrix by session role. Blocked routes invisible in nav (not 403). Child: no add/edit/admin. Parent: no fill-test quiz. Platform admin: full access. | `docs/feature-specs/2026-03-05-role-based-routing.md` | 📋 Planned | 2026-03-05 |
+| 6 | **Role-Based Routing** | RouteGuard enforces permission matrix by session role. Blocked routes invisible in nav (not 403). Child: no add/edit/admin, has fill-test. Parent: no fill-test. Platform admin: full access. | `docs/feature-specs/2026-03-05-role-based-routing.md` | ✅ Done | 2026-03-05 |
 | 8 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | [`docs/feature-specs/2026-03-04-quiz-results-summary.md`](../feature-specs/2026-03-04-quiz-results-summary.md) | ✅ Done | 2026-03-04 |
 | 9 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | ✅ Done | 2026-03-05 |
 | 11 | **Rewards System — Coins** | Coins earned per quiz session (accuracy + completion based). `wallet` table. Persistent, cumulative balance across sessions. Track coin history and milestones. | `docs/feature-specs/2026-03-04-coin-rewards-system.md` | ✅ Done | 2026-03-05 |
@@ -175,11 +175,12 @@ If any answer undermines Tier 1 stability, the feature is deferred.
 - `WordsShell` reads avatar + logout from `useSession()` / `clearSession()`
 - Old `src/app/login/` folder (5 files) deleted
 
-**Feature 6 📋 Planned (NEXT):**
-- Depends on Feature 4 auth layer + session context ✅ now available
-- Adds RouteGuard middleware to enforce role-based access control
-- Permission matrix: child → no add/edit/admin; parent → no fill-test; admin → full access
-- Blocked routes hidden from nav (not 403)
+**Feature 6 ✅ Done (2026-03-05):**
+- Permission matrix enforced: child cannot access add/admin; parent cannot access fill-test
+- RouteGuard component redirects blocked routes to `/words/review`
+- Navigation items filtered by role (blocked routes hidden from nav)
+- Fill-test buttons conditionally rendered (visible for children, hidden for parents)
+- All role checks use `canAccessRoute()` from `src/lib/permissions.ts`
 
 ### Critical Path (Tier 1 Completion)
 

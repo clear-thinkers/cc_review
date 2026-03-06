@@ -204,6 +204,28 @@ These rules govern the login and session protection gate for early-feedback depl
     - Intended for 1–3 early-feedback users on single iPad; not for production multi-user deployment
     - Phase 2+ can upgrade to stronger auth or server-side session validation if feedback warrants
 
+### Role-Based Routing Rules (`/words/*`)
+
+Route access enforced by client-side RouteGuard using session role:
+- **Child**: Can access review (flashcard and fill-test), all characters, quiz results. Cannot access add or admin (content curation restricted to parents).
+- **Parent**: Can access add, admin, all, results, review, flashcard. Cannot access fill-test (learning mode restricted to children).
+- **Platform admin**: Full access (isPlatformAdmin flag bypasses role restrictions).
+
+Blocked routes are hidden from navigation (not shown as disabled). Direct URL access to blocked routes redirects to `/words/review` with no error message.
+
+Role enforcement is UI-only; database operations protected by RLS policies at the data layer.
+
+**Permission matrix**:
+| Route | Child | Parent | Platform Admin |
+|---|---|---|---|
+| `/words/add` | ❌ | ✅ | ✅ |
+| `/words/all` | ✅ | ✅ | ✅ |
+| `/words/admin` | ❌ | ✅ | ✅ |
+| `/words/results` | ✅ | ✅ | ✅ |
+| `/words/review` | ✅ | ✅ | ✅ |
+| `/words/review/flashcard` | ✅ | ✅ | ✅ |
+| `/words/review/fill-test` | ✅ | ❌ | ✅ |
+
 ---
 
 ## 2) Layer Boundaries

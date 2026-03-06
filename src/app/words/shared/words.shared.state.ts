@@ -28,6 +28,7 @@ import { calculateSessionCoins } from "@/lib/coins";
 import type { Word } from "@/lib/types";
 import type { QuizSession } from "@/app/words/results/results.types";
 import { getXinhuaFlashcardInfo } from "@/lib/xinhua";
+import { useSession } from "@/lib/authContext";
 import {
   QUIZ_PHRASE_DRAG_MIME,
   QUIZ_SELECTION_MODES,
@@ -2710,7 +2711,12 @@ const gradeLabels = getGradeLabels(str);
     removeWord,
   };
 
-  const navItems = getNavItems(str);
+  const session = useSession();
+  const navItems = getNavItems(
+    str,
+    session?.role,
+    session?.isPlatformAdmin ?? false
+  );
 
   return {
     ...sectionVm,

@@ -15,7 +15,7 @@ import type { AvatarId, UserRole } from '@/lib/auth.types';
  * If the RPC fails after the Auth account was created, the Auth account
  * is deleted (supabase.auth.admin.deleteUser) before returning the error.
  *
- * PIN hashing: scrypt (N=32768, r=8, p=1, keylen=32)
+ * PIN hashing: scrypt (N=16384, r=8, p=1, keylen=32)
  * Stored format: "{32-hex-salt}:{64-hex-hash}"
  * Must match the algorithm in scripts/seed-platform-admin.mjs.
  */
@@ -49,7 +49,7 @@ interface RegisterResponse {
 
 function hashPin(pin: string): string {
   const salt = randomBytes(16).toString('hex');
-  const hash = scryptSync(pin, salt, 32, { N: 32768, r: 8, p: 1 }).toString('hex');
+  const hash = scryptSync(pin, salt, 32, { N: 16384, r: 8, p: 1 }).toString('hex');
   return `${salt}:${hash}`;
 }
 
@@ -135,12 +135,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<RegisterR
 
   const authUserId = authData.user.id;
 
-  // ── 4. Hash all PINs ─────────────────────────────────────────────────
-  const parentPinHash = hashPin(parent.pin);
-  const childPinHashes = children.map(c => hashPin(c.pin));
-
-  // ── 5. Insert families + users rows (attempt; clean up Auth on failure) ─
+  // ── 4–5. Hash PINs + insert DB rows (clean up Auth on any failure) ──
   try {
+    // 4. Hash all PINs (inside try so scrypt errors trigger Auth cleanup)
+    const parentPinHash = hashPin(parent.pin);
+    const childPinHashes = children.map(c => hashPin(c.pin));
+
     // 5a. Insert family row
     const { data: familyRow, error: familyErr } = await adminClient
       .from('families')
@@ -192,11 +192,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<RegisterR
 
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (err: unknown) {
-    // ── Postgres writes failed — clean up the Auth account ────────────
-    await adminClient.auth.admin.deleteUser(authUserId).catch(() => {
-      // Best-effort cleanup; log but do not rethrow
-      console.error('[register] Auth cleanup failed for userId:', authUserId);
-    });
+    // ── Any step after Auth account creation failed — clean up ────────
+    console.log('[register] Rolling back Auth account for userId:', authUserId);
+    await adminClient.auth.admin.deleteUser(authUserId).then(
+      () => console.log('[register] Auth account deleted successfully:', authUserId),
+      (cleanupErr: unknown) => console.error('[register] Auth cleanup failed for userId:', authUserId, cleanupErr)
+    );
 
     const message = err instanceof Error ? err.message : 'Registration failed.';
     return NextResponse.json({ success: false, error: message }, { status: 500 });

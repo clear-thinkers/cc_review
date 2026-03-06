@@ -15,7 +15,7 @@ import type { PinVerifyRequest, PinVerifyResponse, UserProfile, AvatarId, UserRo
  *   - failed_pin_attempts is incremented on every wrong PIN and reset on success.
  *   - After 5 failures the account is locked. The counter resets only on success.
  *
- * PIN hashing algorithm: scrypt (N=32768, r=8, p=1, keylen=32)
+ * PIN hashing algorithm: scrypt (N=16384, r=8, p=1, keylen=32)
  * Stored format: "{32-hex-salt}:{64-hex-hash}"
  * Must match the algorithm used in scripts/seed-platform-admin.mjs.
  */
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<PinVerify
 
   let pinMatches: boolean;
   try {
-    const derivedKey = scryptSync(pin, storedSalt, 32, { N: 32768, r: 8, p: 1 });
+    const derivedKey = scryptSync(pin, storedSalt, 32, { N: 16384, r: 8, p: 1 });
     const storedKeyBuf = Buffer.from(storedHash, 'hex');
     // buffers must be same length for timingSafeEqual
     pinMatches = derivedKey.length === storedKeyBuf.length &&

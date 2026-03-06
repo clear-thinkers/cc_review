@@ -57,7 +57,7 @@ After Layer 1, the user sees their family's profile cards. They tap a profile an
 
 **Security model:** Layer 2 PIN is a profile switcher, not an authentication gate. Real security lives in Layer 1. An attacker needs the family email + password before they ever reach a PIN screen.
 
-**PIN hashing algorithm:** `scrypt` via Node.js `crypto.scryptSync`. Parameters: N=32768, r=8, p=1, keylen=32. Stored format: `{32-hex-salt}:{64-hex-hash}`. Salt is 16 random bytes generated per hash. Verification uses `crypto.timingSafeEqual` to prevent timing attacks. This algorithm is used in `scripts/seed-platform-admin.mjs` and **must** be used identically in `src/app/api/auth/pin-verify/route.ts` — mismatched algorithms will silently break login.
+**PIN hashing algorithm:** `scrypt` via Node.js `crypto.scryptSync`. Parameters: N=16384, r=8, p=1, keylen=32 (N reduced from 32768 to stay within Node.js default maxmem on Windows). Stored format: `{32-hex-salt}:{64-hex-hash}`. Salt is 16 random bytes generated per hash. Verification uses `crypto.timingSafeEqual` to prevent timing attacks. This algorithm is used in `scripts/seed-platform-admin.mjs` and **must** be used identically in `src/app/api/auth/pin-verify/route.ts` — mismatched algorithms will silently break login.
 
 ---
 

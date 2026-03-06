@@ -20,6 +20,8 @@ import type {
 } from "../review/fill-test/fillTest.types";
 import type { NavItem } from "./shell.types";
 import type { WordsLocaleStrings } from "./words.shared.types";
+import { canAccessRoute } from "@/lib/permissions";
+import type { UserRole } from "@/lib/auth.types";
 
 export const SLOT_INDICES: Array<0 | 1 | 2> = [0, 1, 2];
 export const QUIZ_SELECTION_MODES = ["all", "10", "20", "30", "manual"] as const;
@@ -71,14 +73,22 @@ const PINYIN_TONE_MAP: Record<string, string> = {
   "\u00DC": "V",
 };
 
-export function getNavItems(str: WordsLocaleStrings): NavItem[] {
-  return [
+export function getNavItems(
+  str: WordsLocaleStrings,
+  role: UserRole | undefined,
+  isPlatformAdmin: boolean
+): NavItem[] {
+  const allItems: NavItem[] = [
     { href: "/words/add", label: `${str.nav.addCharacters}`, page: "add" },
     { href: "/words/all", label: `${str.nav.allCharacters}`, page: "all" },
     { href: "/words/admin", label: `${str.nav.contentAdmin}`, page: "admin" },
     { href: "/words/results", label: `${str.nav.quizResults}`, page: "results" },
     { href: "/words/review", label: `${str.nav.dueReview}`, page: "review" },
   ];
+
+  return allItems.filter(item => 
+    canAccessRoute(item.href, role, isPlatformAdmin)
+  );
 }
 
 export function getGradeLabels(str: WordsLocaleStrings) {

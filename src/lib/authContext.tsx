@@ -94,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
         role: profile.role,
         userName: profile.name,
         avatarId: profile.avatarId,
+        isPlatformAdmin: profile.isPlatformAdmin,
       });
     },
     []
