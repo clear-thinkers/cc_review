@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "@/lib/authContext";
 import type { QuizSession } from "./results.types";
 import { getAllQuizSessions } from "@/lib/supabase-service";
 import { computeSessionDisplayData, calculateSummaryStats } from "@/lib/results";
@@ -16,6 +17,8 @@ export interface ResultsPageProps {
 }
 
 export function ResultsPage({ strings }: ResultsPageProps) {
+  const session = useSession();
+  const isChild = session?.role === "child";
   const [sessions, setSessions] = useState<QuizSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
@@ -85,6 +88,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
             sessions={sessions}
             strings={strings}
             onClearClick={handleClearClick}
+            hideDestructiveActions={isChild}
           />
         </>
       )}

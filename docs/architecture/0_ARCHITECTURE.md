@@ -58,7 +58,8 @@ These rules govern the inventory view at `/words/all`:
 6. `Next Review Date` shows `Now` when `nextReviewAt` is empty or `0`.
 7. `Reset` keeps the same `id` and `hanzi`, resets scheduling counters to baseline values, and updates `createdAt`.
 8. `Delete` removes the row from Supabase immediately (no confirmation dialog).
-9. The page does not call AI generation routes.
+9. `Reset` and `Delete` action buttons are hidden for child profiles. Only parents and platform admins can reset or delete words.
+10. The page does not call AI generation routes.
 10. The page does not generate or edit flashcard/admin content.
 11. The page does not deduplicate historical duplicate rows; it renders stored data as-is.
 12. The page does not paginate or virtualize large datasets.
@@ -139,6 +140,7 @@ These rules govern the results/history view for session data reporting:
    - Total Duration = sum of durationSeconds across all sessions, displayed in human-readable format (hh:mm:ss)
 7. **Clear History action:**
    - Single destructive action button available only when sessions exist
+   - Clear History button is hidden for child profiles. Only parents and platform admins can clear quiz history.
    - Requires confirmation dialog before deletion
    - On confirmation, all records in `quizSessions` table are deleted permanently with no undo
    - Table and summary cards clear immediately upon successful deletion
@@ -206,6 +208,10 @@ Route access enforced by client-side RouteGuard using session role:
 Blocked routes are hidden from navigation (not shown as disabled). Direct URL access to blocked routes redirects to `/words/review` with no error message.
 
 Role enforcement is UI-only; database operations protected by RLS policies at the data layer.
+
+**In-page action restrictions (child role):**
+- `/words/all`: Reset and Delete buttons are hidden — children cannot modify or remove words.
+- `/words/results`: Clear History button is hidden — children cannot delete quiz session records.
 
 **Permission matrix**:
 | Route | Child | Parent | Platform Admin |

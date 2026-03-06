@@ -247,10 +247,10 @@ export async function gradeWord(
   updated.reviewCount = (word.reviewCount ?? 0) + 1;
   updated.testCount = (word.testCount ?? 0) + (source === "fillTest" ? 1 : 0);
 
-  // Write back
+  // Write back (update, not upsert — row is known to exist from the read above)
   const { familyId } = await getSessionMetadata();
   const row = fromWord(updated, familyId);
-  const { error: writeErr } = await supabase.from("words").upsert(row);
+  const { error: writeErr } = await supabase.from("words").update(row).eq("id", id);
   if (writeErr) throw new Error(`gradeWord write: ${writeErr.message}`);
   return updated;
 }

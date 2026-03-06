@@ -10,6 +10,7 @@ export interface SessionHistoryTableProps {
   sessions: QuizSession[];
   strings: ResultsLocaleStrings;
   onClearClick: () => void;
+  hideDestructiveActions?: boolean;
 }
 
 type SortField =
@@ -28,6 +29,7 @@ export function SessionHistoryTable({
   sessions,
   strings,
   onClearClick,
+  hideDestructiveActions,
 }: SessionHistoryTableProps) {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -105,7 +107,7 @@ export function SessionHistoryTable({
     <div className={styles.tableSection}>
       <div className={styles.tableSectionHeader}>
         <h2 className={styles.tableSectionTitle}>{strings.table.headers.date}</h2>
-        {sessions.length > 0 && (
+        {sessions.length > 0 && !hideDestructiveActions && (
           <button className={styles.clearHistoryButton} onClick={onClearClick}>
             {strings.clearHistory.button}
           </button>
