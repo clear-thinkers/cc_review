@@ -77,7 +77,17 @@ function PinEntryInner() {
       const data: PinVerifyResponse = await res.json();
 
       if (data.success && data.profile) {
-        setProfileSession(data.profile, supabaseSession);
+        // Fetch a new JWT — the server just wrote family_id/user_id/role into
+        // app_metadata, so the refreshed token will carry those claims for RLS.
+        const { data: { session: refreshedSession }, error: refreshError } =
+          await supabase.auth.refreshSession();
+
+        if (refreshError || !refreshedSession) {
+          router.replace('/login');
+          return;
+        }
+
+        setProfileSession(data.profile, refreshedSession);
         router.push('/words');
         return;
       }

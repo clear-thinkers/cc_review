@@ -25,10 +25,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
 } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import type { AppSession, AuthContextValue, UserProfile } from './auth.types';
@@ -36,9 +38,18 @@ import type { AppSession, AuthContextValue, UserProfile } from './auth.types';
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }): ReactElement {
+  const router = useRouter();
   const [isLayer1Ready, setIsLayer1Ready] = useState(false);
   const [session, setSession] = useState<AppSession | null>(null);
   const [familyProfiles, setFamilyProfiles] = useState<UserProfile[]>([]);
+
+  // Ref so the onAuthStateChange callback can read current session without
+  // a stale closure (the effect deps don't include session to avoid
+  // re-subscribing on every session change).
+  const sessionRef = useRef<AppSession | null>(null);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   /**
    * Fetch all profiles for the authenticated family.
@@ -66,6 +77,17 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, supabaseSession) => {
+      if (_event === 'TOKEN_REFRESHED' && supabaseSession) {
+        // Safety check: if app_metadata claims were somehow lost (e.g. manual
+        // admin reset) while Layer 2 is active, drop back to profile-select.
+        const familyId = supabaseSession.user.app_metadata?.family_id as string | undefined;
+        if (!familyId && sessionRef.current !== null) {
+          setSession(null);
+          router.push('/profile-select');
+        }
+        return;
+      }
+
       if (supabaseSession) {
         setIsLayer1Ready(true);
         await loadFamilyProfiles(supabaseSession.access_token);
@@ -78,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
     });
 
     return () => subscription.unsubscribe();
-  }, [loadFamilyProfiles]);
+  }, [loadFamilyProfiles, router]);
 
   /**
    * Called by /pin-entry after a successful /api/auth/pin-verify response.

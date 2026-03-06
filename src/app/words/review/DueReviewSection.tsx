@@ -113,6 +113,8 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                         className="rounded border-2 border-green-500 bg-green-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-green-900 disabled:opacity-50"
                         onClick={() => openFlashcardReview(word.id)}
                       >
+                        {str.due.table.flashcard}
+                      </button>
                       {canAccessFillTest && (
                         <button
                           type="button"
@@ -123,8 +125,6 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                           {str.due.table.fillTest}
                         </button>
                       )}
-                        {str.due.table.fillTest}
-                      </button>
                     </div>
                   </td>
                 </tr>

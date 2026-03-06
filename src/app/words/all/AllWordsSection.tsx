@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "@/lib/authContext";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 
 export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
@@ -17,6 +18,9 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     resetWord,
     removeWord,
   } = vm;
+
+  const session = useSession();
+  const isChild = session?.role === "child";
 
   if (page !== "all") {
     return null;
@@ -110,7 +114,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                     {str.all.table.headers.familiarity} <span aria-hidden>{getSortIndicator("familiarity")}</span>
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left">{str.all.table.headers.actions}</th>
+                {!isChild && <th className="px-3 py-2 text-left">{str.all.table.headers.actions}</th>}
               </tr>
             </thead>
             <tbody>
@@ -122,6 +126,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                   <td className="px-3 py-2">{reviewCount}</td>
                   <td className="px-3 py-2">{testCount}</td>
                   <td className="px-3 py-2">{formatProbability(familiarity)}</td>
+                  {!isChild && (
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap items-center gap-1">
                       <button
@@ -144,6 +149,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       </button>
                     </div>
                   </td>
+                  )}
                 </tr>
               ))}
             </tbody>

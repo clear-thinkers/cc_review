@@ -17,7 +17,7 @@ This migration replaces all IndexedDB reads/writes with Supabase client calls vi
   - `src/app/words/shared/words.shared.state.ts`
   - `src/app/words/results/ResultsPage.tsx`
 - Convert between camelCase (TypeScript types) ↔ snake_case (Postgres columns) in service layer
-- Scope all writes with `family_id` from session context; scope user-specific writes (quiz_sessions, wallets) with `user_id`
+- RLS policies read `family_id` and `user_id` from the JWT automatically — service functions do **not** accept these as parameters
 
 ---
 
@@ -25,10 +25,10 @@ This migration replaces all IndexedDB reads/writes with Supabase client calls vi
 
 - Schema changes (Feature 5 schema is final)
 - RLS policy changes (already deployed)
-- JWT enrichment (deferred — current RLS uses service role for writes; browser client uses anon key)
 - Legacy data migration from IndexedDB to Supabase (users start fresh)
 - Dexie migration scripts or backward compatibility
 - Changes to scheduler, grading, or normalization logic (pure domain functions stay untouched)
+- Server-side API route fallback (`/api/data/*`) — not needed; browser client works directly with RLS
 
 ---
 
@@ -36,27 +36,27 @@ This migration replaces all IndexedDB reads/writes with Supabase client calls vi
 
 ### New Service Module: `src/lib/supabase-service.ts`
 
-All data access functions live here, replacing `db.ts` exports 1:1. Each function uses the browser Supabase client (`supabase` from `supabaseClient.ts`) for reads, and either the browser client (if JWT claims are enriched) or an API route (if service role is needed for writes).
+All data access functions live here, replacing `db.ts` exports 1:1. Each function uses the browser Supabase client (`supabase` from `supabaseClient.ts`). The JWT is enriched with `family_id`, `user_id`, `role`, and `is_platform_admin` via `app_metadata` (set during PIN verification in `/api/auth/pin-verify`). RLS policies read these claims automatically — **no `familyId` or `userId` parameters are needed in service function signatures**.
 
 ### Function Mapping (IndexedDB → Supabase)
 
 | Old function (db.ts) | New function (supabase-service.ts) | Table | Notes |
 |---|---|---|---|
-| `db.words.orderBy("createdAt").reverse().toArray()` | `getAllWords(familyId)` | `words` | family-scoped; order by `created_at` desc |
-| `getDueWords(now)` | `getDueWords(familyId, now)` | `words` | `next_review_at <= now` OR `next_review_at = 0` |
+| `db.words.orderBy("createdAt").reverse().toArray()` | `getAllWords()` | `words` | RLS scopes to family; order by `created_at` desc |
+| `getDueWords(now)` | `getDueWords(now)` | `words` | `next_review_at <= now` OR `next_review_at = 0` |
 | `gradeWord(id, grade, now)` | `gradeWord(id, grade, now)` | `words` | read → compute via scheduler → update |
-| `db.words.bulkAdd(newWords)` | `addWords(familyId, words)` | `words` | insert with family_id; skip existing (upsert on hanzi) |
+| `db.words.bulkAdd(newWords)` | `addWords(words)` | `words` | insert; RLS enforces family scope; skip existing via `ON CONFLICT DO NOTHING` |
 | `db.words.delete(id)` | `deleteWord(id)` | `words` | single row delete |
 | `db.words.put(word)` | `putWord(word)` | `words` | upsert single word (used by reset) |
-| `getFlashcardContent(char, pron)` | `getFlashcardContent(familyId, char, pron)` | `flashcard_contents` | key = `"{char}\|{pron}"` |
-| `getAllFlashcardContents()` | `getAllFlashcardContents(familyId)` | `flashcard_contents` | family-scoped |
-| `putFlashcardContent(char, pron, content)` | `putFlashcardContent(familyId, char, pron, content)` | `flashcard_contents` | upsert on `(id, family_id)` |
-| `deleteFlashcardContent(char, pron)` | `deleteFlashcardContent(familyId, char, pron)` | `flashcard_contents` | delete by key + family_id |
-| `getAllQuizSessions()` | `getAllQuizSessions(familyId)` | `quiz_sessions` | order by `created_at` desc |
-| `createQuizSession(session)` | `createQuizSession(userId, familyId, session)` | `quiz_sessions` | insert with user_id + family_id |
-| `clearAllQuizSessions()` | `clearAllQuizSessions(familyId)` | `quiz_sessions` | delete all for family |
-| `getWallet()` / `initializeWallet()` | `getOrCreateWallet(userId, familyId)` | `wallets` | upsert on user_id |
-| `updateWallet(coinsEarned)` | `updateWallet(userId, familyId, coinsEarned)` | `wallets` | increment total_coins |
+| `getFlashcardContent(char, pron)` | `getFlashcardContent(char, pron)` | `flashcard_contents` | key = `"{char}\|{pron}"`; RLS scopes to family |
+| `getAllFlashcardContents()` | `getAllFlashcardContents()` | `flashcard_contents` | RLS scopes to family |
+| `putFlashcardContent(char, pron, content)` | `putFlashcardContent(char, pron, content)` | `flashcard_contents` | upsert on `(id, family_id)` |
+| `deleteFlashcardContent(char, pron)` | `deleteFlashcardContent(char, pron)` | `flashcard_contents` | delete by key; RLS scopes to family |
+| `getAllQuizSessions()` | `getAllQuizSessions()` | `quiz_sessions` | order by `created_at` desc; RLS scopes to family |
+| `createQuizSession(session)` | `createQuizSession(session)` | `quiz_sessions` | insert; RLS enforces user_id + family_id from JWT |
+| `clearAllQuizSessions()` | `clearAllQuizSessions()` | `quiz_sessions` | delete all for family (RLS-scoped) |
+| `getWallet()` / `initializeWallet()` | `getOrCreateWallet()` | `wallets` | upsert on user_id from JWT |
+| `updateWallet(coinsEarned)` | `updateWallet(coinsEarned)` | `wallets` | increment total_coins; RLS enforces user_id |
 | `initializeDatabaseForPin()` | **Deleted** | — | No PIN-scoped DB; Supabase session manages isolation |
 | `clearDatabaseState()` | **Deleted** | — | Supabase auth signOut handles cleanup |
 
@@ -66,18 +66,18 @@ The service layer is the **only** place where this conversion happens. TypeScrip
 
 ```typescript
 function toWord(row: SupabaseWordRow): Word { ... }
-function fromWord(word: Word, familyId: string): SupabaseWordRow { ... }
+function fromWord(word: Word): SupabaseWordRow { ... }
 ```
 
-Same pattern for flashcard_contents, quiz_sessions, wallets.
+Same pattern for flashcard_contents, quiz_sessions, wallets. The `family_id` and `user_id` columns are populated by reading the JWT claims inside the database (via RLS helper functions like `current_family_id()` and `current_user_id()`), so the TypeScript conversion helpers do not need to inject them.
 
-### RLS and Auth Strategy
+### RLS and Auth Strategy (Resolved)
 
-**Reads:** The browser Supabase client sends the anon key + session JWT. RLS policies evaluate `family_id` from the JWT. If JWT enrichment is not yet active, reads may need to go through an API route using the service role client, with the family_id extracted from the session context. Determine at implementation time which path works.
+**Decision closed:** JWT claims are enriched. The `/api/auth/pin-verify` route writes `family_id`, `user_id`, `role`, and `is_platform_admin` into Supabase Auth `app_metadata` via `auth.admin.updateUserById()`. After the client calls `supabase.auth.refreshSession()`, every subsequent request includes these claims in the JWT. RLS helper functions (`current_family_id()`, `current_user_id()`, `is_platform_admin()`) extract them from `request.jwt.claims -> 'app_metadata'`.
 
-**Writes:** Same as reads — prefer browser client if RLS allows. Fall back to API route with service role if needed.
+**Path A confirmed:** All service functions use the browser Supabase client directly. No server-side API route fallback (`/api/data/*`) is needed. No `familyId` or `userId` parameters are passed to service functions.
 
-**Decision to make during implementation:** Whether JWT claims (`family_id`, `user_id`) are already enriched in the Supabase session token. If not, all Supabase calls must go through server-side API routes using the service role client. This affects the architecture of the service module (client-side vs. server-side calls).
+For **inserts** into `quiz_sessions` and `wallets` (which require `user_id` and `family_id` columns), the service layer reads these values from the Supabase session's `app_metadata` at call time and includes them in the insert payload. RLS `WITH CHECK` policies verify the values match the JWT claims.
 
 ---
 
@@ -89,8 +89,8 @@ Same pattern for flashcard_contents, quiz_sessions, wallets.
 - **Deleted**: `src/lib/auth.ts` — PIN-scoped DB helpers (if still present)
 
 ### UI Layer (import changes only)
-- `src/app/words/shared/words.shared.state.ts` — change imports from `@/lib/db` to `@/lib/supabase-service`; pass `familyId`/`userId` from session to service calls
-- `src/app/words/results/ResultsPage.tsx` — change imports from `@/lib/db` to `@/lib/supabase-service`; pass `familyId` to `getAllQuizSessions()` and `clearAllQuizSessions()`
+- `src/app/words/shared/words.shared.state.ts` — change imports from `@/lib/db` to `@/lib/supabase-service`; no parameter changes needed (RLS handles scoping)
+- `src/app/words/results/ResultsPage.tsx` — change imports from `@/lib/db` to `@/lib/supabase-service`; no parameter changes needed
 
 ### Domain Layer
 **No changes.** `scheduler.ts`, `fillTest.ts`, `flashcardLlm.ts`, `coins.ts` remain pure functions.
@@ -122,7 +122,6 @@ Same pattern for flashcard_contents, quiz_sessions, wallets.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| JWT not enriched with family_id/user_id | Browser client reads return empty (RLS blocks) | Detect at implementation time; fall back to API routes with service role |
 | Dexie import still referenced somewhere | Build fails after deletion | Grep for all `@/lib/db` imports; fix all before deleting |
 | snake_case conversion bug | Data read/write silently broken | Write unit tests for converter helpers |
 | Network latency (Supabase vs local IndexedDB) | Perceived slower UI | Add loading states where missing; consider SWR/React Query in future |
@@ -181,11 +180,11 @@ Same pattern for flashcard_contents, quiz_sessions, wallets.
 
 ## Open Questions
 
-1. **JWT enrichment status**: Are `family_id` and `user_id` currently set as custom claims in the Supabase JWT? If not, all service calls must route through API routes using the service role client. This determines whether `supabase-service.ts` makes direct Supabase client calls or fetches from `/api/data/*` endpoints.
+1. ~~**JWT enrichment status**~~ **CLOSED.** JWT is enriched via `app_metadata` in `/api/auth/pin-verify/route.ts`. Browser Supabase client works directly with RLS. Path A confirmed — no `/api/data/*` fallback needed.
 
-2. **Wallet model change**: Current `Wallet.id` is `"wallet"` (singleton). Supabase schema keys on `user_id`. Should we update the `Wallet` type to remove `id` and use `userId` as the key, or keep `id` as an alias?
+2. ~~**Wallet model change**~~ **CLOSED.** Remove `id` from `Wallet` type entirely. Use `userId` as the natural key — maps directly to `wallets.user_id` in Postgres. The singleton `id = "wallet"` pattern was an IndexedDB workaround. `coins.types.ts` updated in this PR.
 
-3. **fillTests / disabledFillTests tables**: These IndexedDB tables exist in `db.ts` but have no Supabase equivalent. The `include_in_fill_test` flag on `flashcard_contents.phrases[].include_in_fill_test` appears to have replaced them. Confirm these are dead code and can be dropped without replacement.
+3. ~~**fillTests / disabledFillTests tables**~~ **CLOSED.** Confirmed dead code — zero references in active `src/` outside `db.ts`. The `include_in_fill_test` boolean on `flashcard_contents.phrases[]` and `examples[]` is the replacement. All 7 functions (`getCustomFillTest`, `getAllCustomFillTests`, `putCustomFillTest`, `deleteCustomFillTest`, `getAllDisabledFillTests`, `putDisabledFillTest`, `deleteDisabledFillTest`) and 2 types (`FillTestOverride`, `DisabledFillTestEntry`) dropped with no replacement.
 
 ---
 
