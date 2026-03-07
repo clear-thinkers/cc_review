@@ -67,7 +67,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<PinVerify
   }
 
   // ── 3. Fetch the users row (service role — RLS bypassed) ─────────────
-  const adminClient = getServerSupabaseClient();
+  let adminClient;
+  try {
+    adminClient = getServerSupabaseClient();
+  } catch {
+    console.error('[pin-verify] Server configuration error — SUPABASE_SERVICE_ROLE_KEY is missing');
+    return NextResponse.json(
+      { success: false, error: 'Server configuration error. Please contact the administrator.' },
+      { status: 500 }
+    );
+  }
 
   const { data: userRow, error: userErr } = await adminClient
     .from('users')
