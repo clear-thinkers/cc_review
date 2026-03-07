@@ -42,7 +42,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   // ── 3. Look up the family for this auth user (service role) ─────────
-  const adminClient = getServerSupabaseClient();
+  let adminClient;
+  try {
+    adminClient = getServerSupabaseClient();
+  } catch {
+    console.error('[family-profiles] Server configuration error — SUPABASE_SERVICE_ROLE_KEY is missing');
+    return NextResponse.json(
+      { error: 'Server configuration error. Please contact the administrator.' },
+      { status: 500 }
+    );
+  }
 
   const { data: parentRow, error: parentErr } = await adminClient
     .from('users')

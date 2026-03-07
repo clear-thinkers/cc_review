@@ -105,7 +105,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<RegisterR
     }
   }
 
-  const adminClient = getServerSupabaseClient();
+  let adminClient;
+  try {
+    adminClient = getServerSupabaseClient();
+  } catch {
+    console.error('[register] Server configuration error — SUPABASE_SERVICE_ROLE_KEY is missing');
+    return NextResponse.json(
+      { success: false, error: 'Server configuration error. Please contact the administrator.' },
+      { status: 500 }
+    );
+  }
 
   // ── 3. Create Supabase Auth user ─────────────────────────────────────
   const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
