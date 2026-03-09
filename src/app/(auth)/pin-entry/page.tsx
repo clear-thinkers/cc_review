@@ -54,6 +54,27 @@ function PinEntryInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [digits]);
 
+  // Handle keyboard input for PIN entry
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isLockedOut || isVerifying) return;
+
+      // Handle number keys 0-9
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        handleDigit(e.key);
+      }
+      // Handle Backspace
+      else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleBackspace();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLockedOut, isVerifying]);
+
   const verifyPin = async (pin: string) => {
     setIsVerifying(true);
     setError(null);
