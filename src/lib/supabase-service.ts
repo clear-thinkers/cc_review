@@ -169,19 +169,23 @@ function toWallet(row: {
 // ─── Words ──────────────────────────────────────────────────────────────────
 
 export async function getAllWords(): Promise<Word[]> {
+  const { familyId } = await getSessionMetadata();
   const { data, error } = await supabase
     .from("words")
     .select("*")
+    .eq("family_id", familyId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(`getAllWords: ${error.message}`);
   return (data as SupabaseWordRow[]).map(toWord);
 }
 
 export async function getDueWords(now = Date.now()): Promise<Word[]> {
+  const { familyId } = await getSessionMetadata();
   // Fetch words where next_review_at <= now OR next_review_at = 0
   const { data, error } = await supabase
     .from("words")
     .select("*")
+    .eq("family_id", familyId)
     .or(`next_review_at.lte.${now},next_review_at.eq.0`);
   if (error) throw new Error(`getDueWords: ${error.message}`);
 
@@ -192,9 +196,11 @@ export async function getDueWords(now = Date.now()): Promise<Word[]> {
 
 export async function getExistingWordsByHanzi(hanziList: string[]): Promise<Word[]> {
   if (hanziList.length === 0) return [];
+  const { familyId } = await getSessionMetadata();
   const { data, error } = await supabase
     .from("words")
     .select("*")
+    .eq("family_id", familyId)
     .in("hanzi", hanziList);
   if (error) throw new Error(`getExistingWordsByHanzi: ${error.message}`);
   return (data as SupabaseWordRow[]).map(toWord);
@@ -213,7 +219,8 @@ export async function addWords(words: Word[]): Promise<void> {
 }
 
 export async function deleteWord(id: string): Promise<void> {
-  const { error } = await supabase.from("words").delete().eq("id", id);
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase.from("words").delete().eq("id", id).eq("family_id", familyId);
   if (error) throw new Error(`deleteWord: ${error.message}`);
 }
 
@@ -269,10 +276,12 @@ export async function getFlashcardContent(
   pronunciation: string
 ): Promise<FlashcardContentEntry | undefined> {
   const key = makeFlashcardContentKey(character, pronunciation);
+  const { familyId } = await getSessionMetadata();
   const { data, error } = await supabase
     .from("flashcard_contents")
     .select("*")
     .eq("id", key)
+    .eq("family_id", familyId)
     .maybeSingle();
   if (error) throw new Error(`getFlashcardContent: ${error.message}`);
   if (!data) return undefined;
@@ -282,9 +291,11 @@ export async function getFlashcardContent(
 export async function getAllFlashcardContents(): Promise<
   FlashcardContentEntry[]
 > {
+  const { familyId } = await getSessionMetadata();
   const { data, error } = await supabase
     .from("flashcard_contents")
-    .select("*");
+    .select("*")
+    .eq("family_id", familyId);
   if (error) throw new Error(`getAllFlashcardContents: ${error.message}`);
   return (data ?? []).map(toFlashcardContentEntry);
 }
@@ -312,19 +323,23 @@ export async function deleteFlashcardContent(
   pronunciation: string
 ): Promise<void> {
   const key = makeFlashcardContentKey(character, pronunciation);
+  const { familyId } = await getSessionMetadata();
   const { error } = await supabase
     .from("flashcard_contents")
     .delete()
-    .eq("id", key);
+    .eq("id", key)
+    .eq("family_id", familyId);
   if (error) throw new Error(`deleteFlashcardContent: ${error.message}`);
 }
 
 // ─── Quiz Sessions ──────────────────────────────────────────────────────────
 
 export async function getAllQuizSessions(): Promise<QuizSession[]> {
+  const { familyId } = await getSessionMetadata();
   const { data, error } = await supabase
     .from("quiz_sessions")
     .select("*")
+    .eq("family_id", familyId)
     .order("created_at", { ascending: false });
   if (error) {
     console.error("getAllQuizSessions error:", error);
@@ -353,8 +368,12 @@ export async function createQuizSession(session: QuizSession): Promise<void> {
 }
 
 export async function clearAllQuizSessions(): Promise<void> {
-  // RLS scopes the delete to the current family
-  const { error } = await supabase.from("quiz_sessions").delete().gte("id", "");
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("quiz_sessions")
+    .delete()
+    .eq("family_id", familyId)
+    .gte("id", "");
   if (error) throw new Error(`clearAllQuizSessions: ${error.message}`);
 }
 

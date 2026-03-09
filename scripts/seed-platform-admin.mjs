@@ -6,7 +6,7 @@
  * Creates the platform admin Supabase Auth account, family row, and users row.
  * Idempotent: safe to run multiple times. Existing records are updated, not duplicated.
  *
- * Required env vars (auto-loaded from .env.local if present):
+ * Required env vars (auto-loaded from env file):
  *   NEXT_PUBLIC_SUPABASE_URL     — Supabase project URL
  *   SUPABASE_SERVICE_ROLE_KEY    — Service role key (bypasses RLS)
  *   ADMIN_EMAIL                  — Email for platform admin Supabase Auth account
@@ -14,31 +14,49 @@
  *   ADMIN_PIN                    — 4-digit PIN for platform admin profile login
  *
  * PowerShell usage:
- *   node scripts/seed-platform-admin.mjs
- *   (ensure .env.local is present, or set env vars explicitly before running)
+ *   node scripts/seed-platform-admin.mjs              # dev  (.env.local)
+ *   node scripts/seed-platform-admin.mjs --prod       # prod (.env.production.local)
  */
 
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes, scryptSync } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 
-// ─── auto-load .env.local ──────────────────────────────────────────────────
-try {
-  if (existsSync('.env.local')) {
-    const lines = readFileSync('.env.local', 'utf8').split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eq = trimmed.indexOf('=');
-      if (eq === -1) continue;
-      const key = trimmed.slice(0, eq).trim();
-      const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
-      if (key && !process.env[key]) process.env[key] = val;
+// ─── resolve env file from --prod flag ─────────────────────────────────────
+const isProd = process.argv.includes('--prod');
+const envFile = isProd ? '.env.production.local' : '.env.local';
+
+// ─── auto-load env file ────────────────────────────────────────────────────
+function loadEnvFile(filePath) {
+  try {
+    if (existsSync(filePath)) {
+      const lines = readFileSync(filePath, 'utf8').split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq === -1) continue;
+        const key = trimmed.slice(0, eq).trim();
+        const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+        if (key && !process.env[key]) process.env[key] = val;
+      }
+      return true;
     }
+  } catch {
+    // file unreadable — rely on explicit env vars
   }
-} catch {
-  // .env.local unreadable — rely on explicit env vars
+  return false;
 }
+
+const loaded = loadEnvFile(envFile);
+if (!loaded) {
+  console.warn(`⚠️  ${envFile} not found — relying on explicit env vars`);
+}
+
+// Load admin credentials from .env.local as fallback (shared across environments)
+if (isProd) loadEnvFile('.env.local');
+
+console.log(`🔧 Environment: ${isProd ? 'PRODUCTION' : 'DEV'} (${envFile})`);
 
 // ─── env validation ────────────────────────────────────────────────────────
 const REQUIRED = [
@@ -184,10 +202,11 @@ async function run() {
     console.log(`  ✅ Admin user created: ${newUser.id}`);
   }
 
-  console.log('\n✅ Platform admin bootstrap complete!');
+  console.log(`\n✅ Platform admin bootstrap complete! (${isProd ? 'PRODUCTION' : 'DEV'})`);
   console.log(`   Email:     ${ADMIN_EMAIL}`);
   console.log(`   Family ID: ${familyId}`);
   console.log(`   Auth ID:   ${authUserId}`);
+  console.log(`   Supabase:  ${SUPABASE_URL}`);
   console.log('\n   Next: run npx tsx scripts/verify-rls.ts to confirm schema + RLS.');
 }
 
