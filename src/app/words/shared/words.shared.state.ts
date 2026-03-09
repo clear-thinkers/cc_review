@@ -138,6 +138,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setDueWords,
     loading,
     setLoading,
+    loadError,
+    setLoadError,
     hanzi,
     setHanzi,
     formNotice,
@@ -236,6 +238,9 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setAdminSavedByKey,
     adminPreloading,
     setAdminPreloading,
+    adminPreloadCancelling,
+    setAdminPreloadCancelling,
+    preloadCancelRef,
     adminProgressText,
     setAdminProgressText,
     adminRegeneratingKey,
@@ -936,12 +941,21 @@ const gradeLabels = getGradeLabels(str);
 
   useEffect(() => {
     (async () => {
-      await refreshAll();
-      setLoading(false);
+      try {
+        await refreshAll();
+      } catch (err) {
+        setLoadError(str.common.loadError);
+        console.error("[app] Failed to load initial data:", err);
+      } finally {
+        setLoading(false);
+      }
     })();
-  }, [refreshAll]);
+  }, [refreshAll, setLoadError, str.common.loadError]);
 
   async function requestFlashcardGeneration(payloadBody: unknown): Promise<unknown> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -952,22 +966,27 @@ const gradeLabels = getGradeLabels(str);
     if (supabaseSession?.access_token) {
       headers["Authorization"] = `Bearer ${supabaseSession.access_token}`;
     }
-    const response = await fetch("/api/flashcard/generate", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payloadBody),
-    });
+    try {
+      const response = await fetch("/api/flashcard/generate", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payloadBody),
+        signal: controller.signal,
+      });
 
-    const payload = (await response.json().catch(() => null)) as unknown;
-    if (!response.ok) {
-      const message =
-        payload && typeof payload === "object" && typeof (payload as { error?: unknown }).error === "string"
-          ? ((payload as { error: string }).error ?? "").trim()
-          : "";
-      throw new Error(message || `Generation failed (HTTP ${response.status}).`);
+      const payload = (await response.json().catch(() => null)) as unknown;
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === "object" && typeof (payload as { error?: unknown }).error === "string"
+            ? ((payload as { error: string }).error ?? "").trim()
+            : "";
+        throw new Error(message || `Generation failed (HTTP ${response.status}).`);
+      }
+
+      return payload;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return payload;
   }
 
   async function requestGeneratedFlashcardContent(requestItem: FlashcardLlmRequest): Promise<FlashcardLlmResponse> {
@@ -1807,6 +1826,8 @@ const gradeLabels = getGradeLabels(str);
       return;
     }
 
+    const concurrency = 3;
+    preloadCancelRef.current = false;
     setAdminPreloading(true);
     setAdminProgressText(null);
     setAdminNotice(null);
@@ -1814,57 +1835,79 @@ const gradeLabels = getGradeLabels(str);
     let generatedCount = 0;
     let skippedCount = 0;
     let failedCount = 0;
+    let cancelled = false;
     const total = adminTargets.length;
 
     try {
-      for (let index = 0; index < total; index += 1) {
-        const target = adminTargets[index];
+      for (let batchStart = 0; batchStart < total; batchStart += concurrency) {
+        if (preloadCancelRef.current) {
+          cancelled = true;
+          break;
+        }
+
+        const batchEnd = Math.min(batchStart + concurrency, total);
         setAdminProgressText(
-          `Preloading ${index + 1}/${total}: ${target.character} / ${target.pronunciation}`
+          str.admin.preloadingBatchProgress
+            .replace("{from}", String(batchStart + 1))
+            .replace("{to}", String(batchEnd))
+            .replace("{total}", String(total))
         );
 
-        try {
-          const existing = await getFlashcardContent(target.character, target.pronunciation);
-          if (existing?.content) {
-            skippedCount += 1;
-            setAdminSavedByKey((previous) => ({
-              ...previous,
-              [target.key]: true,
-            }));
-            if (!adminJsonByKey[target.key]) {
-              updateAdminJson(target.key, JSON.stringify(existing.content, null, 2));
+        const batchTargets = adminTargets.slice(batchStart, batchEnd);
+        const results = await Promise.allSettled(
+          batchTargets.map(async (target) => {
+            const existing = await getFlashcardContent(target.character, target.pronunciation);
+            if (existing?.content) {
+              return { outcome: "skipped" as const, target, content: existing.content };
             }
-            continue;
+            const generated = await requestGeneratedFlashcardContent({
+              character: target.character,
+              pronunciation: target.pronunciation,
+            });
+            await putFlashcardContent(target.character, target.pronunciation, generated);
+            return { outcome: "generated" as const, target, content: generated };
+          })
+        );
+
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            const { outcome, target, content } = result.value;
+            if (outcome === "skipped") {
+              skippedCount += 1;
+              setAdminSavedByKey((previous) => ({ ...previous, [target.key]: true }));
+              if (!adminJsonByKey[target.key]) {
+                updateAdminJson(target.key, JSON.stringify(content, null, 2));
+              }
+            } else {
+              generatedCount += 1;
+              updateAdminJson(target.key, JSON.stringify(content, null, 2));
+              setAdminSavedByKey((previous) => ({ ...previous, [target.key]: true }));
+              setFlashcardLlmData((previous) => ({ ...previous, [target.key]: content }));
+            }
+          } else {
+            failedCount += 1;
           }
-
-          const generated = await requestGeneratedFlashcardContent({
-            character: target.character,
-            pronunciation: target.pronunciation,
-          });
-
-          await putFlashcardContent(target.character, target.pronunciation, generated);
-          updateAdminJson(target.key, JSON.stringify(generated, null, 2));
-          setAdminSavedByKey((previous) => ({
-            ...previous,
-            [target.key]: true,
-          }));
-          setFlashcardLlmData((previous) => ({
-            ...previous,
-            [target.key]: generated,
-          }));
-          generatedCount += 1;
-        } catch {
-          failedCount += 1;
         }
       }
     } finally {
+      preloadCancelRef.current = false;
+      setAdminPreloadCancelling(false);
       setAdminPreloading(false);
       setAdminProgressText(null);
     }
 
+    const template = cancelled ? str.admin.preloadCancelled : str.admin.preloadResult;
     setAdminNotice(
-      `Preload finished. Generated ${generatedCount}, skipped ${skippedCount}, failed ${failedCount}.`
+      template
+        .replace("{generated}", String(generatedCount))
+        .replace("{skipped}", String(skippedCount))
+        .replace("{failed}", String(failedCount))
     );
+  }
+
+  function cancelAdminPreload() {
+    preloadCancelRef.current = true;
+    setAdminPreloadCancelling(true);
   }
 
   async function handleAdminRefreshAllPinyin() {
@@ -2053,11 +2096,10 @@ const gradeLabels = getGradeLabels(str);
 
         setAdminNotice(getErrorMessage(error, "Failed to load admin targets."));
       } finally {
+        setAdminLoading(false);
         if (!active) {
           return;
         }
-
-        setAdminLoading(false);
       }
     })();
 
@@ -2657,6 +2699,7 @@ const gradeLabels = getGradeLabels(str);
   const sectionVm = {
     page,
     str,
+    loadError,
     formNotice,
     addWord,
     hanzi,
@@ -2747,6 +2790,8 @@ const gradeLabels = getGradeLabels(str);
     adminTargetsReadyForTestingCount,
     adminTargetsExcludedForTestingCount,
     handleAdminPreloadAll,
+    cancelAdminPreload,
+    adminPreloadCancelling,
     handleAdminRefreshAllPinyin,
     adminLoading,
     adminPreloading,

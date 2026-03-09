@@ -9,6 +9,7 @@ export function useWordsBaseState() {
   const [words, setWords] = useState<Word[]>([]);
   const [dueWords, setDueWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [hanzi, setHanzi] = useState("");
   const [formNotice, setFormNotice] = useState<string | null>(null);
@@ -34,6 +35,8 @@ export function useWordsBaseState() {
     setDueWords,
     loading,
     setLoading,
+    loadError,
+    setLoadError,
     hanzi,
     setHanzi,
     formNotice,

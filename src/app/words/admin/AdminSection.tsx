@@ -22,6 +22,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminTargetsReadyForTestingCount,
     adminTargetsExcludedForTestingCount,
     handleAdminPreloadAll,
+    cancelAdminPreload,
+    adminPreloadCancelling,
     handleAdminRefreshAllPinyin,
     adminLoading,
     adminPreloading,
@@ -307,6 +309,16 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         >
           {adminPreloading ? str.admin.buttons.preloading : str.admin.buttons.preload}
         </button>
+        {adminPreloading ? (
+          <button
+            type="button"
+            className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
+            onClick={cancelAdminPreload}
+            disabled={adminPreloadCancelling}
+          >
+            {adminPreloadCancelling ? str.admin.buttons.cancellingPreload : str.admin.buttons.cancelPreload}
+          </button>
+        ) : null}
         <button
           type="button"
           className="rounded-md border-2 border-purple-300 bg-purple-100 px-4 py-2 font-medium text-purple-700 disabled:opacity-50"

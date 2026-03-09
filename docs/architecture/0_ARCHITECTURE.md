@@ -93,9 +93,10 @@ These rules govern content curation at `/words/admin`:
    - `excluded for testing`: has content but no phrase included for fill test
 9. Preload generation skips targets that already have persisted content and continues non-fatally on per-target failures.
 10. Characters with no dictionary pronunciation are skipped with notice; this is not a fatal load error.
-11. A **tag filter bar** (Textbook / Grade / Unit / Lesson) is displayed above the character list when tag data exists. Same AND logic and cascade behavior as `/words/all`.
-12. Characters with no tags are hidden when any filter is active.
-13. No Lessons column is added to the admin table (filter-only in this phase).
+11. Preload batch execution uses a fixed concurrency of 3 (`Promise.allSettled`). Batch size is capped at 3 to avoid saturating the AI provider with concurrent requests from a single session. No per-character retry — a failed character is counted and skipped; the loop continues. The completion notice reports total succeeded and total failed counts. Batch size must not be increased without validating provider rate limits.
+12. A **tag filter bar** (Textbook / Grade / Unit / Lesson) is displayed above the character list when tag data exists. Same AND logic and cascade behavior as `/words/all`.
+13. Characters with no tags are hidden when any filter is active.
+14. No Lessons column is added to the admin table (filter-only in this phase).
 
 ### Due Review Queue Rules
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type {
   AdminPendingMeaning,
   AdminPendingPhrase,
@@ -13,6 +13,8 @@ export function useAdminState() {
   const [adminJsonByKey, setAdminJsonByKey] = useState<Record<string, string>>({});
   const [adminSavedByKey, setAdminSavedByKey] = useState<Record<string, boolean>>({});
   const [adminPreloading, setAdminPreloading] = useState(false);
+  const [adminPreloadCancelling, setAdminPreloadCancelling] = useState(false);
+  const preloadCancelRef = useRef(false);
   const [adminProgressText, setAdminProgressText] = useState<string | null>(null);
   const [adminRegeneratingKey, setAdminRegeneratingKey] = useState<string | null>(null);
   const [adminSavingKey, setAdminSavingKey] = useState<string | null>(null);
@@ -36,6 +38,9 @@ export function useAdminState() {
     setAdminSavedByKey,
     adminPreloading,
     setAdminPreloading,
+    adminPreloadCancelling,
+    setAdminPreloadCancelling,
+    preloadCancelRef,
     adminProgressText,
     setAdminProgressText,
     adminRegeneratingKey,

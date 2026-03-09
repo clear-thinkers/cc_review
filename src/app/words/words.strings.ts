@@ -241,6 +241,8 @@ export const wordsStrings = {
       buttons: {
         preload: "Preload targets with missing content",
         preloading: "Preloading...",
+        cancelPreload: "Cancel",
+        cancellingPreload: "Cancelling...",
         refreshAllPinyin: "Regenerate missing pinyin",
         refreshingAllPinyin: "Regenerating...",
       },
@@ -307,7 +309,9 @@ export const wordsStrings = {
       loading: "Loading admin targets...",
       noTargets: "No targets yet. Add characters first.",
       preloadingProgress: "Preloading {current}/{total}: {character} / {pronunciation}",
+      preloadingBatchProgress: "Preloading {from}\u2013{to} / {total}...",
       preloadResult: "Preload finished. Generated {generated}, skipped {skipped}, failed {failed}.",
+      preloadCancelled: "Preload cancelled. Generated {generated}, skipped {skipped}, failed {failed}.",
       messages: {
         saveMeaning: "Saved {character} / {pronunciation}.",
         deleteEmpty: "Deleted empty (no content).",
@@ -368,6 +372,7 @@ export const wordsStrings = {
       noData: "No data yet.",
       error: "An error occurred.",
       success: "Operation completed successfully.",
+      loadError: "Failed to load app data. Please refresh the page or log in again.",
     },
   },
 
@@ -600,6 +605,8 @@ export const wordsStrings = {
       buttons: {
         preload: "预生成未保存内容",
         preloading: "预生成中...",
+        cancelPreload: "取消",
+        cancellingPreload: "取消中...",
         refreshAllPinyin: "批量生成拼音",
         refreshingAllPinyin: "生成中...",
       },
@@ -665,8 +672,10 @@ export const wordsStrings = {
       loading: "正在加载内容条目...",
       noTargets: "暂无可管理内容（请先添加汉字）",
       preloadingProgress: "预生成进度 {current}/{total}: {character} / {pronunciation}",
+      preloadingBatchProgress: "预生成 {from}\u2013{to} / {total}...",
       preloadResult:
         "预生成完成。生成 {generated} 个，跳过 {skipped} 个，失败 {failed} 个。",
+      preloadCancelled: "预生成已取消。生成 {generated} 个，跳过 {skipped} 个，失败 {failed} 个。",
       messages: {
         saveMeaning: "已保存 {character} / {pronunciation}。",
         deleteEmpty: "已删除空条目（无内容）。",
@@ -727,6 +736,7 @@ export const wordsStrings = {
       noData: "暂无数据。",
       error: "发生错误。",
       success: "操作成功完成。",
+      loadError: "加载数据失败，请刷新页面或重新登录。",
     },
   },
 };
