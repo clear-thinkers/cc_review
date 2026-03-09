@@ -1,6 +1,6 @@
 ﻿# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-03-06_ (Service Layer Migration complete; IndexedDB fully retired)
+_Last updated: 2026-03-09_ (Admin-Configurable LLM Prompts complete)
 
 ---
 
@@ -53,10 +53,18 @@ Features now include a “Last touched” timestamp and a broader set of status 
 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
-| 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in Supabase. Separated by generation type (full / phrase / example / pinyin). | `docs/feature-specs/` | 📋 Planned | — |
+| 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in Supabase. Separated by generation type (full / phrase / example / pinyin). | `docs/architecture/2026-03-09-admin-configurable-llm-prompts.md` | ✅ Done | 2026-03-09 |
 | 7 | **Character Level Tagging** | Add `level` field to `Word` (e.g., Grade 1, Grade 2). Assign and filter on All Characters page. Review scope can be filtered by level. Scheduler unaffected. | `docs/feature-specs/` | 📋 Planned | — |
 | 10 | **Bakery Shop** | Virtual bakery shop: purchase furniture, display items, decorations with earned coins. `inventory` and `shopState` tables. Spend coins to customize player environment. No real money, no scheduler impact. | [`docs/feature-specs/2026-03-04-coin-rewards-system.md`](../../feature-specs/2026-03-04-coin-rewards-system.md) | 📋 Planned | — |
 
+## Fixed to be done
+1. Delete History button not working for parent accounts - after hitting the button history still exists.  however, it worked for the admin account.  also, make sure that when history is cleared, the coins earned are not cleared. 
+2. The history table of quiz results is not displaying correctly in browser when user uses the app in phone (I tested using iphone)
+
+## Minor UI updates
+1. once logged in, allow users to switch profile just by entering PIN (right now user has to log out and relog in)
+2. once logged in, allow all users types to change profile pics
+3. Update app name， add app logo
 ---
 
 ## 3. Deferred — Do Not Build Yet

@@ -4,6 +4,7 @@ export type ProtectedRoute =
   | '/words/add'
   | '/words/all'
   | '/words/admin'
+  | '/words/prompts'
   | '/words/results'
   | '/words/review'
   | '/words/review/flashcard'
@@ -28,6 +29,7 @@ export function canAccessRoute(
   switch (route) {
     case '/words/add':
     case '/words/admin':
+    case '/words/prompts':
       return role === 'parent';
     
     case '/words/review/fill-test':

@@ -32,6 +32,7 @@ import { calculateSessionCoins } from "@/lib/coins";
 import type { Word } from "@/lib/types";
 import type { QuizSession } from "@/app/words/results/results.types";
 import { getXinhuaFlashcardInfo } from "@/lib/xinhua";
+import { supabase } from "@/lib/supabaseClient";
 import { useSession } from "@/lib/authContext";
 import {
   QUIZ_PHRASE_DRAG_MIME,
@@ -914,11 +915,19 @@ const gradeLabels = getGradeLabels(str);
   }, [refreshAll]);
 
   async function requestFlashcardGeneration(payloadBody: unknown): Promise<unknown> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    // Include auth token so the API route can resolve family-scoped prompts
+    const {
+      data: { session: supabaseSession },
+    } = await supabase.auth.getSession();
+    if (supabaseSession?.access_token) {
+      headers["Authorization"] = `Bearer ${supabaseSession.access_token}`;
+    }
     const response = await fetch("/api/flashcard/generate", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify(payloadBody),
     });
 

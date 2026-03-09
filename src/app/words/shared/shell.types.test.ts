@@ -7,8 +7,8 @@ import type {
 
 describe("Shell & Navigation Types", () => {
   it("should allow creating NavPage values", () => {
-    const pages: NavPage[] = ["add", "all", "review", "admin"];
-    expect(pages).toHaveLength(4);
+    const pages: NavPage[] = ["add", "all", "review", "admin", "results", "prompts"];
+    expect(pages).toHaveLength(6);
   });
 
   it("should allow creating WordsSectionPage values", () => {
@@ -17,10 +17,12 @@ describe("Shell & Navigation Types", () => {
       "all",
       "review",
       "admin",
+      "results",
+      "prompts",
       "flashcard",
       "fillTest",
     ];
-    expect(pages).toHaveLength(6);
+    expect(pages).toHaveLength(8);
   });
 
   it("should allow creating NavItem objects", () => {

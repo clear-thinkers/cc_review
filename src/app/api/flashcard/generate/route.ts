@@ -4,15 +4,19 @@ import {
   parseAndNormalizeFlashcardLlmResponse,
   type FlashcardLlmRequest,
 } from "@/lib/flashcardLlm";
+import { supabase, getServerSupabaseClient } from "@/lib/supabaseClient";
+import type { PromptType } from "@/lib/supabase-service";
 
 const DEFAULT_DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 const MAX_EXAMPLE_LENGTH = 30;
 const RETRY_LIMIT = 2;
 
-const FULL_SYSTEM_PROMPT = `You are a professional elementary Chinese learning assistant.
-Generate JSON only for one character and one pronunciation.
-Output format:
+// ── Hardcoded return-format suffixes (not user-editable) ───────────────────
+// These are always appended to the resolved instructions at call time.
+// User-customizable prompt bodies store instructions + rules ONLY.
+
+const FULL_FORMAT_SUFFIX = `Output format:
 {
   "character":"character",
   "pronunciation":"pinyin",
@@ -26,55 +30,71 @@ Output format:
     }
   ]
 }
+Return JSON only.`;
+
+const PHRASE_FORMAT_SUFFIX = `Return JSON only:
+{"phrase":"...", "pinyin":"...", "example":"...", "example_pinyin":"..."}
+Do not return any extra fields.`;
+
+const EXAMPLE_FORMAT_SUFFIX = `Return JSON only:
+{"example":"...", "example_pinyin":"..."}
+Do not return any extra fields.`;
+
+const PHRASE_DETAIL_FORMAT_SUFFIX = `Return JSON only:
+{"pinyin":"...", "example":"...", "example_pinyin":"..."}
+Do not return any extra fields.`;
+
+const MEANING_DETAIL_FORMAT_SUFFIX = `Return JSON only:
+{"definition_en":"..."}
+Do not return any extra fields.`;
+
+const PROMPT_FORMAT_SUFFIXES: Record<PromptType, string> = {
+  full: FULL_FORMAT_SUFFIX,
+  phrase: PHRASE_FORMAT_SUFFIX,
+  example: EXAMPLE_FORMAT_SUFFIX,
+  phrase_details: PHRASE_DETAIL_FORMAT_SUFFIX,
+  meaning_details: MEANING_DETAIL_FORMAT_SUFFIX,
+};
+
+// ── User-customizable instruction defaults (instructions + rules only) ───────
+
+const FULL_SYSTEM_PROMPT = `You are a professional elementary Chinese learning assistant.
+Generate JSON only for one character and one pronunciation.
 Rules:
 - 1-3 meanings.
 - 2 phrases per meaning, prioritize common Chinese idioms.
 - examples <= 30 Chinese characters.
-- positive, age-appropriate content.
-- phrase object can include only phrase, pinyin, example, example_pinyin.
-- return JSON only.`;
+- positive, age-appropriate content.`;
 
 const PHRASE_SYSTEM_PROMPT = `Generate one new phrase and one matching example sentence for elementary students.
-Return JSON only:
-{"phrase":"...", "pinyin":"...", "example":"...", "example_pinyin":"..."}
 Rules:
 - phrase must include the target character.
 - phrase must match the pronunciation and meaning provided for that character.
 - phrase length 2-4 Chinese characters.
 - example must be <= 30 Chinese characters.
 - example_pinyin must match the example and include tones.
-- positive and age-appropriate.
-- do not return any extra fields.`;
+- positive and age-appropriate.`;
 
 const EXAMPLE_SYSTEM_PROMPT = `Generate one new example sentence for elementary students.
-Return JSON only:
-{"example":"...", "example_pinyin":"..."}
 Rules:
 - sentence must naturally use the given phrase.
 - sentence must be <= 30 Chinese characters.
 - example_pinyin must match the sentence and include tones.
-- positive and age-appropriate.
-- do not return any extra fields.`;
+- positive and age-appropriate.`;
 
 const PHRASE_DETAIL_SYSTEM_PROMPT = `Given a fixed phrase, generate phrase pinyin and one short example sentence for elementary students.
-Return JSON only:
-{"pinyin":"...", "example":"...", "example_pinyin":"..."}
 Rules:
 - Keep the phrase unchanged.
 - Pinyin must match the given phrase and include tones.
 - Example must naturally include the exact phrase.
 - Example must be <= 30 Chinese characters.
 - example_pinyin must match the example and include tones.
-- Positive and age-appropriate.
-- do not return any extra fields.`;
+- Positive and age-appropriate.`;
 
 const MEANING_DETAIL_SYSTEM_PROMPT = `Given a Chinese meaning definition for elementary learners, provide a concise English translation.
-Return JSON only:
-{"definition_en":"..."}
 Rules:
 - Keep translation simple and child-friendly.
-- Do not add extra explanation.
-- do not return any extra fields.`;
+- Do not add extra explanation.`;
 
 const EXAMPLE_PINYIN_SYSTEM_PROMPT = `Given one Chinese example sentence, provide accurate pinyin with tones.
 Return JSON only:
@@ -84,6 +104,74 @@ Rules:
 - Use spaces between syllables.
 - Include tones.
 - do not return any extra fields.`;
+
+/**
+ * Resolves the active system prompt for a given mode and family from the DB.
+ * Falls back to the hardcoded constant if no DB match is found.
+ * Uses service-role client (bypasses RLS) since this runs server-side.
+ */
+async function resolveSystemPrompt(
+  mode: PromptType,
+  familyId: string | null,
+  hardcodedFallback: string
+): Promise<string> {
+  const formatSuffix = PROMPT_FORMAT_SUFFIXES[mode];
+  let instructions = hardcodedFallback;
+
+  if (familyId) {
+    try {
+      const adminClient = getServerSupabaseClient();
+
+      // Try family's active custom slot first
+      const { data: customSlot } = await adminClient
+        .from("prompt_templates")
+        .select("prompt_body")
+        .eq("family_id", familyId)
+        .eq("prompt_type", mode)
+        .eq("is_active", true)
+        .eq("is_default", false)
+        .maybeSingle();
+      if (customSlot && typeof (customSlot as { prompt_body?: string }).prompt_body === "string") {
+        instructions = (customSlot as { prompt_body: string }).prompt_body;
+      } else {
+        // Fall back to Default instructions
+        const { data: defaultSlot } = await adminClient
+          .from("prompt_templates")
+          .select("prompt_body")
+          .is("family_id", null)
+          .eq("prompt_type", mode)
+          .eq("is_default", true)
+          .maybeSingle();
+        if (defaultSlot && typeof (defaultSlot as { prompt_body?: string }).prompt_body === "string") {
+          instructions = (defaultSlot as { prompt_body: string }).prompt_body;
+        }
+      }
+    } catch (err) {
+      console.warn("[generate] Failed to resolve prompt from DB, using hardcoded fallback:", err);
+    }
+  }
+
+  return `${instructions}\n${formatSuffix}`;
+}
+
+/**
+ * Extracts the family_id from the Authorization header JWT.
+ * Returns null if the header is missing or the token is invalid.
+ */
+async function extractFamilyId(request: NextRequest): Promise<string | null> {
+  const authHeader = request.headers.get("Authorization");
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) return null;
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser(token);
+    const familyId = user?.app_metadata?.family_id;
+    return typeof familyId === "string" && familyId ? familyId : null;
+  } catch {
+    return null;
+  }
+}
 
 type GenerateMode = "full" | "phrase" | "example" | "phrase_details" | "meaning_details" | "example_pinyin";
 
@@ -450,6 +538,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const familyId = await extractFamilyId(request);
+
   let parsedRequest: GenerateRequest | null = null;
   try {
     parsedRequest = normalizeRequest((await request.json()) as unknown);
@@ -494,13 +584,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const model = process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL;
 
   try {
+    const resolvedFullPrompt = await resolveSystemPrompt("full", familyId, FULL_SYSTEM_PROMPT);
+    const resolvedPhrasePrompt = await resolveSystemPrompt("phrase", familyId, PHRASE_SYSTEM_PROMPT);
+    const resolvedExamplePrompt = await resolveSystemPrompt("example", familyId, EXAMPLE_SYSTEM_PROMPT);
+    const resolvedPhraseDetailPrompt = await resolveSystemPrompt("phrase_details", familyId, PHRASE_DETAIL_SYSTEM_PROMPT);
+    const resolvedMeaningDetailPrompt = await resolveSystemPrompt("meaning_details", familyId, MEANING_DETAIL_SYSTEM_PROMPT);
+
     if (parsedRequest.mode === "phrase") {
       for (let attempt = 0; attempt < RETRY_LIMIT; attempt += 1) {
         const message = await callDeepSeek({
           endpoint,
           apiKey,
           model,
-          systemPrompt: PHRASE_SYSTEM_PROMPT,
+          systemPrompt: resolvedPhrasePrompt,
           userPrompt: buildUserPromptForPhrase(parsedRequest),
           temperature: 0.6,
         });
@@ -528,7 +624,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           endpoint,
           apiKey,
           model,
-          systemPrompt: EXAMPLE_SYSTEM_PROMPT,
+          systemPrompt: resolvedExamplePrompt,
           userPrompt: buildUserPromptForExample(parsedRequest),
           temperature: 0.6,
         });
@@ -554,7 +650,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           endpoint,
           apiKey,
           model,
-          systemPrompt: PHRASE_DETAIL_SYSTEM_PROMPT,
+          systemPrompt: resolvedPhraseDetailPrompt,
           userPrompt: buildUserPromptForPhraseDetails(parsedRequest),
           temperature: 0.4,
         });
@@ -581,7 +677,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           endpoint,
           apiKey,
           model,
-          systemPrompt: MEANING_DETAIL_SYSTEM_PROMPT,
+          systemPrompt: resolvedMeaningDetailPrompt,
           userPrompt: buildUserPromptForMeaningDetails(parsedRequest),
           temperature: 0.2,
         });
@@ -623,7 +719,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       endpoint,
       apiKey,
       model,
-      systemPrompt: FULL_SYSTEM_PROMPT,
+      systemPrompt: resolvedFullPrompt,
       userPrompt: buildUserPromptForFull(parsedRequest),
       temperature: 0.4,
     });

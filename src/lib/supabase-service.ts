@@ -436,3 +436,232 @@ export async function updateWallet(coinsEarned: number): Promise<Wallet> {
   if (error) throw new Error(`updateWallet: ${error.message}`);
   return toWallet(data);
 }
+
+// ─── Prompt Templates ────────────────────────────────────────────────────────
+
+export type PromptType = "full" | "phrase" | "example" | "phrase_details" | "meaning_details";
+
+export type PromptTemplate = {
+  id: string;
+  familyId: string | null;
+  userId: string | null;
+  promptType: PromptType;
+  slotName: string;
+  promptBody: string;
+  isActive: boolean;
+  isDefault: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+const MAX_PROMPT_SLOTS_PER_FAMILY_PER_TYPE = 5;
+
+interface SupabasePromptTemplateRow {
+  id: string;
+  family_id: string | null;
+  user_id: string | null;
+  prompt_type: string;
+  slot_name: string;
+  prompt_body: string;
+  is_active: boolean;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+function toPromptTemplate(row: SupabasePromptTemplateRow): PromptTemplate {
+  return {
+    id: row.id,
+    familyId: row.family_id,
+    userId: row.user_id,
+    promptType: row.prompt_type as PromptType,
+    slotName: row.slot_name,
+    promptBody: row.prompt_body,
+    isActive: row.is_active,
+    isDefault: row.is_default,
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+  };
+}
+
+/**
+ * Lists all prompt slots visible to the current user for a given prompt type.
+ * Returns Default row first, then user-owned rows ordered by creation date.
+ */
+export async function listPromptSlots(promptType: PromptType): Promise<PromptTemplate[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("prompt_templates")
+    .select("*")
+    .eq("prompt_type", promptType)
+    .or(`family_id.eq.${familyId},is_default.eq.true`)
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listPromptSlots: ${error.message}`);
+  return (data as SupabasePromptTemplateRow[]).map(toPromptTemplate);
+}
+
+/**
+ * Creates a new user-owned prompt slot or updates an existing one.
+ * Enforces the 5-slot maximum per family per prompt type on create.
+ */
+export async function upsertPromptSlot(
+  slot: Pick<PromptTemplate, "promptType" | "slotName" | "promptBody"> & { id?: string }
+): Promise<PromptTemplate> {
+  const { familyId, userId } = await getSessionMetadata();
+
+  if (!slot.id) {
+    // Count existing user-owned slots before creating a new one
+    const { count, error: countErr } = await supabase
+      .from("prompt_templates")
+      .select("id", { count: "exact", head: true })
+      .eq("family_id", familyId)
+      .eq("prompt_type", slot.promptType)
+      .eq("is_default", false);
+    if (countErr) throw new Error(`upsertPromptSlot count: ${countErr.message}`);
+    if ((count ?? 0) >= MAX_PROMPT_SLOTS_PER_FAMILY_PER_TYPE) {
+      throw new Error(
+        `Maximum of ${MAX_PROMPT_SLOTS_PER_FAMILY_PER_TYPE} slots per prompt type allowed.`
+      );
+    }
+  }
+
+  const now = new Date().toISOString();
+
+  if (slot.id) {
+    // Update: only allow updating own family's non-default slots
+    const { data, error } = await supabase
+      .from("prompt_templates")
+      .update({
+        slot_name: slot.slotName,
+        prompt_body: slot.promptBody,
+        updated_at: now,
+      })
+      .eq("id", slot.id)
+      .eq("family_id", familyId)
+      .eq("is_default", false)
+      .select()
+      .single();
+    if (error) throw new Error(`upsertPromptSlot update: ${error.message}`);
+    return toPromptTemplate(data as SupabasePromptTemplateRow);
+  } else {
+    const { data, error } = await supabase
+      .from("prompt_templates")
+      .insert({
+        family_id: familyId,
+        user_id: userId,
+        prompt_type: slot.promptType,
+        slot_name: slot.slotName,
+        prompt_body: slot.promptBody,
+        is_active: false,
+        is_default: false,
+        created_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single();
+    if (error) throw new Error(`upsertPromptSlot insert: ${error.message}`);
+    return toPromptTemplate(data as SupabasePromptTemplateRow);
+  }
+}
+
+/**
+ * Updates the Default prompt slot body and name. Platform_admin only.
+ * RLS enforces this — only platform_admin rows satisfy the policy for is_default rows.
+ */
+export async function updateDefaultPromptSlot(
+  id: string,
+  updates: Pick<PromptTemplate, "slotName" | "promptBody">
+): Promise<PromptTemplate> {
+  const { data, error } = await supabase
+    .from("prompt_templates")
+    .update({
+      slot_name: updates.slotName,
+      prompt_body: updates.promptBody,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("is_default", true)
+    .select()
+    .single();
+  if (error) throw new Error(`updateDefaultPromptSlot: ${error.message}`);
+  return toPromptTemplate(data as SupabasePromptTemplateRow);
+}
+
+/**
+ * Deletes a user-owned prompt slot (never a Default row).
+ * Safe to call on the active slot — the active slot's deletion causes
+ * the system to fall back to the Default automatically (no is_active cleanup needed;
+ * the API route simply finds no active slot and uses the Default).
+ */
+export async function deletePromptSlot(id: string): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("prompt_templates")
+    .delete()
+    .eq("id", id)
+    .eq("family_id", familyId)
+    .eq("is_default", false); // Prevent accidental Default deletion
+  if (error) throw new Error(`deletePromptSlot: ${error.message}`);
+}
+
+/**
+ * Sets a user-owned slot as the active prompt for its type within the current family.
+ * Deactivates any previously active user-owned slot for the same prompt type first.
+ * The Default slot does not need explicit activation — it is used when no user
+ * slot is active.
+ */
+export async function setActivePromptSlot(id: string, promptType: PromptType): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const now = new Date().toISOString();
+
+  // Deactivate all user-owned slots for this family + type
+  const { error: deactivateErr } = await supabase
+    .from("prompt_templates")
+    .update({ is_active: false, updated_at: now })
+    .eq("family_id", familyId)
+    .eq("prompt_type", promptType)
+    .eq("is_default", false);
+  if (deactivateErr) throw new Error(`setActivePromptSlot deactivate: ${deactivateErr.message}`);
+
+  // Activate the target slot
+  const { error: activateErr } = await supabase
+    .from("prompt_templates")
+    .update({ is_active: true, updated_at: now })
+    .eq("id", id)
+    .eq("family_id", familyId);
+  if (activateErr) throw new Error(`setActivePromptSlot activate: ${activateErr.message}`);
+}
+
+/**
+ * Returns the active prompt body for a given type and family (browser client).
+ * Returns null if no active slot is found (caller uses its hardcoded fallback).
+ */
+export async function getActivePromptBody(promptType: PromptType): Promise<string | null> {
+  const { familyId } = await getSessionMetadata();
+
+  // Try family's active custom slot first
+  const { data: customSlot, error: customErr } = await supabase
+    .from("prompt_templates")
+    .select("prompt_body")
+    .eq("family_id", familyId)
+    .eq("prompt_type", promptType)
+    .eq("is_active", true)
+    .eq("is_default", false)
+    .maybeSingle();
+  if (customErr) throw new Error(`getActivePromptBody custom: ${customErr.message}`);
+  if (customSlot) return (customSlot as { prompt_body: string }).prompt_body;
+
+  // Fall back to Default
+  const { data: defaultSlot, error: defaultErr } = await supabase
+    .from("prompt_templates")
+    .select("prompt_body")
+    .is("family_id", null)
+    .eq("prompt_type", promptType)
+    .eq("is_default", true)
+    .maybeSingle();
+  if (defaultErr) throw new Error(`getActivePromptBody default: ${defaultErr.message}`);
+  if (defaultSlot) return (defaultSlot as { prompt_body: string }).prompt_body;
+
+  return null;
+}

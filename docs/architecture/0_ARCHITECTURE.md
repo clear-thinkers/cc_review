@@ -219,6 +219,7 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | `/words/add` | ❌ | ✅ | ✅ |
 | `/words/all` | ✅ | ✅ | ✅ |
 | `/words/admin` | ❌ | ✅ | ✅ |
+| `/words/prompts` | ❌ | ✅ | ✅ |
 | `/words/results` | ✅ | ✅ | ✅ |
 | `/words/review` | ✅ | ✅ | ✅ |
 | `/words/review/flashcard` | ✅ | ✅ | ✅ |
@@ -235,7 +236,7 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | UI | `src/app/...`, `WordsWorkspace` | Interaction, view state, locale rendering |
 | Domain | `src/lib/scheduler.ts`, `src/lib/fillTest.ts`, `src/lib/flashcardLlm.ts` | Pure logic: scheduling, grading, normalization |
 | Service | `src/lib/supabase-service.ts`, `src/lib/supabaseClient.ts`, `src/lib/xinhua.ts` | IO: Supabase reads/writes (all data access), static data loading |
-| AI | `src/app/api/flashcard/generate/route.ts` | Prompt orchestration, provider calls |
+| AI | `src/app/api/flashcard/generate/route.ts` | Prompt orchestration, provider calls, active-prompt resolution from `prompt_templates` |
 
 ### Call Graph (Structural)
 
@@ -345,6 +346,23 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `total_coins` | integer | Cumulative coins earned across all sessions (default: 0) |
 | `last_updated_at` | timestamptz | Server timestamp of last wallet update |
 | `version` | integer | Schema version for future upgrades (currently 1) |
+
+**`prompt_templates` table** — configurable LLM prompt templates (Phase 2, Feature #1)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `family_id` | uuid (nullable) | Foreign key → `families.id`; null for Default rows |
+| `user_id` | uuid (nullable) | Foreign key → `users.id`; null for Default rows |
+| `prompt_type` | text | One of: `full`, `phrase`, `example`, `phrase_details`, `meaning_details` |
+| `slot_name` | text | User-visible name; max 50 chars; Default rows always named `"Default"` |
+| `prompt_body` | text | System prompt sent to DeepSeek; per-type min/max enforced in service layer |
+| `is_active` | boolean | True on the currently active slot; at most one per `(family_id, prompt_type)` |
+| `is_default` | boolean | True only for the platform-wide Default rows (`family_id = null`) |
+| `created_at` | timestamptz | Server timestamp |
+| `updated_at` | timestamptz | Server timestamp of last update |
+| **Active constraint** | | At most one `is_active = true` per `(family_id, prompt_type)` — enforced in service layer |
+| **Slot limit** | | Max 5 user-owned rows per `(family_id, prompt_type)` — enforced in service layer |
 
 ---
 
