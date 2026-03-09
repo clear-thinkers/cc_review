@@ -58,12 +58,9 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | 10 | **Bakery Shop** | Virtual bakery shop: purchase furniture, display items, decorations with earned coins. `inventory` and `shopState` tables. Spend coins to customize player environment. No real money, no scheduler impact. | [`docs/feature-specs/2026-03-04-coin-rewards-system.md`](../../feature-specs/2026-03-04-coin-rewards-system.md) | 📋 Planned | — |
 
 ## Fixed to be done
-1. Delete History button not working for parent accounts - after hitting the button history still exists.  however, it worked for the admin account.  also, make sure that when history is cleared, the coins earned are not cleared. 
 2. The history table of quiz results is not displaying correctly in browser when user uses the app in phone (I tested using iphone)
 
 ## Minor UI updates
-1. once logged in, allow users to switch profile just by entering PIN (right now user has to log out and relog in)
-2. once logged in, allow all users types to change profile pics
 3. Update app name， add app logo
 ---
 

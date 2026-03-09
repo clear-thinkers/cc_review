@@ -33,7 +33,7 @@ import {
 import { useRouter } from 'next/navigation';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
-import type { AppSession, AuthContextValue, UserProfile } from './auth.types';
+import type { AppSession, AuthContextValue, AvatarId, UserProfile } from './auth.types';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -131,6 +131,43 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
     // onAuthStateChange handles clearing isLayer1Ready, session, familyProfiles
   }, []);
 
+  /**
+   * Clears only Layer 2 (profile session) without signing out of Supabase.
+   * isLayer1Ready and familyProfiles remain intact so the user lands on the
+   * profile picker and can immediately choose a profile + enter PIN.
+   */
+  const switchProfile = useCallback((): void => {
+    setSession(null);
+    router.push('/profile-select');
+  }, [router]);
+
+  /**
+   * Updates the avatar for the currently active profile.
+   * Calls PATCH /api/auth/update-avatar (server-side; user_id from JWT claims).
+   * On success, synchronises both session state and familyProfiles.
+   */
+  const updateSessionAvatar = useCallback(async (avatarId: AvatarId): Promise<void> => {
+    const accessToken = sessionRef.current?.supabaseSession.access_token;
+    if (!accessToken || !sessionRef.current) return;
+
+    const res = await fetch('/api/auth/update-avatar', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ avatarId }),
+    });
+
+    if (!res.ok) return;
+
+    const currentUserId = sessionRef.current.userId;
+    setSession(prev => (prev ? { ...prev, avatarId } : null));
+    setFamilyProfiles(prev =>
+      prev.map(p => (p.id === currentUserId ? { ...p, avatarId } : p))
+    );
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       isLayer1Ready,
@@ -138,8 +175,10 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
       familyProfiles,
       setProfileSession,
       clearSession,
+      switchProfile,
+      updateSessionAvatar,
     }),
-    [isLayer1Ready, session, familyProfiles, setProfileSession, clearSession]
+    [isLayer1Ready, session, familyProfiles, setProfileSession, clearSession, switchProfile, updateSessionAvatar]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

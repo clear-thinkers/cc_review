@@ -10,6 +10,7 @@ export default function Home() {
   return (
     <main className="p-6 space-y-4">
       <h1 className="text-2xl font-semibold">{str.home.pageTitle}</h1>
+      <p className="text-sm text-gray-500">{str.home.pageSubtitle}</p>
       <a className="underline" href="/words">
         {str.home.enterGameLink}
       </a>

@@ -15,7 +15,8 @@ export const authStrings = {
   en: {
     // ── Shared ─────────────────────────────────────────────────────────
     shared: {
-      appName: 'Chinese Review',
+      appName: 'HanziQuest',
+      appSubtitle: 'Chinese Character Practice for Kids',
       loading: 'Loading…',
       logout: 'Log out',
       back: '← Back',
@@ -106,7 +107,8 @@ export const authStrings = {
   zh: {
     // ── Shared ─────────────────────────────────────────────────────────
     shared: {
-      appName: '中文复习',
+      appName: '汉字复习游戏',
+      appSubtitle: '专为北美小学生设计',
       loading: '加载中…',
       logout: '退出登录',
       back: '← 返回',

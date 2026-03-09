@@ -26,7 +26,11 @@ export default function ProfileSelectPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-6">
       <div className="w-full max-w-md space-y-6">
-        <h1 className="text-center text-2xl font-semibold">{shared.appName}</h1>
+        <div className="space-y-1 text-center">
+          <img src="/logo.png" alt="HanziQuest" className="mx-auto mb-3 block h-44 w-auto mix-blend-multiply" />
+          <h1 className="text-2xl font-semibold">{shared.appName}</h1>
+          <p className="text-sm italic text-gray-500">{shared.appSubtitle}</p>
+        </div>
         <h2 className="text-center text-lg font-medium">{str.heading}</h2>
         <p className="text-center text-sm text-gray-600">{str.subheading}</p>
 

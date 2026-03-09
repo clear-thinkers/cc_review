@@ -8,8 +8,8 @@
 export const appStrings = {
   en: {
     metadata: {
-      title: "Chinese Character Review Game",
-      description: "Chinese Character Review Game",
+      title: "HanziQuest — Chinese Character Practice for Kids",
+      description: "Chinese Character Practice for Kids",
     },
     locale: {
       label: "Language",
@@ -17,7 +17,8 @@ export const appStrings = {
       chineseButton: "CN",
     },
     home: {
-      pageTitle: "Chinese Character Review Game",
+      pageTitle: "HanziQuest",
+      pageSubtitle: "Chinese Character Practice for Kids",
       enterGameLink: "Enter Game",
     },
   },
@@ -33,6 +34,7 @@ export const appStrings = {
     },
     home: {
       pageTitle: "汉字复习游戏",
+      pageSubtitle: "专为北美小学生设计",
       enterGameLink: "进入游戏",
     },
   },

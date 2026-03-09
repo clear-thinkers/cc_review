@@ -106,4 +106,18 @@ export interface AuthContextValue {
 
   /** Signs out of Supabase and clears all context state. */
   clearSession: () => Promise<void>;
+
+  /**
+   * Clears only Layer 2 (profile session) without signing out of Supabase.
+   * Family profiles remain loaded so the user can immediately pick a new
+   * profile and enter their PIN — no email/password re-entry needed.
+   */
+  switchProfile: () => void;
+
+  /**
+   * Updates the avatar for the currently active profile.
+   * Persists to Supabase via PATCH /api/auth/update-avatar and
+   * synchronises both session and familyProfiles in React state.
+   */
+  updateSessionAvatar: (avatarId: AvatarId) => Promise<void>;
 }

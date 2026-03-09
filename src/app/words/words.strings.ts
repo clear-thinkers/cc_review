@@ -12,7 +12,8 @@ export const wordsStrings = {
   en: {
     // ============= NAVIGATION =============
     nav: {
-      appTitle: "Chinese Character Review Game",
+      appTitle: "HanziQuest",
+      appSubtitle: "Chinese Character Practice for Kids",
       menu: "Menu",
       navigateBetweenPages: "Navigate between pages.",
       addCharacters: "Add Characters",
@@ -22,6 +23,8 @@ export const wordsStrings = {
       dueReview: "Due Review",
       quizResults: "Quiz Results",
       logout: "Logout",
+      switchProfile: "Switch Profile",
+      changeAvatar: "Change Avatar",
     },
 
     // ============= GRADING LABELS =============
@@ -372,6 +375,7 @@ export const wordsStrings = {
     // ============= NAVIGATION =============
     nav: {
       appTitle: "汉字复习游戏",
+      appSubtitle: "专为北美小学生设计",
       menu: "菜单",
       navigateBetweenPages: "在页面之间导航。",
       addCharacters: "添加汉字",
@@ -381,6 +385,8 @@ export const wordsStrings = {
       dueReview: "待复习",
       quizResults: "测验结果",
       logout: "登出",
+      switchProfile: "切换用户",
+      changeAvatar: "更换头像",
     },
 
     // ============= GRADING LABELS =============

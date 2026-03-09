@@ -1,6 +1,6 @@
 # Feature Spec — 2026-03-05 — Auth & User Model
 
-_Status: ✅ Implemented — 2026-03-05 (feat/phase3)_
+_Status: ✅ Implemented — 2026-03-05 (feat/phase3); updated 2026-03-09 (switch-profile, change-avatar)_
 
 > This spec supersedes `docs/architecture/2026-03-04-login-and-avatar-protection.md`.
 > That doc should be moved to `docs/archive/2026-03/` once this spec is approved.
@@ -32,6 +32,8 @@ The entire auth layer must be replaced.
 - Logout flow
 - PIN lockout after failed attempts
 - All localStorage and IndexedDB auth logic retired
+- Inline profile switching (Layer 2 re-entry without Layer 1 sign-out)
+- Inline avatar change for any logged-in profile (all roles)
 
 ---
 
@@ -43,6 +45,7 @@ The entire auth layer must be replaced.
 - Social login / OAuth providers (deferred)
 - Email verification flow (defer to post-pilot; Supabase handles this natively when enabled)
 - Password change or profile name edit UI (deferred)
+- Avatar change is **in scope** (2026-03-09); profile name edit remains deferred
 - Content pack purchase auth (deferred)
 
 ---
@@ -297,6 +300,7 @@ On next visit, user must complete both layers again.
 | `src/app/(auth)/profile-select/page.tsx` | Layer 2 profile picker |
 | `src/app/(auth)/pin-entry/page.tsx` | Layer 2 PIN pad |
 | `src/app/api/auth/pin-verify/route.ts` | Server-side PIN verification API route |
+| `src/app/api/auth/update-avatar/route.ts` | PATCH — updates `users.avatar_id` for the active profile; `user_id` read from JWT `app_metadata`, never from client body |
 | `src/lib/authContext.tsx` | React context: AppSession provider + hook |
 | `src/lib/sessionGuard.tsx` | Route protection wrapper component |
 | `src/lib/supabaseClient.ts` | Supabase client singleton |
@@ -316,7 +320,9 @@ On next visit, user must complete both layers again.
 | File | Change |
 |---|---|
 | `src/app/layout.tsx` | Wrap with `SessionGuard` and `AuthContext` provider |
-| Nav/shell component | Read `userName` + `avatarId` from `AuthContext` instead of localStorage |
+| `src/app/words/shared/WordsShell.tsx` | Reads `userName` + `avatarId` from `AuthContext`; sidebar now has inline avatar picker (click avatar → 8-option grid → saves immediately) and a "Switch Profile" button |
+| `src/lib/authContext.tsx` | Added `switchProfile()` (clears Layer 2, redirects to `/profile-select`) and `updateSessionAvatar(avatarId)` (calls API, patches `session` and `familyProfiles` in React state) |
+| `src/lib/auth.types.ts` | Added `switchProfile` and `updateSessionAvatar` to `AuthContextValue` |
 
 ### Domain Layer
 No changes. Scheduler remains a pure function.
@@ -377,10 +383,13 @@ No changes. Scheduler remains a pure function.
 - [x] Page reload restores full session without re-entering credentials
 - [x] Logout clears Supabase session and `AuthContext`, redirects to `/login`
 - [x] No PIN hash stored in localStorage or client-side state
-- [x] All strings in `auth.strings.ts` (EN + ZH)
+- [x] All strings in `auth.strings.ts` / `words.strings.ts` (EN + ZH)
 - [x] All new types in `auth.types.ts`
 - [x] Old localStorage PIN auth code fully removed
 - [x] Old IndexedDB Dexie auth code fully removed
+- [x] "Switch Profile" clears Layer 2 only — Layer 1 JWT remains valid, no email/password re-entry
+- [x] Avatar change persists to `users.avatar_id` via `PATCH /api/auth/update-avatar`; session and `familyProfiles` updated in React state immediately
+- [x] `update-avatar` route reads `user_id` from JWT `app_metadata` — client cannot target another profile's row
 
 ---
 
