@@ -17,6 +17,10 @@ import {
   gradeWord,
   putFlashcardContent,
   updateWallet,
+  createLessonTagIfNew,
+  assignWordLessonTags,
+  createTextbook,
+  getWordLessonTagsForFamily,
 } from "@/lib/supabase-service";
 import { gradeFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -116,9 +120,12 @@ import { useAdminState } from "./state/useAdminState";
 import { useFillTestReviewState } from "./state/useFillTestReviewState";
 import { useFlashcardReviewState } from "./state/useFlashcardReviewState";
 import { useWordsBaseState } from "./state/useWordsBaseState";
+import { useLocale } from "@/app/shared/locale";
+import { taggingStrings } from "./tagging.strings";
 export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; str: WordsLocaleStrings }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const locale = useLocale();
   const baseState = useWordsBaseState();
   const flashcardState = useFlashcardReviewState();
   const fillTestState = useFillTestReviewState();
@@ -145,6 +152,20 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setDueWordsSortDirection,
     manualSelectedWordIds,
     setManualSelectedWordIds,
+    addTagSectionOpen,
+    setAddTagSectionOpen,
+    addTagTextbookId,
+    setAddTagTextbookId,
+    addTagTextbookName,
+    setAddTagTextbookName,
+    addTagGrade,
+    setAddTagGrade,
+    addTagUnit,
+    setAddTagUnit,
+    addTagLesson,
+    setAddTagLesson,
+    wordTagsMap,
+    setWordTagsMap,
   } = baseState;
 
   const {
@@ -795,6 +816,11 @@ const gradeLabels = getGradeLabels(str);
 
   function clearForm() {
     setHanzi("");
+    setAddTagSectionOpen(false);
+    setAddTagTextbookId(null);
+    setAddTagGrade(null);
+    setAddTagUnit(null);
+    setAddTagLesson(null);
   }
 
   function resetFlashcardWordState() {
@@ -905,7 +931,8 @@ const gradeLabels = getGradeLabels(str);
   const refreshAll = useCallback(async () => {
     await refreshWords();
     await refreshDueWords();
-  }, [refreshDueWords, refreshWords]);
+    await getWordLessonTagsForFamily().then(setWordTagsMap).catch(() => setWordTagsMap(new Map()));
+  }, [refreshDueWords, refreshWords, setWordTagsMap]);
 
   useEffect(() => {
     (async () => {
@@ -2133,6 +2160,26 @@ const gradeLabels = getGradeLabels(str);
       return;
     }
 
+    // Validate tag completeness: if the section is open, all 4 levels are required
+    const tagStr = taggingStrings[locale].add;
+
+    // If textbook name was typed but ID not yet resolved (blur-create pending), create now
+    let resolvedTextbookId = addTagTextbookId;
+    if (addTagSectionOpen && !resolvedTextbookId && addTagTextbookName.trim()) {
+      try {
+        const created = await createTextbook(addTagTextbookName.trim());
+        resolvedTextbookId = created.id;
+        setAddTagTextbookId(created.id);
+      } catch {
+        // fall through to validation which will surface the error
+      }
+    }
+
+    if (addTagSectionOpen && (!resolvedTextbookId || !addTagGrade || !addTagUnit || !addTagLesson)) {
+      setFormNotice(tagStr.partialTagError);
+      return;
+    }
+
     const existingWords = await getExistingWordsByHanzi(parsedCharacters);
     const existingHanziSet = new Set(existingWords.map((word) => word.hanzi));
     const hanziToAdd = parsedCharacters.filter((character) => !existingHanziSet.has(character));
@@ -2153,6 +2200,25 @@ const gradeLabels = getGradeLabels(str);
 
     if (newWords.length > 0) {
       await addWords(newWords);
+    }
+
+    // Assign lesson tag to all submitted characters (new + already-existing)
+    if (addTagSectionOpen && resolvedTextbookId && addTagGrade && addTagUnit && addTagLesson) {
+      const allTargetIds = [
+        ...newWords.map((w) => w.id),
+        ...existingWords
+          .filter((w) => parsedCharacters.includes(w.hanzi))
+          .map((w) => w.id),
+      ];
+      if (allTargetIds.length > 0) {
+        const lessonTag = await createLessonTagIfNew(
+          resolvedTextbookId,
+          addTagGrade,
+          addTagUnit,
+          addTagLesson
+        );
+        await assignWordLessonTags(allTargetIds, lessonTag.id);
+      }
     }
 
     clearForm();
@@ -2722,6 +2788,19 @@ const gradeLabels = getGradeLabels(str);
     sortedAllWords,
     resetWord,
     removeWord,
+    addTagSectionOpen,
+    setAddTagSectionOpen,
+    addTagTextbookId,
+    setAddTagTextbookId,
+    addTagTextbookName,
+    setAddTagTextbookName,
+    addTagGrade,
+    setAddTagGrade,
+    addTagUnit,
+    setAddTagUnit,
+    addTagLesson,
+    setAddTagLesson,
+    wordTagsMap,
   };
 
   const session = useSession();

@@ -1,11 +1,17 @@
 "use client";
 
+import { useMemo, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
+import type { ResolvedLessonTag } from "../shared/tagging.types";
+import { useLocale } from "@/app/shared/locale";
+import { taggingStrings } from "../shared/tagging.strings";
 
 export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const {
     page,
     str,
+    words,
     getAdminStatsCardClass,
     handleAdminStatsFilterClick,
     isAdminStatsFilterActive,
@@ -51,6 +57,154 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     handleAdminEditExample,
     handleAdminDeleteExample,
   } = vm;
+
+  const locale = useLocale();
+  const tagStr = taggingStrings[locale];
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const filterTextbook = searchParams.get("textbook") ?? "";
+  const filterGrade = searchParams.get("grade") ?? "";
+  const filterUnit = searchParams.get("unit") ?? "";
+  const filterLesson = searchParams.get("lesson") ?? "";
+
+  const { wordTagsMap } = vm;
+
+  const hanziToWordId = useMemo(
+    () => new Map(words.map((w) => [w.hanzi, w.id])),
+    [words]
+  );
+
+  const allTags = useMemo<ResolvedLessonTag[]>(() => {
+    const tags: ResolvedLessonTag[] = [];
+    for (const list of wordTagsMap.values()) {
+      for (const t of list) {
+        if (!tags.some((x) => x.lessonTagId === t.lessonTagId)) tags.push(t);
+      }
+    }
+    return tags;
+  }, [wordTagsMap]);
+
+  const textbookOptions = useMemo(
+    () =>
+      [...new Map(allTags.map((t) => [t.textbookId, t.textbookName])).entries()]
+        .sort((a, b) => a[1].localeCompare(b[1]))
+        .map(([id, name]) => ({ id, name })),
+    [allTags]
+  );
+
+  const gradeOptions = useMemo(
+    () =>
+      filterTextbook
+        ? [...new Set(allTags.filter((t) => t.textbookId === filterTextbook).map((t) => t.grade))].sort()
+        : [],
+    [allTags, filterTextbook]
+  );
+
+  const unitOptions = useMemo(
+    () =>
+      filterTextbook && filterGrade
+        ? [
+            ...new Set(
+              allTags
+                .filter((t) => t.textbookId === filterTextbook && t.grade === filterGrade)
+                .map((t) => t.unit)
+            ),
+          ].sort()
+        : [],
+    [allTags, filterTextbook, filterGrade]
+  );
+
+  const lessonOptions = useMemo(
+    () =>
+      filterTextbook && filterGrade && filterUnit
+        ? [
+            ...new Set(
+              allTags
+                .filter(
+                  (t) =>
+                    t.textbookId === filterTextbook &&
+                    t.grade === filterGrade &&
+                    t.unit === filterUnit
+                )
+                .map((t) => t.lesson)
+            ),
+          ].sort()
+        : [],
+    [allTags, filterTextbook, filterGrade, filterUnit]
+  );
+
+  const SAVED_FILTER_KEY = "cc_filter_admin";
+
+  // On first mount: restore saved filters into URL if no params are active
+  useEffect(() => {
+    if (filterTextbook || filterGrade || filterUnit || filterLesson) return;
+    try {
+      const saved = localStorage.getItem(SAVED_FILTER_KEY);
+      if (saved) {
+        const p = JSON.parse(saved) as Record<string, string>;
+        if (p.textbook) setParam(p);
+      }
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [savedNotice, setAdminSavedNotice] = useState(false);
+
+  function saveFilters() {
+    try {
+      localStorage.setItem(SAVED_FILTER_KEY, JSON.stringify({ textbook: filterTextbook, grade: filterGrade, unit: filterUnit, lesson: filterLesson }));
+    } catch { /* ignore */ }
+    setAdminSavedNotice(true);
+    setTimeout(() => setAdminSavedNotice(false), 2000);
+  }
+
+  function setParam(updates: Record<string, string>) {
+    const params = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function clearFilters() {
+    router.replace("?", { scroll: false });
+  }
+
+  const anyFilterActive = filterTextbook || filterGrade || filterUnit || filterLesson;
+
+  // Determine which targetKeys pass the tag filter
+  const visibleTargetKeys = useMemo(() => {
+    if (!anyFilterActive) return null; // null = show all
+    const passing = new Set<string>();
+    for (const row of adminTableRenderRows) {
+      const wordId = hanziToWordId.get(row.character);
+      if (!wordId) continue;
+      const tags = wordTagsMap.get(wordId) ?? [];
+      const matches = tags.some(
+        (t) =>
+          (!filterTextbook || t.textbookId === filterTextbook) &&
+          (!filterGrade || t.grade === filterGrade) &&
+          (!filterUnit || t.unit === filterUnit) &&
+          (!filterLesson || t.lesson === filterLesson)
+      );
+      if (matches) passing.add(row.targetKey);
+    }
+    return passing;
+  }, [adminTableRenderRows, hanziToWordId, wordTagsMap, filterTextbook, filterGrade, filterUnit, filterLesson, anyFilterActive]);
+
+  const filteredAdminRenderRows = useMemo(
+    () =>
+      visibleTargetKeys === null
+        ? adminTableRenderRows
+        : adminTableRenderRows.filter((r) => visibleTargetKeys.has(r.targetKey)),
+    [adminTableRenderRows, visibleTargetKeys]
+  );
 
   if (page !== "admin") {
     return null;
@@ -167,6 +321,89 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       {adminProgressText ? <p className="text-sm text-gray-600">{adminProgressText}</p> : null}
       {adminNotice ? <p className="text-sm text-blue-700">{adminNotice}</p> : null}
 
+      {/* Tag filter bar */}
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">
+          <select
+            className="rounded border px-2 py-1"
+            value={filterTextbook}
+            onChange={(e) => setParam({ textbook: e.target.value, grade: "", unit: "", lesson: "" })}
+            aria-label={tagStr.filter.textbookLabel}
+          >
+            <option value="">{tagStr.filter.allOption}</option>
+            {textbookOptions.map((tb) => (
+              <option key={tb.id} value={tb.id}>
+                {tb.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="rounded border px-2 py-1 disabled:opacity-50"
+            value={filterGrade}
+            onChange={(e) => setParam({ grade: e.target.value, unit: "", lesson: "" })}
+            disabled={!filterTextbook}
+            aria-label={tagStr.filter.gradeLabel}
+          >
+            <option value="">{tagStr.filter.allOption}</option>
+            {gradeOptions.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="rounded border px-2 py-1 disabled:opacity-50"
+            value={filterUnit}
+            onChange={(e) => setParam({ unit: e.target.value, lesson: "" })}
+            disabled={!filterGrade}
+            aria-label={tagStr.filter.unitLabel}
+          >
+            <option value="">{tagStr.filter.allOption}</option>
+            {unitOptions.map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="rounded border px-2 py-1 disabled:opacity-50"
+            value={filterLesson}
+            onChange={(e) => setParam({ lesson: e.target.value })}
+            disabled={!filterUnit}
+            aria-label={tagStr.filter.lessonLabel}
+          >
+            <option value="">{tagStr.filter.allOption}</option>
+            {lessonOptions.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+
+          {anyFilterActive && (
+            <>
+              <button
+                type="button"
+                onClick={saveFilters}
+                className="rounded border px-2 py-1 text-blue-600 hover:bg-blue-50"
+              >
+                {savedNotice ? tagStr.filter.filtersSaved : tagStr.filter.saveFilters}
+              </button>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="rounded border px-2 py-1 text-gray-600 hover:bg-gray-100"
+              >
+                {tagStr.filter.clearFilters}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-md border">
         <table className="min-w-full table-fixed border-collapse text-sm">
           <thead>
@@ -180,14 +417,23 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             </tr>
           </thead>
           <tbody>
-            {adminTableRenderRows.length === 0 ? (
+            {filteredAdminRenderRows.length === 0 ? (
               <tr>
                 <td className="px-3 py-3 text-gray-600" colSpan={4}>
-                  {adminEmptyTableMessage}
+                  {anyFilterActive ? (
+                    <span>
+                      {tagStr.filter.emptyState}{" "}
+                      <button type="button" onClick={clearFilters} className="underline">
+                        {tagStr.filter.clearFilters}
+                      </button>
+                    </span>
+                  ) : (
+                    adminEmptyTableMessage
+                  )}
                 </td>
               </tr>
             ) : (
-              adminTableRenderRows.map((row) => {
+              filteredAdminRenderRows.map((row) => {
                 const target = adminTargetByKey.get(row.targetKey);
                 const rawValue = target ? adminJsonByKey[target.key] ?? "" : "";
                 const regenerating = target ? adminRegeneratingKey === target.key : false;

@@ -3,6 +3,7 @@ import type { Word } from "@/lib/types";
 import type { AllWordsSortKey } from "../../all/all.types";
 import type { DueWordsSortKey } from "../../review/review.types";
 import type { SortDirection } from "../words.shared.types";
+import type { WordLessonTagsMap } from "../tagging.types";
 
 export function useWordsBaseState() {
   const [words, setWords] = useState<Word[]>([]);
@@ -16,6 +17,15 @@ export function useWordsBaseState() {
   const [dueWordsSortKey, setDueWordsSortKey] = useState<DueWordsSortKey>("familiarity");
   const [dueWordsSortDirection, setDueWordsSortDirection] = useState<SortDirection>("asc");
   const [manualSelectedWordIds, setManualSelectedWordIds] = useState<string[]>([]);
+
+  const [addTagSectionOpen, setAddTagSectionOpen] = useState(false);
+  const [addTagTextbookId, setAddTagTextbookId] = useState<string | null>(null);
+  const [addTagTextbookName, setAddTagTextbookName] = useState("");
+  const [addTagGrade, setAddTagGrade] = useState<string | null>(null);
+  const [addTagUnit, setAddTagUnit] = useState<string | null>(null);
+  const [addTagLesson, setAddTagLesson] = useState<string | null>(null);
+
+  const [wordTagsMap, setWordTagsMap] = useState<WordLessonTagsMap>(new Map());
 
   return {
     words,
@@ -38,5 +48,19 @@ export function useWordsBaseState() {
     setDueWordsSortDirection,
     manualSelectedWordIds,
     setManualSelectedWordIds,
+    addTagSectionOpen,
+    setAddTagSectionOpen,
+    addTagTextbookId,
+    setAddTagTextbookId,
+    addTagTextbookName,
+    setAddTagTextbookName,
+    addTagGrade,
+    setAddTagGrade,
+    addTagUnit,
+    setAddTagUnit,
+    addTagLesson,
+    setAddTagLesson,
+    wordTagsMap,
+    setWordTagsMap,
   };
 }

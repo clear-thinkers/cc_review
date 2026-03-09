@@ -54,7 +54,7 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
 | 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in Supabase. Separated by generation type (full / phrase / example / pinyin). | `docs/architecture/2026-03-09-admin-configurable-llm-prompts.md` | ✅ Done | 2026-03-09 |
-| 7 | **Character Level Tagging** | Add `level` field to `Word` (e.g., Grade 1, Grade 2). Assign and filter on All Characters page. Review scope can be filtered by level. Scheduler unaffected. | `docs/feature-specs/` | 📋 Planned | — |
+| 7 | **Character Level Tagging** | 4-level cascade tag system (Textbook → Grade → Unit → Lesson). New tables: `textbooks`, `lesson_tags`, `word_lesson_tags`. Tag assignment on `/words/add`; Lessons column + filter bar on `/words/all`; filter bar on `/words/admin`. Review scope filter deferred. | `docs/architecture/2026-03-09-character-level-tagging.md` | ✅ Done | 2026-03-09 |
 | 10 | **Bakery Shop** | Virtual bakery shop: purchase furniture, display items, decorations with earned coins. `inventory` and `shopState` tables. Spend coins to customize player environment. No real money, no scheduler impact. | [`docs/feature-specs/2026-03-04-coin-rewards-system.md`](../../feature-specs/2026-03-04-coin-rewards-system.md) | 📋 Planned | — |
 
 ## Fixed to be done
