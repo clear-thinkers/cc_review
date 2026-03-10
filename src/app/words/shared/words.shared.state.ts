@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, startTransition } from "react";
 import { useXinhuaFlashcardInfo } from "@/hooks/useXinhuaFlashcardInfo";
 import {
   addWords,
@@ -2024,14 +2024,17 @@ const gradeLabels = getGradeLabels(str);
         const targetKeySet = new Set<string>();
         const skippedNoPronunciationChars: string[] = [];
 
-        setAdminNotice("Step 1: Loading character pronunciations...");
-        const xinhuaResults = await Promise.all(
-          orderedChars.map(async (character) => {
-            const info = await getXinhuaFlashcardInfo(character, { includeAllMatches: true });
-            return { character, pronunciations: info?.pronunciations ?? [] };
-          })
-        );
-
+        setAdminNotice("Step 1: Loading character pronunciations and saved content...");
+        const [xinhuaResults, allSavedContents] = await Promise.all([
+          Promise.all(
+            orderedChars.map(async (character) => {
+              const info = await getXinhuaFlashcardInfo(character, { includeAllMatches: true });
+              return { character, pronunciations: info?.pronunciations ?? [] };
+            })
+          ),
+          getAllFlashcardContents(),
+        ]);
+        setAdminNotice("Step 2: Data loaded. Building table...");
         for (const { character, pronunciations } of xinhuaResults) {
           if (pronunciations.length === 0) {
             skippedNoPronunciationChars.push(character);
@@ -2058,9 +2061,6 @@ const gradeLabels = getGradeLabels(str);
           }
         }
 
-        setAdminNotice("Step 2: Pronunciations done. Loading saved content...");
-        const allSavedContents = await getAllFlashcardContents();
-        setAdminNotice("Step 3: Saved content loaded. Building table...");
         const savedContentByKey = new Map(allSavedContents.map((entry) => [entry.key, entry.content] as const));
 
         if (!active) {
@@ -2083,16 +2083,21 @@ const gradeLabels = getGradeLabels(str);
           nextFlashcardMap[target.key] = savedContent;
         }
 
-        setAdminTargets(nextTargets);
-        setAdminSavedByKey(nextSavedByKey);
-        setAdminJsonByKey((previous) => ({
-          ...nextJsonByKey,
-          ...Object.fromEntries(Object.entries(previous).filter(([key]) => key in nextSavedByKey && !nextSavedByKey[key])),
-        }));
-        setFlashcardLlmData((previous) => ({
-          ...previous,
-          ...nextFlashcardMap,
-        }));
+        // Wrap state updates in startTransition so React 19 treats this render
+        // as non-urgent and yields to the browser between chunks, preventing
+        // the main thread from freezing while the table is built.
+        startTransition(() => {
+          setAdminTargets(nextTargets);
+          setAdminSavedByKey(nextSavedByKey);
+          setAdminJsonByKey((previous) => ({
+            ...nextJsonByKey,
+            ...Object.fromEntries(Object.entries(previous).filter(([key]) => key in nextSavedByKey && !nextSavedByKey[key])),
+          }));
+          setFlashcardLlmData((previous) => ({
+            ...previous,
+            ...nextFlashcardMap,
+          }));
+        });
         if (skippedNoPronunciationChars.length > 0) {
           const preview = skippedNoPronunciationChars.slice(0, 12).join("\u3001");
           const suffix = skippedNoPronunciationChars.length > 12 ? "..." : "";
