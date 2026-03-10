@@ -36,6 +36,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [textbooksLoading, setTextbooksLoading] = useState(false);
   const [textbookInputValue, setTextbookInputValue] = useState("");
   const [textbookCreating, setTextbookCreating] = useState(false);
+  const [textbookCreateMode, setTextbookCreateMode] = useState(false);
   const [lessonTags, setLessonTags] = useState<LessonTag[]>([]);
 
   // Load textbooks when section opens
@@ -50,7 +51,10 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
 
   // Sync display input when textbookId is cleared from outside (e.g. form reset)
   useEffect(() => {
-    if (!addTagTextbookId) setTextbookInputValue("");
+    if (!addTagTextbookId) {
+      setTextbookInputValue("");
+      setTextbookCreateMode(false);
+    }
   }, [addTagTextbookId]);
 
   // Load all lesson_tags for selected textbook when textbook changes
@@ -64,41 +68,38 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
       .catch(() => setLessonTags([]));
   }, [addTagTextbookId]);
 
-  function handleTextbookInputChange(value: string) {
-    setTextbookInputValue(value);
-    setAddTagTextbookName(value);
-    // Check if the typed name matches an existing textbook
-    const match = textbooks.find((tb) => tb.name.toLowerCase() === value.trim().toLowerCase());
+  function handleTextbookSelect(id: string) {
+    const match = textbooks.find((tb) => tb.id === id);
     if (match) {
       setAddTagTextbookId(match.id);
-      setAddTagGrade(null);
-      setAddTagUnit(null);
-      setAddTagLesson(null);
+      setAddTagTextbookName(match.name);
     } else {
       setAddTagTextbookId(null);
-      setAddTagGrade(null);
-      setAddTagUnit(null);
-      setAddTagLesson(null);
+      setAddTagTextbookName("");
     }
+    setAddTagGrade(null);
+    setAddTagUnit(null);
+    setAddTagLesson(null);
   }
 
-  async function handleTextbookBlur() {
+  async function handleCreateNewTextbook() {
     const trimmed = textbookInputValue.trim();
-    if (!trimmed || addTagTextbookId) return; // already resolved or empty
-    // No match — create a new family textbook
+    if (!trimmed) return;
     setTextbookCreating(true);
     try {
       const created = await createTextbook(trimmed);
       setTextbooks((prev) =>
         prev.some((tb) => tb.id === created.id) ? prev : [...prev, created]
       );
-      setTextbookInputValue(created.name);
+      setTextbookInputValue("");
+      setTextbookCreateMode(false);
       setAddTagTextbookId(created.id);
+      setAddTagTextbookName(created.name);
       setAddTagGrade(null);
       setAddTagUnit(null);
       setAddTagLesson(null);
     } catch {
-      // leave input value so user can retry; don't clear it
+      // leave input so user can retry
     } finally {
       setTextbookCreating(false);
     }
@@ -125,6 +126,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
       setAddTagUnit(null);
       setAddTagLesson(null);
       setTextbookInputValue("");
+      setTextbookCreateMode(false);
     } else {
       setAddTagSectionOpen(true);
     }
@@ -184,31 +186,60 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
               {/* Textbook */}
               <div>
                 <label className="block text-xs text-gray-500">{tagStr.textbookPlaceholder}</label>
-                <input
-                  list="tag-textbook-list"
-                  className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-                  placeholder={
-                    textbooksLoading ? tagStr.loadingTextbooks : tagStr.textbookPlaceholder
-                  }
-                  value={textbookInputValue}
-                  onChange={(e) => handleTextbookInputChange(e.target.value)}
-                  onBlur={handleTextbookBlur}
-                  disabled={textbooksLoading || textbookCreating}
-                />
-                <datalist id="tag-textbook-list">
-                  {textbooks.map((tb) => (
-                    <option key={tb.id} value={tb.name} />
-                  ))}
-                </datalist>
-                {textbookCreating && (
-                  <p className="mt-0.5 text-xs text-gray-500">{tagStr.creatingTextbook}</p>
+                {!textbookCreateMode ? (
+                  <select
+                    className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    value={addTagTextbookId ?? ""}
+                    onChange={(e) => {
+                      if (e.target.value === "__create__") {
+                        setTextbookCreateMode(true);
+                      } else {
+                        handleTextbookSelect(e.target.value);
+                      }
+                    }}
+                    disabled={textbooksLoading}
+                  >
+                    <option value="">
+                      {textbooksLoading ? tagStr.loadingTextbooks : tagStr.textbookPlaceholder}
+                    </option>
+                    {textbooks.map((tb) => (
+                      <option key={tb.id} value={tb.id}>
+                        {tb.name}
+                      </option>
+                    ))}
+                    <option value="__create__">{tagStr.createNewOption}</option>
+                  </select>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                      placeholder={tagStr.createNewPlaceholder}
+                      value={textbookInputValue}
+                      onChange={(e) => setTextbookInputValue(e.target.value)}
+                      disabled={textbookCreating}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateNewTextbook}
+                      disabled={!textbookInputValue.trim() || textbookCreating}
+                      className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                    >
+                      {textbookCreating ? tagStr.creatingTextbook : tagStr.createNewConfirm}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTextbookCreateMode(false);
+                        setTextbookInputValue("");
+                      }}
+                      disabled={textbookCreating}
+                      className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      {tagStr.createNewCancel}
+                    </button>
+                  </div>
                 )}
-                {textbookInputValue.trim() &&
-                  !addTagTextbookId &&
-                  !textbooksLoading &&
-                  !textbookCreating && (
-                    <p className="mt-0.5 text-xs text-blue-600">{tagStr.willCreateTextbook}</p>
-                  )}
               </div>
 
               {/* Grade */}
