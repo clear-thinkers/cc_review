@@ -25,10 +25,17 @@ Tier 1 rules (active):
 - Fill-test eligibility is derived from saved phrase/example rows and `include_in_fill_test` flags.
 - Unsafe content and malformed payloads are dropped during normalization before they can be persisted.
 
-Primary user flow:
-1. Add Hanzi → `/words/add` → Supabase `words` table.
-2. Curate content → `/words/admin` → `/api/flashcard/generate` + manual edits → Supabase `flashcard_contents` table.
-3. Review → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test` → reads persisted data only.
+Primary admin user flow:
+1. Add Hanzi       → `/words/add`     → Supabase `words` table (hanzi ingested, untagged, unreviewed).
+2. Tag characters  → `/words/tag`     → assign textbook / grade / unit / lesson 
+                                         → Supabase `words` table (tag fields) 
+                                         + Supabase `textbooks` table (new textbook created if no match).
+3. Adjust prompts  → `/words/prompts` → edit/version AI prompt templates → Supabase prompts table.
+4. Curate content  → `/words/admin`   → `/api/flashcard/generate` + manual edits 
+                                         → Supabase `flashcard_contents` table.
+5. Review          → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test` 
+                                         → reads persisted data only.
+
 
 ### Ingestion Rules
 
@@ -41,6 +48,11 @@ These rules govern all character ingestion via `/words/add`:
 5. New records are initialized as unreviewed (`repetitions=0`, `nextReviewAt=0`, no fill-test content).
 6. A bilingual status message is shown after every submission covering three states: nothing added, all added, some added and some skipped.
 7. Add flow does not auto-generate flashcard or admin content — Content Admin remains a separate step.
+8. An optional collapsible "Assign to Lesson" section below the Hanzi input allows a 4-level cascade tag (Textbook → Grade → Unit → Lesson) to be applied to all words in the batch.
+9. Tag selection is all-or-nothing: if the section is open, all 4 levels must be filled before submitting. Partial selection blocks submission with an inline error.
+10. If the section is collapsed or untouched, no tag is applied and no validation is performed.
+11. Tag assignment is performed after words are written; skipped (existing) words do not receive a tag assignment.
+12. Children cannot access `/words/add` — the route is blocked; tag UI is not visible to child profiles.
 
 ### All Characters Inventory Rules
 
@@ -64,6 +76,11 @@ These rules govern the inventory view at `/words/all`:
 11. The page does not deduplicate historical duplicate rows; it renders stored data as-is.
 12. The page does not paginate or virtualize large datasets.
 13. The page owns display/sorting behavior only; scheduler logic remains in `scheduler.ts`.
+14. A **Lessons column** displays cascade tag pills (`TextbookName · Grade · Unit · Lesson`) for non-child roles. Multiple tags stack vertically; no tags = empty cell.
+15. A **filter bar** (Textbook / Grade / Unit / Lesson dropdowns) is shown for non-child roles when tag data exists. Cascade dropdowns reset lower levels on parent-level change.
+16. Filter logic is AND: a word is shown only if it matches all set filter levels.
+17. Filter state persists via URL search params (`?textbook=...&grade=...&unit=...&lesson=...`). A [Clear Filters] button resets all four.
+18. When filters are active and no words match, "No characters match the selected filters." is shown with a Clear Filters link.
 
 ### Content Admin Curation Rules
 
@@ -83,6 +100,10 @@ These rules govern content curation at `/words/admin`:
    - `excluded for testing`: has content but no phrase included for fill test
 9. Preload generation skips targets that already have persisted content and continues non-fatally on per-target failures.
 10. Characters with no dictionary pronunciation are skipped with notice; this is not a fatal load error.
+11. Preload batch execution uses a fixed concurrency of 3 (`Promise.allSettled`). Batch size is capped at 3 to avoid saturating the AI provider with concurrent requests from a single session. No per-character retry — a failed character is counted and skipped; the loop continues. The completion notice reports total succeeded and total failed counts. Batch size must not be increased without validating provider rate limits.
+12. A **tag filter bar** (Textbook / Grade / Unit / Lesson) is displayed above the character list when tag data exists. Same AND logic and cascade behavior as `/words/all`.
+13. Characters with no tags are hidden when any filter is active.
+14. No Lessons column is added to the admin table (filter-only in this phase).
 
 ### Due Review Queue Rules
 
@@ -224,6 +245,7 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | `/words/review` | ✅ | ✅ | ✅ |
 | `/words/review/flashcard` | ✅ | ✅ | ✅ |
 | `/words/review/fill-test` | ✅ | ❌ | ✅ |
+| `/words/debug` | ❌ | ❌ | ✅ |
 
 ---
 
@@ -363,6 +385,40 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `updated_at` | timestamptz | Server timestamp of last update |
 | **Active constraint** | | At most one `is_active = true` per `(family_id, prompt_type)` — enforced in service layer |
 | **Slot limit** | | Max 5 user-owned rows per `(family_id, prompt_type)` — enforced in service layer |
+
+**`textbooks` table** — curriculum textbooks for cascade tagging (Phase 2, Feature #7)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `name` | text | Human-readable textbook name |
+| `is_shared` | boolean | `true` = admin-curated, visible to all families; `false` = family-private |
+| `family_id` | uuid (nullable) | Foreign key → `families.id`; null when `is_shared = true` |
+| `created_by` | uuid (nullable) | Foreign key → `auth.users.id` |
+| `created_at` | timestamptz | Server timestamp |
+
+**`lesson_tags` table** — unique Textbook → Grade → Unit → Lesson combinations (Phase 2, Feature #7)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `textbook_id` | uuid | Foreign key → `textbooks.id`; cascades on delete |
+| `grade` | text | e.g. `"G2"`, `"二年级"` |
+| `unit` | text | e.g. `"Unit 8"`, `"第八单元"` |
+| `lesson` | text | e.g. `"Lesson 4"`, `"第四课"` |
+| `created_at` | timestamptz | Server timestamp |
+| **Unique constraint** | | `(textbook_id, grade, unit, lesson)` |
+
+**`word_lesson_tags` table** — family-scoped join table assigning lesson tags to words (Phase 2, Feature #7)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `word_id` | uuid | Foreign key → `words.id`; cascades on delete |
+| `lesson_tag_id` | uuid | Foreign key → `lesson_tags.id`; cascades on delete |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `created_at` | timestamptz | Server timestamp |
+| **Unique constraint** | | `(word_id, lesson_tag_id, family_id)` |
 
 ---
 

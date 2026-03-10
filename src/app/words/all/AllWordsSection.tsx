@@ -17,6 +17,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     formatDateTime,
     resetWord,
     removeWord,
+    wordTagsMap,
   } = vm;
 
   const session = useSession();
@@ -49,6 +50,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
           <p className="text-2xl font-semibold">{formatProbability(allWordsSummary.averageFamiliarity)}</p>
         </div>
       </div>
+
+      {/* Filter bar — hidden for child role */}
 
       {loading ? (
         <p>{str.common.loading}</p>
@@ -114,6 +117,9 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                     {str.all.table.headers.familiarity} <span aria-hidden>{getSortIndicator("familiarity")}</span>
                   </button>
                 </th>
+                {!isChild && (
+                  <th className="px-3 py-2 text-left">Lessons</th>
+                )}
                 {!isChild && <th className="px-3 py-2 text-left">{str.all.table.headers.actions}</th>}
               </tr>
             </thead>
@@ -126,6 +132,20 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                   <td className="px-3 py-2">{reviewCount}</td>
                   <td className="px-3 py-2">{testCount}</td>
                   <td className="px-3 py-2">{formatProbability(familiarity)}</td>
+                  {!isChild && (
+                    <td className="px-3 py-2">
+                      <div className="flex flex-col gap-0.5">
+                        {(wordTagsMap.get(word.id) ?? []).map((tag) => (
+                          <span
+                            key={tag.lessonTagId}
+                            className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-800"
+                          >
+                            {tag.textbookName} · {tag.grade} · {tag.unit} · {tag.lesson}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  )}
                   {!isChild && (
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap items-center gap-1">
@@ -141,7 +161,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       <button
                         type="button"
                         className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700"
-                        onClick={() => removeWord(word.id)}
+                        onClick={() => removeWord(word)}
                         title={str.all.table.tooltips.delete}
                         aria-label={str.all.table.buttons.delete}
                       >

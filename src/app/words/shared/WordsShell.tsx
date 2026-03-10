@@ -160,7 +160,12 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
           </div>
         </section>
 
-        <div className="space-y-6">{children}</div>
+        <div className="space-y-6">
+          {vm.loadError ? (
+            <p className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{vm.loadError}</p>
+          ) : null}
+          {children}
+        </div>
       </div>
     </main>
   );

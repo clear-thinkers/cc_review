@@ -20,6 +20,7 @@ export const wordsStrings = {
       allCharacters: "All Characters",
       contentAdmin: "Content Admin",
       aiPrompts: "AI Prompts",
+      debug: "Debug Tools",
       dueReview: "Due Review",
       quizResults: "Quiz Results",
       logout: "Logout",
@@ -241,6 +242,8 @@ export const wordsStrings = {
       buttons: {
         preload: "Preload targets with missing content",
         preloading: "Preloading...",
+        cancelPreload: "Cancel",
+        cancellingPreload: "Cancelling...",
         refreshAllPinyin: "Regenerate missing pinyin",
         refreshingAllPinyin: "Regenerating...",
       },
@@ -307,7 +310,9 @@ export const wordsStrings = {
       loading: "Loading admin targets...",
       noTargets: "No targets yet. Add characters first.",
       preloadingProgress: "Preloading {current}/{total}: {character} / {pronunciation}",
+      preloadingBatchProgress: "Preloading {from}\u2013{to} / {total}...",
       preloadResult: "Preload finished. Generated {generated}, skipped {skipped}, failed {failed}.",
+      preloadCancelled: "Preload cancelled. Generated {generated}, skipped {skipped}, failed {failed}.",
       messages: {
         saveMeaning: "Saved {character} / {pronunciation}.",
         deleteEmpty: "Deleted empty (no content).",
@@ -359,7 +364,27 @@ export const wordsStrings = {
           reset: "Reset as new (Date Added = now)",
           delete: "Delete",
         },
+        confirmDeleteWithContent:
+          "This character has saved flashcard content. Deleting it will also permanently remove all associated content. Continue?",
       },
+    },
+
+    // ============= DEBUG TOOLS PAGE =============
+    debug: {
+      pageTitle: "Debug Tools",
+      pageDescription: "Platform admin only. These actions modify production data.",
+      cleanOrphanedTitle: "Clean Orphaned Flashcard Content",
+      cleanOrphanedDescription:
+        "Finds and deletes flashcard_contents rows with no matching word in the words table. Caused by interrupted preload batches followed by word deletion.",
+      runCleanup: "Run Cleanup",
+      running: "Running...",
+      noOrphans: "\u2705 No orphaned content found. Database is clean.",
+      confirmOrphans: (count: number, chars: string) =>
+        `Found ${count} orphaned flashcard content record(s) for: ${chars}\n\nDelete all?`,
+      deleted: (count: number, chars: string) =>
+        `\uD83D\uDDD1\uFE0F Deleted ${count} orphaned record(s): ${chars}`,
+      cancelled: "Cancelled.",
+      error: (msg: string) => `\u274C Error: ${msg}`,
     },
 
     // ============= COMMON MESSAGES =============
@@ -368,6 +393,7 @@ export const wordsStrings = {
       noData: "No data yet.",
       error: "An error occurred.",
       success: "Operation completed successfully.",
+      loadError: "Failed to load app data. Please refresh the page or log in again.",
     },
   },
 
@@ -382,6 +408,7 @@ export const wordsStrings = {
       allCharacters: "全部汉字",
       contentAdmin: "内容管理",
       aiPrompts: "AI提示词",
+      debug: "调试工具",
       dueReview: "待复习",
       quizResults: "测验结果",
       logout: "登出",
@@ -600,6 +627,8 @@ export const wordsStrings = {
       buttons: {
         preload: "预生成未保存内容",
         preloading: "预生成中...",
+        cancelPreload: "取消",
+        cancellingPreload: "取消中...",
         refreshAllPinyin: "批量生成拼音",
         refreshingAllPinyin: "生成中...",
       },
@@ -665,8 +694,10 @@ export const wordsStrings = {
       loading: "正在加载内容条目...",
       noTargets: "暂无可管理内容（请先添加汉字）",
       preloadingProgress: "预生成进度 {current}/{total}: {character} / {pronunciation}",
+      preloadingBatchProgress: "预生成 {from}\u2013{to} / {total}...",
       preloadResult:
         "预生成完成。生成 {generated} 个，跳过 {skipped} 个，失败 {failed} 个。",
+      preloadCancelled: "预生成已取消。生成 {generated} 个，跳过 {skipped} 个，失败 {failed} 个。",
       messages: {
         saveMeaning: "已保存 {character} / {pronunciation}。",
         deleteEmpty: "已删除空条目（无内容）。",
@@ -718,7 +749,27 @@ export const wordsStrings = {
           reset: "重置为新字（添加日期为当前时间）",
           delete: "删除",
         },
+        confirmDeleteWithContent:
+          "该汉字已有保存的闪卡内容。删除后，相关内容将一并永久移除。是否继续？",
       },
+    },
+
+    // ============= 调试工具页面 =============
+    debug: {
+      pageTitle: "调试工具",
+      pageDescription: "仅限平台管理员使用。这些操作将直接修改用户的数据。",
+      cleanOrphanedTitle: "清理孤立闪卡内容",
+      cleanOrphanedDescription:
+        "查找并删除在 words 表中没有匹配汉字的 flashcard_contents 行。通常由预加载批次中断后删除单词所导致。",
+      runCleanup: "执行清理",
+      running: "执行中...",
+      noOrphans: "\u2705 未发现孤立内容，数据库整洁。",
+      confirmOrphans: (count: number, chars: string) =>
+        `发现 ${count} 条孤立闪卡内容记录，对应汉字：${chars}\n\n确认全部删除？`,
+      deleted: (count: number, chars: string) =>
+        `\uD83D\uDDD1\uFE0F 已删除 ${count} 条孤立记录：${chars}`,
+      cancelled: "已取消。",
+      error: (msg: string) => `\u274C 错误：${msg}`,
     },
 
     // ============= COMMON MESSAGES =============
@@ -727,6 +778,7 @@ export const wordsStrings = {
       noData: "暂无数据。",
       error: "发生错误。",
       success: "操作成功完成。",
+      loadError: "加载数据失败，请刷新页面或重新登录。",
     },
   },
 };

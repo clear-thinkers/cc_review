@@ -584,19 +584,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const model = process.env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL;
 
   try {
-    const resolvedFullPrompt = await resolveSystemPrompt("full", familyId, FULL_SYSTEM_PROMPT);
-    const resolvedPhrasePrompt = await resolveSystemPrompt("phrase", familyId, PHRASE_SYSTEM_PROMPT);
-    const resolvedExamplePrompt = await resolveSystemPrompt("example", familyId, EXAMPLE_SYSTEM_PROMPT);
-    const resolvedPhraseDetailPrompt = await resolveSystemPrompt("phrase_details", familyId, PHRASE_DETAIL_SYSTEM_PROMPT);
-    const resolvedMeaningDetailPrompt = await resolveSystemPrompt("meaning_details", familyId, MEANING_DETAIL_SYSTEM_PROMPT);
-
     if (parsedRequest.mode === "phrase") {
+      const phraseSystemPrompt = await resolveSystemPrompt("phrase", familyId, PHRASE_SYSTEM_PROMPT);
       for (let attempt = 0; attempt < RETRY_LIMIT; attempt += 1) {
         const message = await callDeepSeek({
           endpoint,
           apiKey,
           model,
-          systemPrompt: resolvedPhrasePrompt,
+          systemPrompt: phraseSystemPrompt,
           userPrompt: buildUserPromptForPhrase(parsedRequest),
           temperature: 0.6,
         });
@@ -619,12 +614,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (parsedRequest.mode === "example") {
+      const exampleSystemPrompt = await resolveSystemPrompt("example", familyId, EXAMPLE_SYSTEM_PROMPT);
       for (let attempt = 0; attempt < RETRY_LIMIT; attempt += 1) {
         const message = await callDeepSeek({
           endpoint,
           apiKey,
           model,
-          systemPrompt: resolvedExamplePrompt,
+          systemPrompt: exampleSystemPrompt,
           userPrompt: buildUserPromptForExample(parsedRequest),
           temperature: 0.6,
         });
@@ -645,12 +641,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (parsedRequest.mode === "phrase_details") {
+      const phraseDetailSystemPrompt = await resolveSystemPrompt("phrase_details", familyId, PHRASE_DETAIL_SYSTEM_PROMPT);
       for (let attempt = 0; attempt < RETRY_LIMIT; attempt += 1) {
         const message = await callDeepSeek({
           endpoint,
           apiKey,
           model,
-          systemPrompt: resolvedPhraseDetailPrompt,
+          systemPrompt: phraseDetailSystemPrompt,
           userPrompt: buildUserPromptForPhraseDetails(parsedRequest),
           temperature: 0.4,
         });
@@ -672,12 +669,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (parsedRequest.mode === "meaning_details") {
+      const meaningDetailSystemPrompt = await resolveSystemPrompt("meaning_details", familyId, MEANING_DETAIL_SYSTEM_PROMPT);
       for (let attempt = 0; attempt < RETRY_LIMIT; attempt += 1) {
         const message = await callDeepSeek({
           endpoint,
           apiKey,
           model,
-          systemPrompt: resolvedMeaningDetailPrompt,
+          systemPrompt: meaningDetailSystemPrompt,
           userPrompt: buildUserPromptForMeaningDetails(parsedRequest),
           temperature: 0.2,
         });
@@ -715,11 +713,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const fullSystemPrompt = await resolveSystemPrompt("full", familyId, FULL_SYSTEM_PROMPT);
     const message = await callDeepSeek({
       endpoint,
       apiKey,
       model,
-      systemPrompt: resolvedFullPrompt,
+      systemPrompt: fullSystemPrompt,
       userPrompt: buildUserPromptForFull(parsedRequest),
       temperature: 0.4,
     });

@@ -1,6 +1,7 @@
 # Content Admin Curation - Processing Flow and Risks
 
 _Created: 2026-02-27_
+_Last updated: 2026-03-09_ (Preload batch concurrency and rate limit policy documented)
 _Covers: `/words/admin` route, target loading, draft/edit/save operations, preload, and filter stats_
 
 > Authoritative behavior rules are maintained in `0_ARCHITECTURE.md` under `Content Admin Curation Rules`.
@@ -47,7 +48,7 @@ Stats/filter buckets are computed from normalized draft content per target:
 
 1. Duplicate Hanzi race conditions from add flow can inflate target inventory before deduping by `character|pronunciation`.
 2. Row identity and mutations depend on value matching and are sensitive to concurrent local edits.
-3. Sequential preload can be slow for large target sets.
+3. Preload runs in batches of 3 concurrent requests (`Promise.allSettled`). Batch size was chosen to reduce total preload time (~3× faster than serial) while staying within safe concurrency limits for a single-user admin session against the AI provider. This is not a guarantee against rate limiting — if the provider returns 429s at this concurrency level, reduce batch size to 1 and revert to serial execution.
 4. Table derivations repeatedly parse/normalize drafts and may degrade at larger scales.
 5. Deleting target content does not alter `words` inventory rows.
 
@@ -58,7 +59,7 @@ Stats/filter buckets are computed from normalized draft content per target:
 1. Keep save pipeline as draft -> normalize -> persist.
 2. Keep `flashcardContents` key contract as `character|pronunciation` unless architecture review explicitly approves change.
 3. Do not introduce scheduler or `words` writes from this page.
-4. If switching preload to parallel/batch execution, define rate limits, retries, and error policy first.
+4. If switching preload to parallel/batch execution, define rate limits, retries, and error policy first. Resolved (2026-03-09): Preload uses `Promise.allSettled` with batch size 3. Rate limit policy: cap at 3 concurrent requests per preload run; no automatic backoff implemented — reduce to 1 if 429s are observed. Retry policy: no per-character retry; failures are non-fatal and the loop continues to the next batch. Error policy: final notice reports succeeded count and failed count; individual failures are logged to console. Do not increase batch size without re-evaluating provider rate limits.
 5. If changing fill-test semantics, update both admin status definitions and due-review derivation docs.
 
 ---

@@ -16,6 +16,12 @@ import type { Wallet } from "@/app/words/shared/coins.types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade } from "./scheduler";
 import type { GradeResult } from "./review";
+import type {
+  Textbook,
+  LessonTag,
+  WordLessonTagsMap,
+  ResolvedLessonTag,
+} from "@/app/words/shared/tagging.types";
 
 // ─── Exported types (moved from db.ts) ─────────────────────────────────────
 
@@ -330,6 +336,35 @@ export async function deleteFlashcardContent(
     .eq("id", key)
     .eq("family_id", familyId);
   if (error) throw new Error(`deleteFlashcardContent: ${error.message}`);
+}
+
+/**
+ * Returns true if any flashcard_contents rows exist for the given hanzi
+ * (across all pronunciations) within the current family.
+ */
+export async function hasFlashcardContentForHanzi(hanzi: string): Promise<boolean> {
+  const { familyId } = await getSessionMetadata();
+  const { count, error } = await supabase
+    .from("flashcard_contents")
+    .select("id", { count: "exact", head: true })
+    .eq("family_id", familyId)
+    .like("id", `${hanzi}|%`);
+  if (error) throw new Error(`hasFlashcardContentForHanzi: ${error.message}`);
+  return (count ?? 0) > 0;
+}
+
+/**
+ * Deletes all flashcard_contents rows for the given hanzi (all pronunciations)
+ * within the current family.
+ */
+export async function deleteFlashcardContentByHanzi(hanzi: string): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("flashcard_contents")
+    .delete()
+    .eq("family_id", familyId)
+    .like("id", `${hanzi}|%`);
+  if (error) throw new Error(`deleteFlashcardContentByHanzi: ${error.message}`);
 }
 
 // ─── Quiz Sessions ──────────────────────────────────────────────────────────
@@ -664,4 +699,213 @@ export async function getActivePromptBody(promptType: PromptType): Promise<strin
   if (defaultSlot) return (defaultSlot as { prompt_body: string }).prompt_body;
 
   return null;
+}
+
+// ─── Lesson Tagging ──────────────────────────────────────────────────────────
+
+/** Normalise a free-text tag segment: trim, collapse interior whitespace. */
+export function normalizeLessonTagField(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+interface SupabaseTextbookRow {
+  id: string;
+  name: string;
+  is_shared: boolean;
+  family_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+function toTextbook(row: SupabaseTextbookRow): Textbook {
+  return {
+    id: row.id,
+    name: row.name,
+    isShared: row.is_shared,
+    familyId: row.family_id,
+    createdBy: row.created_by,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+interface SupabaseLessonTagRow {
+  id: string;
+  textbook_id: string;
+  family_id: string;
+  grade: string;
+  unit: string;
+  lesson: string;
+  created_at: string;
+}
+
+function toLessonTag(row: SupabaseLessonTagRow): LessonTag {
+  return {
+    id: row.id,
+    textbookId: row.textbook_id,
+    grade: row.grade,
+    unit: row.unit,
+    lesson: row.lesson,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+/** Return all textbooks visible to the current family (shared + own). */
+export async function listTextbooks(): Promise<Textbook[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("textbooks")
+    .select("*")
+    .or(`is_shared.eq.true,family_id.eq.${familyId}`)
+    .order("name");
+  if (error) throw new Error(`listTextbooks: ${error.message}`);
+  return (data as SupabaseTextbookRow[]).map(toTextbook);
+}
+
+/**
+ * Create a new private family-scoped textbook.
+ * Returns the existing textbook if one with the same trimmed name already
+ * belongs to this family (case-insensitive dedup).
+ */
+export async function createTextbook(name: string): Promise<Textbook> {
+  const { familyId, userId } = await getSessionMetadata();
+  const trimmedName = name.trim();
+
+  // Check for existing family textbook with the same name (case-insensitive)
+  const { data: existing, error: readErr } = await supabase
+    .from("textbooks")
+    .select("*")
+    .eq("family_id", familyId)
+    .ilike("name", trimmedName)
+    .maybeSingle();
+  if (readErr) throw new Error(`createTextbook read: ${readErr.message}`);
+  if (existing) return toTextbook(existing as SupabaseTextbookRow);
+
+  const { data: created, error: writeErr } = await supabase
+    .from("textbooks")
+    .insert({ name: trimmedName, is_shared: false, family_id: familyId, created_by: userId })
+    .select("*")
+    .single();
+  if (writeErr) throw new Error(`createTextbook insert: ${writeErr.message}`);
+  return toTextbook(created as SupabaseTextbookRow);
+}
+
+/**
+ * List lesson tags for a textbook, optionally filtering by grade and unit.
+ * Used to populate cascading dropdowns.
+ */
+export async function listLessonTags(
+  textbookId: string,
+  grade?: string,
+  unit?: string
+): Promise<LessonTag[]> {
+  let query = supabase
+    .from("lesson_tags")
+    .select("*")
+    .eq("textbook_id", textbookId)
+    .order("grade")
+    .order("unit")
+    .order("lesson");
+  if (grade !== undefined) query = query.eq("grade", grade);
+  if (unit !== undefined) query = query.eq("unit", unit);
+  const { data, error } = await query;
+  if (error) throw new Error(`listLessonTags: ${error.message}`);
+  return (data as SupabaseLessonTagRow[]).map(toLessonTag);
+}
+
+/**
+ * Find an existing lesson tag matching all four levels, or create a new one.
+ * Uses the DB unique constraint (textbook_id, grade, unit, lesson) for safety.
+ */
+export async function createLessonTagIfNew(
+  textbookId: string,
+  grade: string,
+  unit: string,
+  lesson: string
+): Promise<LessonTag> {
+  const { familyId } = await getSessionMetadata();
+  const normGrade = normalizeLessonTagField(grade);
+  const normUnit = normalizeLessonTagField(unit);
+  const normLesson = normalizeLessonTagField(lesson);
+
+  // Check existing
+  const { data: existing, error: readErr } = await supabase
+    .from("lesson_tags")
+    .select("*")
+    .eq("textbook_id", textbookId)
+    .eq("grade", normGrade)
+    .eq("unit", normUnit)
+    .eq("lesson", normLesson)
+    .maybeSingle();
+  if (readErr) throw new Error(`createLessonTagIfNew read: ${readErr.message}`);
+  if (existing) return toLessonTag(existing as SupabaseLessonTagRow);
+
+  const { data: created, error: writeErr } = await supabase
+    .from("lesson_tags")
+    .insert({ textbook_id: textbookId, family_id: familyId, grade: normGrade, unit: normUnit, lesson: normLesson })
+    .select("*")
+    .single();
+  if (writeErr) throw new Error(`createLessonTagIfNew insert: ${writeErr.message}`);
+  return toLessonTag(created as SupabaseLessonTagRow);
+}
+
+/**
+ * Assign a lesson tag to a list of word IDs for the current family.
+ * Skips duplicates via ON CONFLICT DO NOTHING.
+ */
+export async function assignWordLessonTags(
+  wordIds: string[],
+  lessonTagId: string
+): Promise<void> {
+  if (wordIds.length === 0) return;
+  const { familyId } = await getSessionMetadata();
+  const rows = wordIds.map((wordId) => ({
+    word_id: wordId,
+    lesson_tag_id: lessonTagId,
+    family_id: familyId,
+  }));
+  const { error } = await supabase
+    .from("word_lesson_tags")
+    .upsert(rows, { onConflict: "word_id,lesson_tag_id,family_id", ignoreDuplicates: true });
+  if (error) throw new Error(`assignWordLessonTags: ${error.message}`);
+}
+
+/**
+ * Return a map of wordId → ResolvedLessonTag[] for all words belonging to
+ * the current family.  Used to populate the Lessons column and filter bars.
+ */
+export async function getWordLessonTagsForFamily(): Promise<WordLessonTagsMap> {
+  const { familyId } = await getSessionMetadata();
+
+  const { data, error } = await supabase
+    .from("word_lesson_tags")
+    .select(
+      `word_id,
+       lesson_tags ( id, textbook_id, grade, unit, lesson, created_at,
+         textbooks ( id, name, is_shared, family_id, created_by, created_at )
+       )`
+    )
+    .eq("family_id", familyId);
+  if (error) throw new Error(`getWordLessonTagsForFamily: ${error.message}`);
+
+  const map: WordLessonTagsMap = new Map();
+  for (const row of (data ?? []) as unknown as Array<{
+    word_id: string;
+    lesson_tags: (SupabaseLessonTagRow & { textbooks: SupabaseTextbookRow }) | null;
+  }>) {
+    if (!row.lesson_tags) continue;
+    const lt = row.lesson_tags;
+    const tb = lt.textbooks;
+    const resolved: ResolvedLessonTag = {
+      lessonTagId: lt.id,
+      textbookId: lt.textbook_id,
+      textbookName: tb?.name ?? "",
+      grade: lt.grade,
+      unit: lt.unit,
+      lesson: lt.lesson,
+    };
+    const existing = map.get(row.word_id) ?? [];
+    existing.push(resolved);
+    map.set(row.word_id, existing);
+  }
+  return map;
 }

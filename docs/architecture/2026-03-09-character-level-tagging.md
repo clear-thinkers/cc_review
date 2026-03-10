@@ -1,7 +1,7 @@
 # Feature Spec — 2026-03-09 — Character Level Tagging
 
 ## Status
-📋 Planned
+✅ Done — shipped 2026-03-09, deployed to production.
 
 ---
 
@@ -112,9 +112,12 @@ create table word_lesson_tags (
 - `textbooks`: families can read `is_shared = true` rows + their own
   `family_id` rows. Only platform_admin can insert/update `is_shared = true`
   rows. Parents can insert/update their own family rows.
-- `lesson_tags`: readable if the parent textbook is readable by the family.
-  Insertable if the parent textbook belongs to the family (or is_shared and
-  user is platform_admin).
+- `lesson_tags`: direct `family_id` column (denormalised from parent textbook
+  at insert time). RLS checks `family_id = current_family_id()` directly —
+  not via a subquery on `textbooks`. This avoids a Postgres recursive-RLS
+  failure that occurred when the subquery was itself blocked by the `textbooks`
+  SELECT policy. Migration `20260309000005_lesson_tags_add_family_id.sql`
+  backfilled the column and replaced the subquery-based policies.
 - `word_lesson_tags`: full CRUD scoped to `family_id` matching the session.
 
 ### Indexes
@@ -122,6 +125,7 @@ create table word_lesson_tags (
 ```sql
 create index on textbooks (family_id, is_shared);
 create index on lesson_tags (textbook_id);
+create index on lesson_tags (family_id);  -- added by migration 20260309000005
 create index on word_lesson_tags (word_id);
 create index on word_lesson_tags (lesson_tag_id);
 create index on word_lesson_tags (family_id);
@@ -158,12 +162,27 @@ Lesson    [________ ▼]   ← populated after unit is chosen
   creates the new `lesson_tag` row on save.
 - Selecting a higher-level value resets all dropdowns below it.
 
+**As implemented (deviates from spec above):**
+- The Textbook field is a free-text `<input>` with a `<datalist>` for
+  autocomplete (not a `<select>`). Selecting an existing name resolves the
+  UUID silently. Typing a new name shows a blue hint "New textbook — will be
+  created on save." and creates the textbook row on blur (or inline at submit
+  time if blur hadn't fired). `createTextbook` does a case-insensitive dedup
+  check before inserting.
+- Grade/Unit/Lesson are also `<input>` + `<datalist>` fields. Free-text
+  entry is allowed; options are populated from existing `lesson_tags`.
+- Grade field is enabled as soon as any textbook text is entered (not gated
+  on the UUID being resolved) so the user can type ahead freely before the
+  async textbook creation completes.
+
 **Batch application:**
 - The cascade tag section is above the submit button.
 - When submitted, the same cascade tag is applied to **every word** in the
-  batch. If no tag is selected, words are saved without tags.
-- Tag assignment is performed in the same transaction as word insertion.
-  If a word is skipped (already exists), its tag assignment is also skipped.
+  batch, including words that already existed in the family's collection
+  (i.e. were skipped for insertion but are still tagged). This differs from
+  the original spec which said already-existing words' tag assignment is
+  skipped.
+- Tag assignment is performed after word insertion.
 
 **Validation:**
 - Tag is all-or-nothing: if the section is open, all 4 levels must be
@@ -187,11 +206,11 @@ Textbook [All ▼]   Grade [All ▼]   Unit [All ▼]   Lesson [All ▼]   [Clea
 - Selecting a higher-level filter resets lower-level filters.
 - "All" (default) means no filter applied at that level.
 - **[Clear Filters]** resets all four to "All".
-- Filter state **persists across in-app navigations** within the session
-  (implement via URL search params: `?textbook=...&grade=...&unit=...&lesson=...`).
-  State resets on profile switch or logout. If URL param implementation
-  proves costly during build, fall back to session-level in-memory state
-  (resets on hard refresh) and flag it in the fix log.
+- Filter state **persists across in-app navigations** via URL search params
+  (`?textbook=...&grade=...&unit=...&lesson=...`). A **[Save Filters]** button
+  also persists the current filter set to `localStorage` (key `cc_filter_all`
+  / `cc_filter_admin`) and auto-restores on page load if the URL has no params.
+  State resets on profile switch or logout.
 
 **Tag column in the character table:**
 
@@ -227,7 +246,7 @@ No tag column added to the admin table in this phase — filter-only.
 |---------|--------|
 | UI      | `/words/add` — optional tag section; `/words/all` — filter bar + Lessons column; `/words/admin` — filter bar |
 | Domain  | No changes to scheduler or grading logic |
-| Service | New functions in `supabase-service.ts`: `listTextbooks`, `listLessonTags`, `createLessonTagIfNew`, `assignWordLessonTags`, `getWordLessonTags`, `listWordsByLessonTag`. All write paths normalize grade/unit/lesson strings (trim, collapse whitespace, title-case ASCII, preserve CJK) before insert or dedup comparison. |
+| Service | New functions in `supabase-service.ts`: `listTextbooks`, `createTextbook`, `listLessonTags`, `createLessonTagIfNew`, `assignWordLessonTags`, `getWordLessonTagsForFamily`. All write paths normalize grade/unit/lesson strings (trim, collapse whitespace, title-case ASCII, preserve CJK) before insert or dedup comparison. `wordTagsMap` is loaded in shared state (`useWordsBaseState`) and refreshed as part of `refreshAll` so both `/words/all` and `/words/admin` always reflect the latest tag data. |
 | AI      | No changes |
 | Schema  | Three new tables: `textbooks`, `lesson_tags`, `word_lesson_tags` + RLS + seed |
 
@@ -242,8 +261,9 @@ No tag column added to the admin table in this phase — filter-only.
 
 ## Edge Cases
 
-1. **Word already exists on batch add** — tag assignment for that word is
-   skipped silently (consistent with existing "already exists" skip behavior).
+1. **Word already exists on batch add** — tag assignment is still applied
+   to already-existing words. The original spec said to skip; this was
+   revised during testing — the more useful behaviour is to tag them.
 2. **User partially fills cascade then collapses the section** — treat as
    no tag selected; clear partial state on collapse.
 3. **Shared textbook deleted by admin** — cascade deletes associated

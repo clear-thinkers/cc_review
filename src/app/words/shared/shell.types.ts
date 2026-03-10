@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
  * Shared across all feature pages for routing and layout
  */
 
-export type NavPage = "add" | "all" | "review" | "admin" | "results" | "prompts";
+export type NavPage = "add" | "all" | "review" | "admin" | "results" | "prompts" | "debug";
 export type WordsSectionPage = NavPage | "flashcard" | "fillTest";
 
 export type NavItem = {

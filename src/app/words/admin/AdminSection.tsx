@@ -1,6 +1,386 @@
-"use client";
+﻿"use client";
 
+import { useMemo, memo, useCallback, useRef } from "react";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
+import type { WordsLocaleStrings } from "../shared/words.shared.types";
+import type {
+  AdminTableRenderRow,
+  AdminTableRow,
+  AdminTarget,
+} from "./admin.types";
+import { renderPhraseWithPinyin, renderSentenceWithPinyin } from "../shared/words.shared.utils";
+
+// ---------------------------------------------------------------------------
+// Memoised table row â€” prevents re-render when only URL filter params change.
+// React.memo does a shallow prop comparison; all handler props come from the
+// vm object which is stable when only searchParams change (WordsWorkspace does
+// not re-render on URL changes), so bailed-out rows skip renderPhraseWithPinyin
+// and renderSentenceWithPinyin entirely.
+// ---------------------------------------------------------------------------
+
+type AdminTableRowComponentProps = {
+  row: AdminTableRenderRow;
+  target: AdminTarget | undefined;
+  rawValue: string;
+  isRegenerating: boolean;
+  isSaving: boolean;
+  isDeleting: boolean;
+  adminPreloading: boolean;
+  isEditingThis: boolean;
+  str: WordsLocaleStrings;
+  onRegenerate: (target: AdminTarget) => void;
+  onSave: (target: AdminTarget) => void;
+  onDeleteTarget: (target: AdminTarget) => void;
+  onAddMeaningRow: (targetKey: string) => void;
+  onUpdatePendingMeaningInput: (
+    pendingId: string,
+    field: "meaningZhInput" | "phraseInput" | "exampleInput",
+    value: string
+  ) => void;
+  onSavePendingMeaning: (row: AdminTableRow) => void;
+  onRemovePendingMeaning: (pendingId: string) => void;
+  onAddPhraseRow: (targetKey: string, meaningZh: string, meaningEn: string) => void;
+  onUpdatePendingPhraseInput: (pendingId: string, value: string) => void;
+  onSavePendingPhrase: (row: AdminTableRow) => void;
+  onRemovePendingPhrase: (pendingId: string) => void;
+  onToggleFillTestInclude: (row: AdminTableRow, include: boolean) => void;
+  onRegeneratePhrase: (row: AdminTableRow) => void;
+  onDeletePhrase: (row: AdminTableRow) => void;
+  onInlineEditExample: (row: AdminTableRow, value: string) => void;
+  onRegenerateExample: (row: AdminTableRow) => void;
+  onEditExample: (row: AdminTableRow) => void;
+  onDeleteExample: (row: AdminTableRow) => void;
+};
+
+const AdminTableRowComponent = memo(function AdminTableRowComponent({
+  row,
+  target,
+  rawValue,
+  isRegenerating,
+  isSaving,
+  isDeleting,
+  adminPreloading,
+  isEditingThis,
+  str,
+  onRegenerate,
+  onSave,
+  onDeleteTarget,
+  onAddMeaningRow,
+  onUpdatePendingMeaningInput,
+  onSavePendingMeaning,
+  onRemovePendingMeaning,
+  onAddPhraseRow,
+  onUpdatePendingPhraseInput,
+  onSavePendingPhrase,
+  onRemovePendingPhrase,
+  onToggleFillTestInclude,
+  onRegeneratePhrase,
+  onDeletePhrase,
+  onInlineEditExample,
+  onRegenerateExample,
+  onEditExample,
+  onDeleteExample,
+}: AdminTableRowComponentProps) {
+  const busy = adminPreloading || isRegenerating || isSaving || isDeleting;
+  const canSave = Boolean(rawValue.trim());
+  const isPendingPhraseRow = row.rowType === "pending_phrase";
+  const isPendingMeaningRow = row.rowType === "pending_meaning";
+  const isEmptyTargetRow = row.rowType === "empty_target";
+  const isExistingRow = row.rowType === "existing";
+
+  return (
+    <tr key={row.rowKey} className="border-b align-top">
+      {row.showCharacterCell ? (
+        <td className="px-3 py-2 text-base" rowSpan={row.characterRowSpan}>
+          <div className="flex min-h-[5rem] flex-col justify-between gap-2">
+            <p>
+              {row.character} ({row.pronunciation})
+            </p>
+            {!target ? null : (
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => onRegenerate(target)}
+                  title={str.admin.table.actionTooltips.regenerate}
+                >
+                  {str.admin.table.actionButtons.regenerate}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                  disabled={busy || !canSave}
+                  onClick={() => onSave(target)}
+                  title={str.admin.table.actionTooltips.save}
+                >
+                  {str.admin.table.actionButtons.save}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => onDeleteTarget(target)}
+                  title={str.admin.table.actionTooltips.delete}
+                >
+                  {str.admin.table.actionButtons.delete}
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-1 text-[11px] font-medium leading-tight text-sky-800 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => onAddMeaningRow(target.key)}
+                  title={str.admin.table.actionTooltips.addMeaning}
+                >
+                  {str.admin.table.actionButtons.addMeaning}
+                </button>
+              </div>
+            )}
+          </div>
+        </td>
+      ) : null}
+      {row.showMeaningCell ? (
+        <td className="px-3 py-2" rowSpan={row.meaningRowSpan}>
+          {isPendingMeaningRow ? (
+            <div className="space-y-2">
+              <input
+                className="w-full rounded-md border px-2 py-1 text-sm"
+                value={row.meaningZh}
+                onChange={(event) => {
+                  if (!row.pendingId) return;
+                  onUpdatePendingMeaningInput(row.pendingId, "meaningZhInput", event.target.value);
+                }}
+                placeholder={str.admin.table.placeholders.newMeaning}
+              />
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-0.5 text-xs font-medium leading-none text-white disabled:opacity-50"
+                  disabled={busy || !row.meaningZh.trim() || !row.phrase.trim() || !row.example.trim()}
+                  onClick={() => onSavePendingMeaning(row)}
+                  title={str.admin.table.actionTooltips.saveNew}
+                >
+                  {str.admin.table.actionButtons.saveNew}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border-2 border-rose-500 bg-rose-50 px-2 py-0.5 text-xs font-medium leading-none text-rose-700 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => { if (row.pendingId) onRemovePendingMeaning(row.pendingId); }}
+                  title={str.admin.table.actionTooltips.cancelAdd}
+                >
+                  {str.admin.table.actionButtons.cancel}
+                </button>
+              </div>
+            </div>
+          ) : isEmptyTargetRow ? (
+            <p className="text-xs text-gray-500">
+              {str.admin.table.emptyMessages.noContent}
+            </p>
+          ) : (
+            <>
+              <p className="text-base leading-tight">{row.meaningZh}</p>
+              {row.meaningEn ? <p className="mt-1 text-xs text-gray-500">{row.meaningEn}</p> : null}
+              {!target ? null : (
+                <button
+                  type="button"
+                  className="mt-2 rounded border-2 border-sky-300 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-800 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => onAddPhraseRow(row.targetKey, row.meaningZh, row.meaningEn)}
+                  title={str.admin.table.actionTooltips.addPhrase}
+                >
+                  {str.admin.table.actionButtons.addPhrase}
+                </button>
+              )}
+            </>
+          )}
+        </td>
+      ) : null}
+      <td className="px-3 py-2">
+        <div className="flex flex-col gap-1">
+          {isPendingPhraseRow ? (
+            <input
+              className="w-full rounded-md border px-2 py-1 text-sm"
+              value={row.phrase}
+              onChange={(event) => {
+                if (!row.pendingId) return;
+                onUpdatePendingPhraseInput(row.pendingId, event.target.value);
+              }}
+              placeholder={str.admin.table.placeholders.newPhrase.replace("{char}", row.character)}
+            />
+          ) : isPendingMeaningRow ? (
+            <input
+              className="w-full rounded-md border px-2 py-1 text-sm"
+              value={row.phrase}
+              onChange={(event) => {
+                if (!row.pendingId) return;
+                onUpdatePendingMeaningInput(row.pendingId, "phraseInput", event.target.value);
+              }}
+              placeholder={str.admin.table.placeholders.newPhrase.replace("{char}", row.character)}
+            />
+          ) : isEmptyTargetRow ? (
+            <p className="text-xs text-gray-500">{str.admin.table.emptyMessages.addMeaningFirst}</p>
+          ) : (
+            <div className="text-base leading-tight">
+              {renderPhraseWithPinyin(row.phrase, row.phrasePinyin)}
+            </div>
+          )}
+          {!target || isEmptyTargetRow ? null : isPendingPhraseRow ? (
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-0.5 text-xs font-medium leading-none text-white disabled:opacity-50"
+                disabled={busy || !row.phrase.trim()}
+                onClick={() => onSavePendingPhrase(row)}
+                title={str.admin.table.actionTooltips.saveNew}
+              >
+                {str.admin.table.actionButtons.saveNew}
+              </button>
+              <button
+                type="button"
+                className="rounded border-2 border-rose-500 bg-rose-50 px-2 py-0.5 text-xs font-medium leading-none text-rose-700 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => { if (row.pendingId) onRemovePendingPhrase(row.pendingId); }}
+                title={str.admin.table.actionTooltips.cancelAdd}
+              >
+                {str.admin.table.actionButtons.cancel}
+              </button>
+            </div>
+          ) : isPendingMeaningRow ? null : (
+            <div className="flex flex-wrap gap-1">
+              {isExistingRow ? (
+                <button
+                  type="button"
+                  className={
+                    row.includeInFillTest
+                      ? "rounded border-2 border-teal-600 bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-teal-700 disabled:opacity-50"
+                      : "rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50"
+                  }
+                  disabled={busy}
+                  onClick={() => { void onToggleFillTestInclude(row, !row.includeInFillTest); }}
+                  title={
+                    row.includeInFillTest
+                      ? str.admin.table.actionTooltips.fillTestOn
+                      : str.admin.table.actionTooltips.fillTestOff
+                  }
+                >
+                  {row.includeInFillTest
+                    ? str.admin.table.actionButtons.fillTestOn
+                    : str.admin.table.actionButtons.fillTestOff}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => onRegeneratePhrase(row)}
+                title={str.admin.table.actionTooltips.regeneratePhrase}
+              >
+                {str.admin.table.actionButtons.regenerate}
+              </button>
+              <button
+                type="button"
+                className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                disabled={busy || !canSave}
+                onClick={() => onSave(target)}
+                title={str.admin.table.actionTooltips.save}
+              >
+                {str.admin.table.actionButtons.save}
+              </button>
+              <button
+                type="button"
+                className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => onDeletePhrase(row)}
+                title={str.admin.table.actionTooltips.deletePhrase}
+              >
+                {str.admin.table.actionButtons.delete}
+              </button>
+            </div>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-2">
+        <div className="flex flex-col gap-1">
+          {isPendingPhraseRow || isPendingMeaningRow ? (
+            isPendingMeaningRow ? (
+              <input
+                className="w-full rounded-md border px-2 py-1 text-sm"
+                value={row.example}
+                onChange={(event) => {
+                  if (!row.pendingId) return;
+                  onUpdatePendingMeaningInput(row.pendingId, "exampleInput", event.target.value);
+                }}
+                placeholder={str.admin.table.placeholders.matchingExample}
+              />
+            ) : (
+              <p className="text-xs text-gray-500">
+                {str.admin.table.helper.generatedOnSave}
+              </p>
+            )
+          ) : isEmptyTargetRow ? (
+            <p className="text-xs text-gray-500">
+              {str.admin.table.emptyMessages.addMeaningAndPhraseFirst}
+            </p>
+          ) : isEditingThis ? (
+            <input
+              className="w-full rounded-md border px-2 py-1 text-sm"
+              value={row.example}
+              onChange={(event) => onInlineEditExample(row, event.target.value)}
+              placeholder={str.admin.table.placeholders.editExample}
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+            />
+          ) : (
+            <div className="text-base leading-tight">
+              {renderSentenceWithPinyin(row.example, row.examplePinyin)}
+            </div>
+          )}
+          {!target || isPendingPhraseRow || isPendingMeaningRow || isEmptyTargetRow ? null : (
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => onRegenerateExample(row)}
+                title={str.admin.table.actionTooltips.regenerateExample}
+              >
+                {str.admin.table.actionButtons.regenerate}
+              </button>
+              <button
+                type="button"
+                className="rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-sky-800 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => onEditExample(row)}
+                title={str.admin.table.actionTooltips.editExample}
+              >
+                {str.admin.table.actionButtons.edit}
+              </button>
+              <button
+                type="button"
+                className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                disabled={busy || !canSave}
+                onClick={() => onSave(target)}
+                title={str.admin.table.actionTooltips.save}
+              >
+                {str.admin.table.actionButtons.save}
+              </button>
+              <button
+                type="button"
+                className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => onDeleteExample(row)}
+                title={str.admin.table.actionTooltips.deleteExample}
+              >
+                {str.admin.table.actionButtons.delete}
+              </button>
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+});
 
 export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const {
@@ -16,6 +396,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminTargetsReadyForTestingCount,
     adminTargetsExcludedForTestingCount,
     handleAdminPreloadAll,
+    cancelAdminPreload,
+    adminPreloadCancelling,
     handleAdminRefreshAllPinyin,
     adminLoading,
     adminPreloading,
@@ -23,6 +405,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminProgressText,
     adminNotice,
     adminTableRenderRows,
+    adminVisibleTargetKeySet,
     adminEmptyTableMessage,
     adminTargetByKey,
     adminJsonByKey,
@@ -40,17 +423,61 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     updateAdminPendingPhraseInput,
     handleAdminSavePendingPhrase,
     removeAdminPendingPhrase,
-    renderPhraseWithPinyin,
     handleAdminToggleFillTestInclude,
     handleAdminRegeneratePhrase,
     handleAdminDeletePhrase,
     adminEditingExampleRowKey,
     handleAdminInlineEditExample,
-    renderSentenceWithPinyin,
     handleAdminRegenerateExample,
     handleAdminEditExample,
     handleAdminDeleteExample,
   } = vm;
+
+  const vmRef = useRef(vm);
+  vmRef.current = vm;
+
+  // Stable callback wrappers — identity never changes so React.memo on
+  // AdminTableRowComponent bails out correctly for unaffected rows.
+  const stableOnRegenerate = useCallback((target: AdminTarget) => vmRef.current.handleAdminRegenerate(target), []);
+  const stableOnSave = useCallback((target: AdminTarget) => vmRef.current.handleAdminSave(target), []);
+  const stableOnDeleteTarget = useCallback((target: AdminTarget) => vmRef.current.handleAdminDeleteTarget(target), []);
+  const stableOnAddMeaningRow = useCallback((targetKey: string) => vmRef.current.handleAdminAddMeaningRow(targetKey), []);
+  const stableOnUpdatePendingMeaningInput = useCallback(
+    (pendingId: string, field: "meaningZhInput" | "phraseInput" | "exampleInput", value: string) =>
+      vmRef.current.updateAdminPendingMeaningInput(pendingId, field, value),
+    []
+  );
+  const stableOnSavePendingMeaning = useCallback((row: AdminTableRow) => vmRef.current.handleAdminSavePendingMeaning(row), []);
+  const stableOnRemovePendingMeaning = useCallback((pendingId: string) => vmRef.current.removeAdminPendingMeaning(pendingId), []);
+  const stableOnAddPhraseRow = useCallback(
+    (targetKey: string, meaningZh: string, meaningEn: string) =>
+      vmRef.current.handleAdminAddPhraseRow(targetKey, meaningZh, meaningEn),
+    []
+  );
+  const stableOnUpdatePendingPhraseInput = useCallback(
+    (pendingId: string, value: string) => vmRef.current.updateAdminPendingPhraseInput(pendingId, value),
+    []
+  );
+  const stableOnSavePendingPhrase = useCallback((row: AdminTableRow) => vmRef.current.handleAdminSavePendingPhrase(row), []);
+  const stableOnRemovePendingPhrase = useCallback((pendingId: string) => vmRef.current.removeAdminPendingPhrase(pendingId), []);
+  const stableOnToggleFillTestInclude = useCallback(
+    (row: AdminTableRow, include: boolean) => vmRef.current.handleAdminToggleFillTestInclude(row, include),
+    []
+  );
+  const stableOnRegeneratePhrase = useCallback((row: AdminTableRow) => vmRef.current.handleAdminRegeneratePhrase(row), []);
+  const stableOnDeletePhrase = useCallback((row: AdminTableRow) => vmRef.current.handleAdminDeletePhrase(row), []);
+  const stableOnInlineEditExample = useCallback(
+    (row: AdminTableRow, value: string) => vmRef.current.handleAdminInlineEditExample(row, value),
+    []
+  );
+  const stableOnRegenerateExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminRegenerateExample(row), []);
+  const stableOnEditExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminEditExample(row), []);
+  const stableOnDeleteExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminDeleteExample(row), []);
+
+  const filteredAdminRenderRows = useMemo(
+    () => adminTableRenderRows.filter((r) => adminVisibleTargetKeySet.has(r.targetKey)),
+    [adminTableRenderRows, adminVisibleTargetKeySet]
+  );
 
   if (page !== "admin") {
     return null;
@@ -153,6 +580,16 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         >
           {adminPreloading ? str.admin.buttons.preloading : str.admin.buttons.preload}
         </button>
+        {adminPreloading ? (
+          <button
+            type="button"
+            className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
+            onClick={cancelAdminPreload}
+            disabled={adminPreloadCancelling}
+          >
+            {adminPreloadCancelling ? str.admin.buttons.cancellingPreload : str.admin.buttons.cancelPreload}
+          </button>
+        ) : null}
         <button
           type="button"
           className="rounded-md border-2 border-purple-300 bg-purple-100 px-4 py-2 font-medium text-purple-700 disabled:opacity-50"
@@ -180,352 +617,52 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             </tr>
           </thead>
           <tbody>
-            {adminTableRenderRows.length === 0 ? (
+            {filteredAdminRenderRows.length === 0 ? (
               <tr>
                 <td className="px-3 py-3 text-gray-600" colSpan={4}>
                   {adminEmptyTableMessage}
                 </td>
               </tr>
             ) : (
-              adminTableRenderRows.map((row) => {
+              filteredAdminRenderRows.map((row) => {
                 const target = adminTargetByKey.get(row.targetKey);
                 const rawValue = target ? adminJsonByKey[target.key] ?? "" : "";
-                const regenerating = target ? adminRegeneratingKey === target.key : false;
-                const saving = target ? adminSavingKey === target.key : false;
-                const deleting = target ? adminDeletingKey === target.key : false;
-                const busy = adminPreloading || regenerating || saving || deleting;
-                const canSave = Boolean(rawValue.trim());
-                const isPendingPhraseRow = row.rowType === "pending_phrase";
-                const isPendingMeaningRow = row.rowType === "pending_meaning";
-                const isEmptyTargetRow = row.rowType === "empty_target";
-                const isExistingRow = row.rowType === "existing";
+                const isRegenerating = target ? adminRegeneratingKey === target.key : false;
+                const isSaving = target ? adminSavingKey === target.key : false;
+                const isDeleting = target ? adminDeletingKey === target.key : false;
+                const isEditingThis = row.rowKey === adminEditingExampleRowKey;
 
                 return (
-                  <tr key={row.rowKey} className="border-b align-top">
-                    {row.showCharacterCell ? (
-                      <td className="px-3 py-2 text-base" rowSpan={row.characterRowSpan}>
-                        <div className="flex min-h-[5rem] flex-col justify-between gap-2">
-                          <p>
-                            {row.character} ({row.pronunciation})
-                          </p>
-                          {!target ? null : (
-                            <div className="flex flex-wrap gap-1">
-                              <button
-                                type="button"
-                                className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
-                                disabled={busy}
-                                onClick={() => handleAdminRegenerate(target)}
-                                title={str.admin.table.actionTooltips.regenerate}
-                              >
-                                {str.admin.table.actionButtons.regenerate}
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
-                                disabled={busy || !canSave}
-                                onClick={() => handleAdminSave(target)}
-                                title={str.admin.table.actionTooltips.save}
-                              >
-                                {str.admin.table.actionButtons.save}
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
-                                disabled={busy}
-                                onClick={() => handleAdminDeleteTarget(target)}
-                                title={str.admin.table.actionTooltips.delete}
-                              >
-                                {str.admin.table.actionButtons.delete}
-                              </button>
-                              <button
-                                type="button"
-                                className="inline-flex items-center justify-center rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-1 text-[11px] font-medium leading-tight text-sky-800 disabled:opacity-50"
-                                disabled={busy}
-                                onClick={() => handleAdminAddMeaningRow(target.key)}
-                                title={str.admin.table.actionTooltips.addMeaning}
-                              >
-                                {str.admin.table.actionButtons.addMeaning}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    ) : null}
-                    {row.showMeaningCell ? (
-                      <td className="px-3 py-2" rowSpan={row.meaningRowSpan}>
-                        {isPendingMeaningRow ? (
-                          <div className="space-y-2">
-                            <input
-                              className="w-full rounded-md border px-2 py-1 text-sm"
-                              value={row.meaningZh}
-                              onChange={(event) => {
-                                if (!row.pendingId) {
-                                  return;
-                                }
-                                updateAdminPendingMeaningInput(
-                                  row.pendingId,
-                                  "meaningZhInput",
-                                  event.target.value
-                                );
-                              }}
-                              placeholder={str.admin.table.placeholders.newMeaning}
-                            />
-                            <div className="flex flex-wrap gap-1">
-                              <button
-                                type="button"
-                                className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-0.5 text-xs font-medium leading-none text-white disabled:opacity-50"
-                                disabled={
-                                  busy || !row.meaningZh.trim() || !row.phrase.trim() || !row.example.trim()
-                                }
-                                onClick={() => handleAdminSavePendingMeaning(row)}
-                                title={str.admin.table.actionTooltips.saveNew}
-                              >
-                                {str.admin.table.actionButtons.saveNew}
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded border-2 border-rose-500 bg-rose-50 px-2 py-0.5 text-xs font-medium leading-none text-rose-700 disabled:opacity-50"
-                                disabled={busy}
-                                onClick={() => {
-                                  if (!row.pendingId) {
-                                    return;
-                                  }
-                                  removeAdminPendingMeaning(row.pendingId);
-                                }}
-                                title={str.admin.table.actionTooltips.cancelAdd}
-                              >
-                                {str.admin.table.actionButtons.cancel}
-                              </button>
-                            </div>
-                          </div>
-                        ) : isEmptyTargetRow ? (
-                          <p className="text-xs text-gray-500">
-                            {str.admin.table.emptyMessages.noContent}
-                          </p>
-                        ) : (
-                          <>
-                            <p className="text-base leading-tight">{row.meaningZh}</p>
-                            {row.meaningEn ? <p className="mt-1 text-xs text-gray-500">{row.meaningEn}</p> : null}
-                            {!target ? null : (
-                              <button
-                                type="button"
-                                className="mt-2 rounded border-2 border-sky-300 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-800 disabled:opacity-50"
-                                disabled={busy}
-                                onClick={() =>
-                                  handleAdminAddPhraseRow(row.targetKey, row.meaningZh, row.meaningEn)
-                                }
-                                title={str.admin.table.actionTooltips.addPhrase}
-                              >
-                                {str.admin.table.actionButtons.addPhrase}
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </td>
-                    ) : null}
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col gap-1">
-                        {isPendingPhraseRow ? (
-                          <input
-                            className="w-full rounded-md border px-2 py-1 text-sm"
-                            value={row.phrase}
-                            onChange={(event) => {
-                              if (!row.pendingId) {
-                                return;
-                              }
-                              updateAdminPendingPhraseInput(row.pendingId, event.target.value);
-                            }}
-                            placeholder={str.admin.table.placeholders.newPhrase.replace("{char}", row.character)}
-                          />
-                        ) : isPendingMeaningRow ? (
-                          <input
-                            className="w-full rounded-md border px-2 py-1 text-sm"
-                            value={row.phrase}
-                            onChange={(event) => {
-                              if (!row.pendingId) {
-                                return;
-                              }
-                              updateAdminPendingMeaningInput(
-                                row.pendingId,
-                                "phraseInput",
-                                event.target.value
-                              );
-                            }}
-                            placeholder={str.admin.table.placeholders.newPhrase.replace("{char}", row.character)}
-                          />
-                        ) : isEmptyTargetRow ? (
-                          <p className="text-xs text-gray-500">{str.admin.table.emptyMessages.addMeaningFirst}</p>
-                        ) : (
-                          <div className="text-base leading-tight">
-                            {renderPhraseWithPinyin(row.phrase, row.phrasePinyin)}
-                          </div>
-                        )}
-                        {!target || isEmptyTargetRow ? null : isPendingPhraseRow ? (
-                          <div className="flex flex-wrap gap-1">
-                            <button
-                              type="button"
-                              className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-0.5 text-xs font-medium leading-none text-white disabled:opacity-50"
-                              disabled={busy || !row.phrase.trim()}
-                              onClick={() => handleAdminSavePendingPhrase(row)}
-                              title={str.admin.table.actionTooltips.saveNew}
-                            >
-                              {str.admin.table.actionButtons.saveNew}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded border-2 border-rose-500 bg-rose-50 px-2 py-0.5 text-xs font-medium leading-none text-rose-700 disabled:opacity-50"
-                              disabled={busy}
-                              onClick={() => {
-                                if (!row.pendingId) {
-                                  return;
-                                }
-                                removeAdminPendingPhrase(row.pendingId);
-                              }}
-                              title={str.admin.table.actionTooltips.cancelAdd}
-                            >
-                              {str.admin.table.actionButtons.cancel}
-                            </button>
-                          </div>
-                        ) : isPendingMeaningRow ? null : (
-                          <div className="flex flex-wrap gap-1">
-                            {isExistingRow ? (
-                              <button
-                                type="button"
-                                className={
-                                  row.includeInFillTest
-                                    ? "rounded border-2 border-teal-600 bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-teal-700 disabled:opacity-50"
-                                    : "rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50"
-                                }
-                                disabled={busy}
-                                onClick={() => {
-                                  void handleAdminToggleFillTestInclude(row, !row.includeInFillTest);
-                                }}
-                                title={
-                                  row.includeInFillTest
-                                    ? str.admin.table.actionTooltips.fillTestOn
-                                    : str.admin.table.actionTooltips.fillTestOff
-                                }
-                              >
-                                {row.includeInFillTest
-                                  ? str.admin.table.actionButtons.fillTestOn
-                                  : str.admin.table.actionButtons.fillTestOff}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
-                              disabled={busy}
-                              onClick={() => handleAdminRegeneratePhrase(row)}
-                              title={str.admin.table.actionTooltips.regeneratePhrase}
-                            >
-                              {str.admin.table.actionButtons.regenerate}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
-                              disabled={busy || !canSave}
-                              onClick={() => handleAdminSave(target)}
-                              title={str.admin.table.actionTooltips.save}
-                            >
-                              {str.admin.table.actionButtons.save}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
-                              disabled={busy}
-                              onClick={() => handleAdminDeletePhrase(row)}
-                              title={str.admin.table.actionTooltips.deletePhrase}
-                            >
-                              {str.admin.table.actionButtons.delete}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-col gap-1">
-                        {isPendingPhraseRow || isPendingMeaningRow ? (
-                          isPendingMeaningRow ? (
-                            <input
-                              className="w-full rounded-md border px-2 py-1 text-sm"
-                              value={row.example}
-                              onChange={(event) => {
-                                if (!row.pendingId) {
-                                  return;
-                                }
-                                updateAdminPendingMeaningInput(
-                                  row.pendingId,
-                                  "exampleInput",
-                                  event.target.value
-                                );
-                              }}
-                              placeholder={str.admin.table.placeholders.matchingExample}
-                            />
-                          ) : (
-                            <p className="text-xs text-gray-500">
-                              {str.admin.table.helper.generatedOnSave}
-                            </p>
-                          )
-                        ) : isEmptyTargetRow ? (
-                          <p className="text-xs text-gray-500">
-                            {str.admin.table.emptyMessages.addMeaningAndPhraseFirst}
-                          </p>
-                        ) : row.rowKey === adminEditingExampleRowKey ? (
-                          <input
-                            className="w-full rounded-md border px-2 py-1 text-sm"
-                            value={row.example}
-                            onChange={(event) => handleAdminInlineEditExample(row, event.target.value)}
-                            placeholder={str.admin.table.placeholders.editExample}
-                            autoFocus
-                          />
-                        ) : (
-                          <div className="text-base leading-tight">
-                            {renderSentenceWithPinyin(row.example, row.examplePinyin)}
-                          </div>
-                        )}
-                        {!target || isPendingPhraseRow || isPendingMeaningRow || isEmptyTargetRow ? null : (
-                          <div className="flex flex-wrap gap-1">
-                            <button
-                              type="button"
-                              className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
-                              disabled={busy}
-                              onClick={() => handleAdminRegenerateExample(row)}
-                              title={str.admin.table.actionTooltips.regenerateExample}
-                            >
-                              {str.admin.table.actionButtons.regenerate}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-sky-800 disabled:opacity-50"
-                              disabled={busy}
-                              onClick={() => handleAdminEditExample(row)}
-                              title={str.admin.table.actionTooltips.editExample}
-                            >
-                              {str.admin.table.actionButtons.edit}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
-                              disabled={busy || !canSave}
-                              onClick={() => handleAdminSave(target)}
-                              title={str.admin.table.actionTooltips.save}
-                            >
-                              {str.admin.table.actionButtons.save}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
-                              disabled={busy}
-                              onClick={() => handleAdminDeleteExample(row)}
-                              title={str.admin.table.actionTooltips.deleteExample}
-                            >
-                              {str.admin.table.actionButtons.delete}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                  <AdminTableRowComponent
+                    key={row.rowKey}
+                    row={row}
+                    target={target}
+                    rawValue={rawValue}
+                    isRegenerating={isRegenerating}
+                    isSaving={isSaving}
+                    isDeleting={isDeleting}
+                    adminPreloading={adminPreloading}
+                    isEditingThis={isEditingThis}
+                    str={str}
+                    onRegenerate={stableOnRegenerate}
+                    onSave={stableOnSave}
+                    onDeleteTarget={stableOnDeleteTarget}
+                    onAddMeaningRow={stableOnAddMeaningRow}
+                    onUpdatePendingMeaningInput={stableOnUpdatePendingMeaningInput}
+                    onSavePendingMeaning={stableOnSavePendingMeaning}
+                    onRemovePendingMeaning={stableOnRemovePendingMeaning}
+                    onAddPhraseRow={stableOnAddPhraseRow}
+                    onUpdatePendingPhraseInput={stableOnUpdatePendingPhraseInput}
+                    onSavePendingPhrase={stableOnSavePendingPhrase}
+                    onRemovePendingPhrase={stableOnRemovePendingPhrase}
+                    onToggleFillTestInclude={stableOnToggleFillTestInclude}
+                    onRegeneratePhrase={stableOnRegeneratePhrase}
+                    onDeletePhrase={stableOnDeletePhrase}
+                    onInlineEditExample={stableOnInlineEditExample}
+                    onRegenerateExample={stableOnRegenerateExample}
+                    onEditExample={stableOnEditExample}
+                    onDeleteExample={stableOnDeleteExample}
+                  />
                 );
               })
             )}

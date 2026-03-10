@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, startTransition } from "react";
 import { useXinhuaFlashcardInfo } from "@/hooks/useXinhuaFlashcardInfo";
 import {
   addWords,
@@ -11,12 +11,18 @@ import {
   putWord,
   createQuizSession,
   deleteFlashcardContent,
+  deleteFlashcardContentByHanzi,
+  hasFlashcardContentForHanzi,
   getAllFlashcardContents,
   getDueWords,
   getFlashcardContent,
   gradeWord,
   putFlashcardContent,
   updateWallet,
+  createLessonTagIfNew,
+  assignWordLessonTags,
+  createTextbook,
+  getWordLessonTagsForFamily,
 } from "@/lib/supabase-service";
 import { gradeFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -116,9 +122,12 @@ import { useAdminState } from "./state/useAdminState";
 import { useFillTestReviewState } from "./state/useFillTestReviewState";
 import { useFlashcardReviewState } from "./state/useFlashcardReviewState";
 import { useWordsBaseState } from "./state/useWordsBaseState";
+import { useLocale } from "@/app/shared/locale";
+import { taggingStrings } from "./tagging.strings";
 export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; str: WordsLocaleStrings }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const locale = useLocale();
   const baseState = useWordsBaseState();
   const flashcardState = useFlashcardReviewState();
   const fillTestState = useFillTestReviewState();
@@ -131,6 +140,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setDueWords,
     loading,
     setLoading,
+    loadError,
+    setLoadError,
     hanzi,
     setHanzi,
     formNotice,
@@ -145,6 +156,20 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setDueWordsSortDirection,
     manualSelectedWordIds,
     setManualSelectedWordIds,
+    addTagSectionOpen,
+    setAddTagSectionOpen,
+    addTagTextbookId,
+    setAddTagTextbookId,
+    addTagTextbookName,
+    setAddTagTextbookName,
+    addTagGrade,
+    setAddTagGrade,
+    addTagUnit,
+    setAddTagUnit,
+    addTagLesson,
+    setAddTagLesson,
+    wordTagsMap,
+    setWordTagsMap,
   } = baseState;
 
   const {
@@ -215,6 +240,9 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setAdminSavedByKey,
     adminPreloading,
     setAdminPreloading,
+    adminPreloadCancelling,
+    setAdminPreloadCancelling,
+    preloadCancelRef,
     adminProgressText,
     setAdminProgressText,
     adminRegeneratingKey,
@@ -516,27 +544,22 @@ const gradeLabels = getGradeLabels(str);
     }
     return map;
   }, [adminPendingMeanings]);
+  const adminVisibleTargetKeySet = useMemo(
+    () => new Set(adminVisibleTargets.map((t) => t.key)),
+    [adminVisibleTargets]
+  );
   const adminTableRows = useMemo<AdminTableRow[]>(() => {
     const rows: AdminTableRow[] = [];
 
-    for (const target of adminVisibleTargets) {
-      const raw = adminJsonByKey[target.key];
-      let normalized: FlashcardLlmResponse = {
+    for (const target of adminTargets) {
+      // Use already-parsed flashcardLlmData to avoid JSON.parse + normalize on every render.
+      // flashcardLlmData is always written with normalized content and updated in the same
+      // React batch as adminTargets, so it is always in sync for table display purposes.
+      const normalized: FlashcardLlmResponse = flashcardLlmData[target.key] ?? {
         character: target.character,
         pronunciation: target.pronunciation,
         meanings: [],
       };
-      if (raw && raw.trim()) {
-        try {
-          const parsed = JSON.parse(raw) as unknown;
-          normalized = normalizeAdminDraftResponse(parsed, {
-            character: target.character,
-            pronunciation: target.pronunciation,
-          });
-        } catch {
-          // Keep empty fallback row so target stays visible in admin table.
-        }
-      }
       let hasRowsForTarget = false;
 
       for (let meaningIndex = 0; meaningIndex < normalized.meanings.length; meaningIndex += 1) {
@@ -633,7 +656,7 @@ const gradeLabels = getGradeLabels(str);
     }
 
     return rows;
-  }, [adminJsonByKey, adminPendingByMeaningKey, adminPendingMeaningsByTargetKey, adminVisibleTargets]);
+  }, [flashcardLlmData, adminPendingByMeaningKey, adminPendingMeaningsByTargetKey, adminTargets]);
   const adminTableRenderRows = useMemo<AdminTableRenderRow[]>(() => {
     if (adminTableRows.length === 0) {
       return [];
@@ -795,6 +818,11 @@ const gradeLabels = getGradeLabels(str);
 
   function clearForm() {
     setHanzi("");
+    setAddTagSectionOpen(false);
+    setAddTagTextbookId(null);
+    setAddTagGrade(null);
+    setAddTagUnit(null);
+    setAddTagLesson(null);
   }
 
   function resetFlashcardWordState() {
@@ -905,16 +933,26 @@ const gradeLabels = getGradeLabels(str);
   const refreshAll = useCallback(async () => {
     await refreshWords();
     await refreshDueWords();
-  }, [refreshDueWords, refreshWords]);
+    await getWordLessonTagsForFamily().then(setWordTagsMap).catch(() => setWordTagsMap(new Map()));
+  }, [refreshDueWords, refreshWords, setWordTagsMap]);
 
   useEffect(() => {
     (async () => {
-      await refreshAll();
-      setLoading(false);
+      try {
+        await refreshAll();
+      } catch (err) {
+        setLoadError(str.common.loadError);
+        console.error("[app] Failed to load initial data:", err);
+      } finally {
+        setLoading(false);
+      }
     })();
-  }, [refreshAll]);
+  }, [refreshAll, setLoadError, str.common.loadError]);
 
   async function requestFlashcardGeneration(payloadBody: unknown): Promise<unknown> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
@@ -925,22 +963,27 @@ const gradeLabels = getGradeLabels(str);
     if (supabaseSession?.access_token) {
       headers["Authorization"] = `Bearer ${supabaseSession.access_token}`;
     }
-    const response = await fetch("/api/flashcard/generate", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payloadBody),
-    });
+    try {
+      const response = await fetch("/api/flashcard/generate", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payloadBody),
+        signal: controller.signal,
+      });
 
-    const payload = (await response.json().catch(() => null)) as unknown;
-    if (!response.ok) {
-      const message =
-        payload && typeof payload === "object" && typeof (payload as { error?: unknown }).error === "string"
-          ? ((payload as { error: string }).error ?? "").trim()
-          : "";
-      throw new Error(message || `Generation failed (HTTP ${response.status}).`);
+      const payload = (await response.json().catch(() => null)) as unknown;
+      if (!response.ok) {
+        const message =
+          payload && typeof payload === "object" && typeof (payload as { error?: unknown }).error === "string"
+            ? ((payload as { error: string }).error ?? "").trim()
+            : "";
+        throw new Error(message || `Generation failed (HTTP ${response.status}).`);
+      }
+
+      return payload;
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return payload;
   }
 
   async function requestGeneratedFlashcardContent(requestItem: FlashcardLlmRequest): Promise<FlashcardLlmResponse> {
@@ -1780,6 +1823,8 @@ const gradeLabels = getGradeLabels(str);
       return;
     }
 
+    const concurrency = 3;
+    preloadCancelRef.current = false;
     setAdminPreloading(true);
     setAdminProgressText(null);
     setAdminNotice(null);
@@ -1787,57 +1832,79 @@ const gradeLabels = getGradeLabels(str);
     let generatedCount = 0;
     let skippedCount = 0;
     let failedCount = 0;
+    let cancelled = false;
     const total = adminTargets.length;
 
     try {
-      for (let index = 0; index < total; index += 1) {
-        const target = adminTargets[index];
+      for (let batchStart = 0; batchStart < total; batchStart += concurrency) {
+        if (preloadCancelRef.current) {
+          cancelled = true;
+          break;
+        }
+
+        const batchEnd = Math.min(batchStart + concurrency, total);
         setAdminProgressText(
-          `Preloading ${index + 1}/${total}: ${target.character} / ${target.pronunciation}`
+          str.admin.preloadingBatchProgress
+            .replace("{from}", String(batchStart + 1))
+            .replace("{to}", String(batchEnd))
+            .replace("{total}", String(total))
         );
 
-        try {
-          const existing = await getFlashcardContent(target.character, target.pronunciation);
-          if (existing?.content) {
-            skippedCount += 1;
-            setAdminSavedByKey((previous) => ({
-              ...previous,
-              [target.key]: true,
-            }));
-            if (!adminJsonByKey[target.key]) {
-              updateAdminJson(target.key, JSON.stringify(existing.content, null, 2));
+        const batchTargets = adminTargets.slice(batchStart, batchEnd);
+        const results = await Promise.allSettled(
+          batchTargets.map(async (target) => {
+            const existing = await getFlashcardContent(target.character, target.pronunciation);
+            if (existing?.content) {
+              return { outcome: "skipped" as const, target, content: existing.content };
             }
-            continue;
+            const generated = await requestGeneratedFlashcardContent({
+              character: target.character,
+              pronunciation: target.pronunciation,
+            });
+            await putFlashcardContent(target.character, target.pronunciation, generated);
+            return { outcome: "generated" as const, target, content: generated };
+          })
+        );
+
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            const { outcome, target, content } = result.value;
+            if (outcome === "skipped") {
+              skippedCount += 1;
+              setAdminSavedByKey((previous) => ({ ...previous, [target.key]: true }));
+              if (!adminJsonByKey[target.key]) {
+                updateAdminJson(target.key, JSON.stringify(content, null, 2));
+              }
+            } else {
+              generatedCount += 1;
+              updateAdminJson(target.key, JSON.stringify(content, null, 2));
+              setAdminSavedByKey((previous) => ({ ...previous, [target.key]: true }));
+              setFlashcardLlmData((previous) => ({ ...previous, [target.key]: content }));
+            }
+          } else {
+            failedCount += 1;
           }
-
-          const generated = await requestGeneratedFlashcardContent({
-            character: target.character,
-            pronunciation: target.pronunciation,
-          });
-
-          await putFlashcardContent(target.character, target.pronunciation, generated);
-          updateAdminJson(target.key, JSON.stringify(generated, null, 2));
-          setAdminSavedByKey((previous) => ({
-            ...previous,
-            [target.key]: true,
-          }));
-          setFlashcardLlmData((previous) => ({
-            ...previous,
-            [target.key]: generated,
-          }));
-          generatedCount += 1;
-        } catch {
-          failedCount += 1;
         }
       }
     } finally {
+      preloadCancelRef.current = false;
+      setAdminPreloadCancelling(false);
       setAdminPreloading(false);
       setAdminProgressText(null);
     }
 
+    const template = cancelled ? str.admin.preloadCancelled : str.admin.preloadResult;
     setAdminNotice(
-      `Preload finished. Generated ${generatedCount}, skipped ${skippedCount}, failed ${failedCount}.`
+      template
+        .replace("{generated}", String(generatedCount))
+        .replace("{skipped}", String(skippedCount))
+        .replace("{failed}", String(failedCount))
     );
+  }
+
+  function cancelAdminPreload() {
+    preloadCancelRef.current = true;
+    setAdminPreloadCancelling(true);
   }
 
   async function handleAdminRefreshAllPinyin() {
@@ -1918,6 +1985,14 @@ const gradeLabels = getGradeLabels(str);
     );
   }
 
+  // Stable key: only changes when the set of hanzi characters changes.
+  // Prevents the admin effect from re-running on every refreshAll() call that
+  // produces a new `words` array reference without changing which characters exist.
+  const adminHanziKey = useMemo(
+    () => words.map((w) => w.hanzi).sort().join(","),
+    [words]
+  );
+
   useEffect(() => {
     if (page !== "admin") {
       return;
@@ -1928,7 +2003,7 @@ const gradeLabels = getGradeLabels(str);
     setAdminNotice(null);
 
     (async () => {
-      try {
+      const adminLoadAsync = async () => {
         const seenChars = new Set<string>();
         const orderedChars: string[] = [];
         for (const word of words) {
@@ -1951,9 +2026,18 @@ const gradeLabels = getGradeLabels(str);
         const targetKeySet = new Set<string>();
         const skippedNoPronunciationChars: string[] = [];
 
-        for (const character of orderedChars) {
-          const info = await getXinhuaFlashcardInfo(character, { includeAllMatches: true });
-          const pronunciations = info?.pronunciations ?? [];
+        setAdminNotice("Step 1: Loading character pronunciations and saved content...");
+        const [xinhuaResults, allSavedContents] = await Promise.all([
+          Promise.all(
+            orderedChars.map(async (character) => {
+              const info = await getXinhuaFlashcardInfo(character, { includeAllMatches: true });
+              return { character, pronunciations: info?.pronunciations ?? [] };
+            })
+          ),
+          getAllFlashcardContents(),
+        ]);
+        setAdminNotice("Step 2: Data loaded. Building table...");
+        for (const { character, pronunciations } of xinhuaResults) {
           if (pronunciations.length === 0) {
             skippedNoPronunciationChars.push(character);
             continue;
@@ -1979,8 +2063,9 @@ const gradeLabels = getGradeLabels(str);
           }
         }
 
-        const allSavedContents = await getAllFlashcardContents();
-        const savedContentByKey = new Map(allSavedContents.map((entry) => [entry.key, entry.content] as const));
+        const validKeys = new Set(nextTargets.map((t) => t.key));
+        const filteredContents = allSavedContents.filter((e) => validKeys.has(e.key));
+        const savedContentByKey = new Map(filteredContents.map((entry) => [entry.key, entry.content] as const));
 
         if (!active) {
           return;
@@ -2002,16 +2087,21 @@ const gradeLabels = getGradeLabels(str);
           nextFlashcardMap[target.key] = savedContent;
         }
 
-        setAdminTargets(nextTargets);
-        setAdminSavedByKey(nextSavedByKey);
-        setAdminJsonByKey((previous) => ({
-          ...nextJsonByKey,
-          ...Object.fromEntries(Object.entries(previous).filter(([key]) => key in nextSavedByKey && !nextSavedByKey[key])),
-        }));
-        setFlashcardLlmData((previous) => ({
-          ...previous,
-          ...nextFlashcardMap,
-        }));
+        // Wrap state updates in startTransition so React 19 treats this render
+        // as non-urgent and yields to the browser between chunks, preventing
+        // the main thread from freezing while the table is built.
+        startTransition(() => {
+          setAdminTargets(nextTargets);
+          setAdminSavedByKey(nextSavedByKey);
+          setAdminJsonByKey((previous) => ({
+            ...nextJsonByKey,
+            ...Object.fromEntries(Object.entries(previous).filter(([key]) => key in nextSavedByKey && !nextSavedByKey[key])),
+          }));
+          setFlashcardLlmData((previous) => ({
+            ...previous,
+            ...nextFlashcardMap,
+          }));
+        });
         if (skippedNoPronunciationChars.length > 0) {
           const preview = skippedNoPronunciationChars.slice(0, 12).join("\u3001");
           const suffix = skippedNoPronunciationChars.length > 12 ? "..." : "";
@@ -2019,17 +2109,19 @@ const gradeLabels = getGradeLabels(str);
             `Skipped ${skippedNoPronunciationChars.length} char(s) without dictionary pronunciation: ${preview}${suffix}`
           );
         }
-      } catch (error) {
-        if (!active) {
-          return;
-        }
+      };
 
+      try {
+        await Promise.race([
+          adminLoadAsync(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Admin load timed out after 15s")), 15_000)
+          ),
+        ]);
+      } catch (error) {
+        if (!active) return;
         setAdminNotice(getErrorMessage(error, "Failed to load admin targets."));
       } finally {
-        if (!active) {
-          return;
-        }
-
         setAdminLoading(false);
       }
     })();
@@ -2037,7 +2129,7 @@ const gradeLabels = getGradeLabels(str);
     return () => {
       active = false;
     };
-  }, [page, words]);
+  }, [page, adminHanziKey]);
 
   useEffect(() => {
     if (
@@ -2133,6 +2225,26 @@ const gradeLabels = getGradeLabels(str);
       return;
     }
 
+    // Validate tag completeness: if the section is open, all 4 levels are required
+    const tagStr = taggingStrings[locale].add;
+
+    // If textbook name was typed but ID not yet resolved (blur-create pending), create now
+    let resolvedTextbookId = addTagTextbookId;
+    if (addTagSectionOpen && !resolvedTextbookId && addTagTextbookName.trim()) {
+      try {
+        const created = await createTextbook(addTagTextbookName.trim());
+        resolvedTextbookId = created.id;
+        setAddTagTextbookId(created.id);
+      } catch {
+        // fall through to validation which will surface the error
+      }
+    }
+
+    if (addTagSectionOpen && (!resolvedTextbookId || !addTagGrade || !addTagUnit || !addTagLesson)) {
+      setFormNotice(tagStr.partialTagError);
+      return;
+    }
+
     const existingWords = await getExistingWordsByHanzi(parsedCharacters);
     const existingHanziSet = new Set(existingWords.map((word) => word.hanzi));
     const hanziToAdd = parsedCharacters.filter((character) => !existingHanziSet.has(character));
@@ -2155,6 +2267,25 @@ const gradeLabels = getGradeLabels(str);
       await addWords(newWords);
     }
 
+    // Assign lesson tag to all submitted characters (new + already-existing)
+    if (addTagSectionOpen && resolvedTextbookId && addTagGrade && addTagUnit && addTagLesson) {
+      const allTargetIds = [
+        ...newWords.map((w) => w.id),
+        ...existingWords
+          .filter((w) => parsedCharacters.includes(w.hanzi))
+          .map((w) => w.id),
+      ];
+      if (allTargetIds.length > 0) {
+        const lessonTag = await createLessonTagIfNew(
+          resolvedTextbookId,
+          addTagGrade,
+          addTagUnit,
+          addTagLesson
+        );
+        await assignWordLessonTags(allTargetIds, lessonTag.id);
+      }
+    }
+
     clearForm();
 
     const skippedExistingCount = parsedCharacters.length - hanziToAdd.length;
@@ -2173,8 +2304,14 @@ const gradeLabels = getGradeLabels(str);
     await refreshAll();
   }
 
-  async function removeWord(id: string) {
-    await deleteWordFromDb(id);
+  async function removeWord(word: Pick<Word, "id" | "hanzi">) {
+    const hasContent = await hasFlashcardContentForHanzi(word.hanzi);
+    if (hasContent) {
+      const confirmed = window.confirm(str.all.table.confirmDeleteWithContent);
+      if (!confirmed) return;
+      await deleteFlashcardContentByHanzi(word.hanzi);
+    }
+    await deleteWordFromDb(word.id);
     await refreshAll();
   }
 
@@ -2591,6 +2728,7 @@ const gradeLabels = getGradeLabels(str);
   const sectionVm = {
     page,
     str,
+    loadError,
     formNotice,
     addWord,
     hanzi,
@@ -2681,6 +2819,8 @@ const gradeLabels = getGradeLabels(str);
     adminTargetsReadyForTestingCount,
     adminTargetsExcludedForTestingCount,
     handleAdminPreloadAll,
+    cancelAdminPreload,
+    adminPreloadCancelling,
     handleAdminRefreshAllPinyin,
     adminLoading,
     adminPreloading,
@@ -2688,6 +2828,7 @@ const gradeLabels = getGradeLabels(str);
     adminProgressText,
     adminNotice,
     adminTableRenderRows,
+    adminVisibleTargetKeySet,
     adminEmptyTableMessage,
     adminTargetByKey,
     adminJsonByKey,
@@ -2722,6 +2863,19 @@ const gradeLabels = getGradeLabels(str);
     sortedAllWords,
     resetWord,
     removeWord,
+    addTagSectionOpen,
+    setAddTagSectionOpen,
+    addTagTextbookId,
+    setAddTagTextbookId,
+    addTagTextbookName,
+    setAddTagTextbookName,
+    addTagGrade,
+    setAddTagGrade,
+    addTagUnit,
+    setAddTagUnit,
+    addTagLesson,
+    setAddTagLesson,
+    wordTagsMap,
   };
 
   const session = useSession();
