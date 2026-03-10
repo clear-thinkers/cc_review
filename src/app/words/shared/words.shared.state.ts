@@ -11,6 +11,8 @@ import {
   putWord,
   createQuizSession,
   deleteFlashcardContent,
+  deleteFlashcardContentByHanzi,
+  hasFlashcardContentForHanzi,
   getAllFlashcardContents,
   getDueWords,
   getFlashcardContent,
@@ -2061,7 +2063,9 @@ const gradeLabels = getGradeLabels(str);
           }
         }
 
-        const savedContentByKey = new Map(allSavedContents.map((entry) => [entry.key, entry.content] as const));
+        const validKeys = new Set(nextTargets.map((t) => t.key));
+        const filteredContents = allSavedContents.filter((e) => validKeys.has(e.key));
+        const savedContentByKey = new Map(filteredContents.map((entry) => [entry.key, entry.content] as const));
 
         if (!active) {
           return;
@@ -2300,8 +2304,14 @@ const gradeLabels = getGradeLabels(str);
     await refreshAll();
   }
 
-  async function removeWord(id: string) {
-    await deleteWordFromDb(id);
+  async function removeWord(word: Pick<Word, "id" | "hanzi">) {
+    const hasContent = await hasFlashcardContentForHanzi(word.hanzi);
+    if (hasContent) {
+      const confirmed = window.confirm(str.all.table.confirmDeleteWithContent);
+      if (!confirmed) return;
+      await deleteFlashcardContentByHanzi(word.hanzi);
+    }
+    await deleteWordFromDb(word.id);
     await refreshAll();
   }
 

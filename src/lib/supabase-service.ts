@@ -338,6 +338,35 @@ export async function deleteFlashcardContent(
   if (error) throw new Error(`deleteFlashcardContent: ${error.message}`);
 }
 
+/**
+ * Returns true if any flashcard_contents rows exist for the given hanzi
+ * (across all pronunciations) within the current family.
+ */
+export async function hasFlashcardContentForHanzi(hanzi: string): Promise<boolean> {
+  const { familyId } = await getSessionMetadata();
+  const { count, error } = await supabase
+    .from("flashcard_contents")
+    .select("id", { count: "exact", head: true })
+    .eq("family_id", familyId)
+    .like("id", `${hanzi}|%`);
+  if (error) throw new Error(`hasFlashcardContentForHanzi: ${error.message}`);
+  return (count ?? 0) > 0;
+}
+
+/**
+ * Deletes all flashcard_contents rows for the given hanzi (all pronunciations)
+ * within the current family.
+ */
+export async function deleteFlashcardContentByHanzi(hanzi: string): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("flashcard_contents")
+    .delete()
+    .eq("family_id", familyId)
+    .like("id", `${hanzi}|%`);
+  if (error) throw new Error(`deleteFlashcardContentByHanzi: ${error.message}`);
+}
+
 // ─── Quiz Sessions ──────────────────────────────────────────────────────────
 
 export async function getAllQuizSessions(): Promise<QuizSession[]> {

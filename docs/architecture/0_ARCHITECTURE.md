@@ -25,10 +25,17 @@ Tier 1 rules (active):
 - Fill-test eligibility is derived from saved phrase/example rows and `include_in_fill_test` flags.
 - Unsafe content and malformed payloads are dropped during normalization before they can be persisted.
 
-Primary user flow:
-1. Add Hanzi → `/words/add` → Supabase `words` table.
-2. Curate content → `/words/admin` → `/api/flashcard/generate` + manual edits → Supabase `flashcard_contents` table.
-3. Review → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test` → reads persisted data only.
+Primary admin user flow:
+1. Add Hanzi       → `/words/add`     → Supabase `words` table (hanzi ingested, untagged, unreviewed).
+2. Tag characters  → `/words/tag`     → assign textbook / grade / unit / lesson 
+                                         → Supabase `words` table (tag fields) 
+                                         + Supabase `textbooks` table (new textbook created if no match).
+3. Adjust prompts  → `/words/prompts` → edit/version AI prompt templates → Supabase prompts table.
+4. Curate content  → `/words/admin`   → `/api/flashcard/generate` + manual edits 
+                                         → Supabase `flashcard_contents` table.
+5. Review          → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test` 
+                                         → reads persisted data only.
+
 
 ### Ingestion Rules
 
@@ -238,6 +245,7 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | `/words/review` | ✅ | ✅ | ✅ |
 | `/words/review/flashcard` | ✅ | ✅ | ✅ |
 | `/words/review/fill-test` | ✅ | ❌ | ✅ |
+| `/words/debug` | ❌ | ❌ | ✅ |
 
 ---
 

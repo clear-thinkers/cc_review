@@ -161,7 +161,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       <button
                         type="button"
                         className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700"
-                        onClick={() => removeWord(word.id)}
+                        onClick={() => removeWord(word)}
                         title={str.all.table.tooltips.delete}
                         aria-label={str.all.table.buttons.delete}
                       >

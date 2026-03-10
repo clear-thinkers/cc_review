@@ -8,7 +8,8 @@ export type ProtectedRoute =
   | '/words/results'
   | '/words/review'
   | '/words/review/flashcard'
-  | '/words/review/fill-test';
+  | '/words/review/fill-test'
+  | '/words/debug';
 
 /**
  * Checks if the current user can access a given route.
@@ -40,6 +41,9 @@ export function canAccessRoute(
     case '/words/review':
     case '/words/review/flashcard':
       return true; // Both roles allowed
+
+    case '/words/debug':
+      return isPlatformAdmin;
     
     default:
       return true; // Unknown routes pass through

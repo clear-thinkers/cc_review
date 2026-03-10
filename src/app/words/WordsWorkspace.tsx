@@ -3,6 +3,7 @@
 import AddSection from "./add/AddSection";
 import AdminSection from "./admin/AdminSection";
 import AllWordsSection from "./all/AllWordsSection";
+import DebugSection from "./debug/DebugSection";
 import PromptsSection from "./prompts/PromptsSection";
 import ResultsSection from "./results/ResultsSection";
 import DueReviewSection from "./review/DueReviewSection";
@@ -31,6 +32,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
       <PromptsSection vm={vm} />
       <AllWordsSection vm={vm} />
       <ResultsSection vm={vm} />
+      <DebugSection vm={vm} />
     </WordsShell>
   );
 }
