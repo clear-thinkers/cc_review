@@ -550,23 +550,14 @@ const gradeLabels = getGradeLabels(str);
     const rows: AdminTableRow[] = [];
 
     for (const target of adminTargets) {
-      const raw = adminJsonByKey[target.key];
-      let normalized: FlashcardLlmResponse = {
+      // Use already-parsed flashcardLlmData to avoid JSON.parse + normalize on every render.
+      // flashcardLlmData is always written with normalized content and updated in the same
+      // React batch as adminTargets, so it is always in sync for table display purposes.
+      const normalized: FlashcardLlmResponse = flashcardLlmData[target.key] ?? {
         character: target.character,
         pronunciation: target.pronunciation,
         meanings: [],
       };
-      if (raw && raw.trim()) {
-        try {
-          const parsed = JSON.parse(raw) as unknown;
-          normalized = normalizeAdminDraftResponse(parsed, {
-            character: target.character,
-            pronunciation: target.pronunciation,
-          });
-        } catch {
-          // Keep empty fallback row so target stays visible in admin table.
-        }
-      }
       let hasRowsForTarget = false;
 
       for (let meaningIndex = 0; meaningIndex < normalized.meanings.length; meaningIndex += 1) {
@@ -663,7 +654,7 @@ const gradeLabels = getGradeLabels(str);
     }
 
     return rows;
-  }, [adminJsonByKey, adminPendingByMeaningKey, adminPendingMeaningsByTargetKey, adminTargets]);
+  }, [flashcardLlmData, adminPendingByMeaningKey, adminPendingMeaningsByTargetKey, adminTargets]);
   const adminTableRenderRows = useMemo<AdminTableRenderRow[]>(() => {
     if (adminTableRows.length === 0) {
       return [];
