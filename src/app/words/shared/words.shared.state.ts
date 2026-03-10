@@ -542,10 +542,14 @@ const gradeLabels = getGradeLabels(str);
     }
     return map;
   }, [adminPendingMeanings]);
+  const adminVisibleTargetKeySet = useMemo(
+    () => new Set(adminVisibleTargets.map((t) => t.key)),
+    [adminVisibleTargets]
+  );
   const adminTableRows = useMemo<AdminTableRow[]>(() => {
     const rows: AdminTableRow[] = [];
 
-    for (const target of adminVisibleTargets) {
+    for (const target of adminTargets) {
       const raw = adminJsonByKey[target.key];
       let normalized: FlashcardLlmResponse = {
         character: target.character,
@@ -659,7 +663,7 @@ const gradeLabels = getGradeLabels(str);
     }
 
     return rows;
-  }, [adminJsonByKey, adminPendingByMeaningKey, adminPendingMeaningsByTargetKey, adminVisibleTargets]);
+  }, [adminJsonByKey, adminPendingByMeaningKey, adminPendingMeaningsByTargetKey, adminTargets]);
   const adminTableRenderRows = useMemo<AdminTableRenderRow[]>(() => {
     if (adminTableRows.length === 0) {
       return [];
@@ -2006,7 +2010,7 @@ const gradeLabels = getGradeLabels(str);
     setAdminNotice(null);
 
     (async () => {
-      try {
+      const adminLoadAsync = async () => {
         const seenChars = new Set<string>();
         const orderedChars: string[] = [];
         for (const word of words) {
@@ -2029,9 +2033,15 @@ const gradeLabels = getGradeLabels(str);
         const targetKeySet = new Set<string>();
         const skippedNoPronunciationChars: string[] = [];
 
-        for (const character of orderedChars) {
-          const info = await getXinhuaFlashcardInfo(character, { includeAllMatches: true });
-          const pronunciations = info?.pronunciations ?? [];
+        setAdminNotice("Step 1: Loading character pronunciations...");
+        const xinhuaResults = await Promise.all(
+          orderedChars.map(async (character) => {
+            const info = await getXinhuaFlashcardInfo(character, { includeAllMatches: true });
+            return { character, pronunciations: info?.pronunciations ?? [] };
+          })
+        );
+
+        for (const { character, pronunciations } of xinhuaResults) {
           if (pronunciations.length === 0) {
             skippedNoPronunciationChars.push(character);
             continue;
@@ -2057,7 +2067,9 @@ const gradeLabels = getGradeLabels(str);
           }
         }
 
+        setAdminNotice("Step 2: Pronunciations done. Loading saved content...");
         const allSavedContents = await getAllFlashcardContents();
+        setAdminNotice("Step 3: Saved content loaded. Building table...");
         const savedContentByKey = new Map(allSavedContents.map((entry) => [entry.key, entry.content] as const));
 
         if (!active) {
@@ -2097,17 +2109,20 @@ const gradeLabels = getGradeLabels(str);
             `Skipped ${skippedNoPronunciationChars.length} char(s) without dictionary pronunciation: ${preview}${suffix}`
           );
         }
-      } catch (error) {
-        if (!active) {
-          return;
-        }
+      };
 
+      try {
+        await Promise.race([
+          adminLoadAsync(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Admin load timed out after 15s")), 15_000)
+          ),
+        ]);
+      } catch (error) {
+        if (!active) return;
         setAdminNotice(getErrorMessage(error, "Failed to load admin targets."));
       } finally {
         setAdminLoading(false);
-        if (!active) {
-          return;
-        }
       }
     })();
 
@@ -2807,6 +2822,7 @@ const gradeLabels = getGradeLabels(str);
     adminProgressText,
     adminNotice,
     adminTableRenderRows,
+    adminVisibleTargetKeySet,
     adminEmptyTableMessage,
     adminTargetByKey,
     adminJsonByKey,
