@@ -1988,6 +1988,14 @@ const gradeLabels = getGradeLabels(str);
     );
   }
 
+  // Stable key: only changes when the set of hanzi characters changes.
+  // Prevents the admin effect from re-running on every refreshAll() call that
+  // produces a new `words` array reference without changing which characters exist.
+  const adminHanziKey = useMemo(
+    () => words.map((w) => w.hanzi).sort().join(","),
+    [words]
+  );
+
   useEffect(() => {
     if (page !== "admin") {
       return;
@@ -2106,7 +2114,7 @@ const gradeLabels = getGradeLabels(str);
     return () => {
       active = false;
     };
-  }, [page, words]);
+  }, [page, adminHanziKey]);
 
   useEffect(() => {
     if (
