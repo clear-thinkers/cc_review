@@ -16,4 +16,7 @@ export type Word = {
   nextReviewAt: number;
   reviewCount?: number;
   testCount?: number;
+
+  contentStatus: 'pending' | 'ready';
+  contentSource: 'pack' | 'admin_curated' | null;
 };

@@ -22,9 +22,10 @@ export function useWordsBaseState() {
   const [addTagSectionOpen, setAddTagSectionOpen] = useState(false);
   const [addTagTextbookId, setAddTagTextbookId] = useState<string | null>(null);
   const [addTagTextbookName, setAddTagTextbookName] = useState("");
-  const [addTagGrade, setAddTagGrade] = useState<string | null>(null);
-  const [addTagUnit, setAddTagUnit] = useState<string | null>(null);
-  const [addTagLesson, setAddTagLesson] = useState<string | null>(null);
+  const [addTagSlot1Label, setAddTagSlot1Label] = useState<string | null>(null);
+  const [addTagSlot1Value, setAddTagSlot1Value] = useState<string | null>(null);
+  const [addTagSlot2Value, setAddTagSlot2Value] = useState<string | null>(null);
+  const [addTagSlot3Value, setAddTagSlot3Value] = useState<string | null>(null);
 
   const [wordTagsMap, setWordTagsMap] = useState<WordLessonTagsMap>(new Map());
 
@@ -57,12 +58,14 @@ export function useWordsBaseState() {
     setAddTagTextbookId,
     addTagTextbookName,
     setAddTagTextbookName,
-    addTagGrade,
-    setAddTagGrade,
-    addTagUnit,
-    setAddTagUnit,
-    addTagLesson,
-    setAddTagLesson,
+    addTagSlot1Label,
+    setAddTagSlot1Label,
+    addTagSlot1Value,
+    setAddTagSlot1Value,
+    addTagSlot2Value,
+    setAddTagSlot2Value,
+    addTagSlot3Value,
+    setAddTagSlot3Value,
     wordTagsMap,
     setWordTagsMap,
   };

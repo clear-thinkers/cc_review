@@ -24,6 +24,8 @@ describe("Review Queue Types", () => {
         repetitions: 5,
         intervalDays: 10,
         ease: 2.5,
+        contentStatus: 'ready' as const,
+        contentSource: null,
       },
       familiarity: 0.85,
     };

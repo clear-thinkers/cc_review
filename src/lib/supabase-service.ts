@@ -68,6 +68,8 @@ interface SupabaseWordRow {
   review_count: number;
   test_count: number;
   fill_test: unknown;
+  content_status: string;
+  content_source: string | null;
 }
 
 function toWord(row: SupabaseWordRow): Word {
@@ -84,6 +86,8 @@ function toWord(row: SupabaseWordRow): Word {
     reviewCount: row.review_count,
     testCount: row.test_count,
     fillTest: row.fill_test as Word["fillTest"],
+    contentStatus: (row.content_status as Word["contentStatus"]) ?? "pending",
+    contentSource: (row.content_source as Word["contentSource"]) ?? null,
   };
 }
 
@@ -102,6 +106,8 @@ function fromWord(word: Word, familyId: string): Record<string, unknown> {
     review_count: word.reviewCount ?? 0,
     test_count: word.testCount ?? 0,
     fill_test: word.fillTest ?? null,
+    content_status: word.contentStatus ?? "pending",
+    content_source: word.contentSource ?? null,
   };
 }
 
@@ -187,11 +193,12 @@ export async function getAllWords(): Promise<Word[]> {
 
 export async function getDueWords(now = Date.now()): Promise<Word[]> {
   const { familyId } = await getSessionMetadata();
-  // Fetch words where next_review_at <= now OR next_review_at = 0
+  // Fetch words where next_review_at <= now OR next_review_at = 0, and content is ready
   const { data, error } = await supabase
     .from("words")
     .select("*")
     .eq("family_id", familyId)
+    .eq("content_status", "ready")
     .or(`next_review_at.lte.${now},next_review_at.eq.0`);
   if (error) throw new Error(`getDueWords: ${error.message}`);
 
@@ -715,6 +722,12 @@ interface SupabaseTextbookRow {
   family_id: string | null;
   created_by: string | null;
   created_at: string;
+  slot_1_label: string | null;
+  slot_2_label: string | null;
+  slot_3_label: string | null;
+  slot_1_label_zh: string | null;
+  slot_2_label_zh: string | null;
+  slot_3_label_zh: string | null;
 }
 
 function toTextbook(row: SupabaseTextbookRow): Textbook {
@@ -725,6 +738,12 @@ function toTextbook(row: SupabaseTextbookRow): Textbook {
     familyId: row.family_id,
     createdBy: row.created_by,
     createdAt: new Date(row.created_at).getTime(),
+    slot1Label: row.slot_1_label,
+    slot2Label: row.slot_2_label,
+    slot3Label: row.slot_3_label,
+    slot1LabelZh: row.slot_1_label_zh,
+    slot2LabelZh: row.slot_2_label_zh,
+    slot3LabelZh: row.slot_3_label_zh,
   };
 }
 
@@ -732,9 +751,9 @@ interface SupabaseLessonTagRow {
   id: string;
   textbook_id: string;
   family_id: string;
-  grade: string;
-  unit: string;
-  lesson: string;
+  slot_1_value: string | null;
+  slot_2_value: string | null;
+  slot_3_value: string | null;
   created_at: string;
 }
 
@@ -742,9 +761,10 @@ function toLessonTag(row: SupabaseLessonTagRow): LessonTag {
   return {
     id: row.id,
     textbookId: row.textbook_id,
-    grade: row.grade,
-    unit: row.unit,
-    lesson: row.lesson,
+    familyId: row.family_id,
+    slot1Value: row.slot_1_value,
+    slot2Value: row.slot_2_value,
+    slot3Value: row.slot_3_value,
     createdAt: new Date(row.created_at).getTime(),
   };
 }
@@ -767,7 +787,7 @@ export async function listTextbooks(): Promise<Textbook[]> {
  * belongs to this family (case-insensitive dedup).
  */
 export async function createTextbook(name: string): Promise<Textbook> {
-  const { familyId, userId } = await getSessionMetadata();
+  const { familyId } = await getSessionMetadata();
   const trimmedName = name.trim();
 
   // Check for existing family textbook with the same name (case-insensitive)
@@ -782,7 +802,7 @@ export async function createTextbook(name: string): Promise<Textbook> {
 
   const { data: created, error: writeErr } = await supabase
     .from("textbooks")
-    .insert({ name: trimmedName, is_shared: false, family_id: familyId, created_by: userId })
+    .insert({ name: trimmedName, is_shared: false, family_id: familyId, created_by: null })
     .select("*")
     .single();
   if (writeErr) throw new Error(`createTextbook insert: ${writeErr.message}`);
@@ -790,58 +810,68 @@ export async function createTextbook(name: string): Promise<Textbook> {
 }
 
 /**
- * List lesson tags for a textbook, optionally filtering by grade and unit.
+ * List lesson tags for a textbook, optionally filtering by slot values.
  * Used to populate cascading dropdowns.
  */
 export async function listLessonTags(
   textbookId: string,
-  grade?: string,
-  unit?: string
+  slot1Value?: string,
+  slot2Value?: string
 ): Promise<LessonTag[]> {
   let query = supabase
     .from("lesson_tags")
     .select("*")
     .eq("textbook_id", textbookId)
-    .order("grade")
-    .order("unit")
-    .order("lesson");
-  if (grade !== undefined) query = query.eq("grade", grade);
-  if (unit !== undefined) query = query.eq("unit", unit);
+    .order("slot_1_value")
+    .order("slot_2_value")
+    .order("slot_3_value");
+  if (slot1Value !== undefined) query = query.eq("slot_1_value", slot1Value);
+  if (slot2Value !== undefined) query = query.eq("slot_2_value", slot2Value);
   const { data, error } = await query;
   if (error) throw new Error(`listLessonTags: ${error.message}`);
   return (data as SupabaseLessonTagRow[]).map(toLessonTag);
 }
 
 /**
- * Find an existing lesson tag matching all four levels, or create a new one.
- * Uses the DB unique constraint (textbook_id, grade, unit, lesson) for safety.
+ * Find an existing lesson tag matching all slot values, or create a new one.
+ * Slot values are nullable; null means "not applicable for this textbook".
  */
 export async function createLessonTagIfNew(
   textbookId: string,
-  grade: string,
-  unit: string,
-  lesson: string
+  slot1Value: string | null,
+  slot2Value: string | null,
+  slot3Value: string | null
 ): Promise<LessonTag> {
   const { familyId } = await getSessionMetadata();
-  const normGrade = normalizeLessonTagField(grade);
-  const normUnit = normalizeLessonTagField(unit);
-  const normLesson = normalizeLessonTagField(lesson);
+  const normSlot1 = slot1Value ? normalizeLessonTagField(slot1Value) : null;
+  const normSlot2 = slot2Value ? normalizeLessonTagField(slot2Value) : null;
+  const normSlot3 = slot3Value ? normalizeLessonTagField(slot3Value) : null;
 
-  // Check existing
-  const { data: existing, error: readErr } = await supabase
+  // Check existing by matching all three slot values (null-safe)
+  let lookupQuery = supabase
     .from("lesson_tags")
     .select("*")
-    .eq("textbook_id", textbookId)
-    .eq("grade", normGrade)
-    .eq("unit", normUnit)
-    .eq("lesson", normLesson)
-    .maybeSingle();
+    .eq("textbook_id", textbookId);
+  if (normSlot1 !== null) lookupQuery = lookupQuery.eq("slot_1_value", normSlot1);
+  else lookupQuery = lookupQuery.is("slot_1_value", null);
+  if (normSlot2 !== null) lookupQuery = lookupQuery.eq("slot_2_value", normSlot2);
+  else lookupQuery = lookupQuery.is("slot_2_value", null);
+  if (normSlot3 !== null) lookupQuery = lookupQuery.eq("slot_3_value", normSlot3);
+  else lookupQuery = lookupQuery.is("slot_3_value", null);
+
+  const { data: existing, error: readErr } = await lookupQuery.maybeSingle();
   if (readErr) throw new Error(`createLessonTagIfNew read: ${readErr.message}`);
   if (existing) return toLessonTag(existing as SupabaseLessonTagRow);
 
   const { data: created, error: writeErr } = await supabase
     .from("lesson_tags")
-    .insert({ textbook_id: textbookId, family_id: familyId, grade: normGrade, unit: normUnit, lesson: normLesson })
+    .insert({
+      textbook_id: textbookId,
+      family_id: familyId,
+      slot_1_value: normSlot1,
+      slot_2_value: normSlot2,
+      slot_3_value: normSlot3,
+    })
     .select("*")
     .single();
   if (writeErr) throw new Error(`createLessonTagIfNew insert: ${writeErr.message}`);
@@ -870,6 +900,185 @@ export async function assignWordLessonTags(
 }
 
 /**
+ * Set content_status = 'ready' and content_source = 'admin_curated' for all
+ * words with the given hanzi in the current family.
+ * Called after platform admin saves flashcard content via /words/admin.
+ */
+export async function setWordContentReady(hanzi: string): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("words")
+    .update({ content_status: "ready", content_source: "admin_curated" })
+    .eq("family_id", familyId)
+    .eq("hanzi", hanzi);
+  if (error) throw new Error(`setWordContentReady: ${error.message}`);
+}
+
+// ─── Platform Admin — Cross-Family Operations ────────────────────────────────
+// These functions bypass the current-family scope.
+// RLS enforces that only platform_admin (is_platform_admin() = true) can use them.
+
+export type AdminPendingWord = {
+  id: string;
+  hanzi: string;
+  pinyin: string | null;
+  familyId: string;
+  familyName: string;
+  createdAt: number;
+  contentStatus: "pending" | "ready";
+};
+
+/**
+ * Return all words across all families for the admin content queue.
+ * Platform admin only — RLS returns all rows when is_platform_admin() = true.
+ */
+export async function getAllPendingWordsForAdmin(): Promise<AdminPendingWord[]> {
+  // Join words with families to get family_name in one query
+  const { data, error } = await supabase
+    .from("words")
+    .select("id, hanzi, pinyin, family_id, created_at, content_status, families ( name )")
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`getAllPendingWordsForAdmin: ${error.message}`);
+
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    hanzi: row.hanzi as string,
+    pinyin: (row.pinyin as string | null) ?? null,
+    familyId: row.family_id as string,
+    familyName: ((row.families as Record<string, unknown> | null)?.name as string | undefined) ?? "",
+    createdAt: new Date(row.created_at as string).getTime(),
+    contentStatus: (row.content_status as "pending" | "ready") ?? "pending",
+  }));
+}
+
+/**
+ * Save flashcard content for a specific family (platform admin bypass).
+ * Used in admin queue to curate content for any family's pending word.
+ */
+export async function putFlashcardContentForFamily(
+  familyId: string,
+  character: string,
+  pronunciation: string,
+  content: FlashcardLlmResponse
+): Promise<void> {
+  const key = makeFlashcardContentKey(character, pronunciation);
+  const { error } = await supabase.from("flashcard_contents").upsert({
+    id: key,
+    family_id: familyId,
+    meanings: content.meanings,
+    phrases: [],
+    examples: [],
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw new Error(`putFlashcardContentForFamily: ${error.message}`);
+}
+
+/**
+ * Flip a word to content_status = 'ready' by word ID.
+ * Platform admin version — does not scope to current family.
+ * Used in admin queue after curating content for another family's word.
+ */
+export async function setWordContentReadyById(wordId: string): Promise<void> {
+  const { error } = await supabase
+    .from("words")
+    .update({ content_status: "ready", content_source: "admin_curated" })
+    .eq("id", wordId);
+  if (error) throw new Error(`setWordContentReadyById: ${error.message}`);
+}
+
+/**
+ * Return all textbooks (shared + all family-private).
+ * Platform admin only — RLS returns all rows when is_platform_admin() = true.
+ */
+export async function listAllTextbooksForAdmin(): Promise<Textbook[]> {
+  const { data, error } = await supabase
+    .from("textbooks")
+    .select("*")
+    .order("is_shared", { ascending: false })
+    .order("name");
+  if (error) throw new Error(`listAllTextbooksForAdmin: ${error.message}`);
+  return (data as SupabaseTextbookRow[]).map(toTextbook);
+}
+
+export type TextbookLabelUpdates = {
+  name?: string;
+  slot1Label: string | null;
+  slot2Label: string | null;
+  slot3Label: string | null;
+  slot1LabelZh: string | null;
+  slot2LabelZh: string | null;
+  slot3LabelZh: string | null;
+};
+
+/**
+ * Create a new shared (platform-level) textbook with slot labels.
+ * Platform admin only.
+ */
+export async function createSharedTextbook(
+  name: string,
+  labels: Omit<TextbookLabelUpdates, "name">
+): Promise<Textbook> {
+  const { data, error } = await supabase
+    .from("textbooks")
+    .insert({
+      name: name.trim(),
+      is_shared: true,
+      family_id: null,
+      created_by: null,
+      slot_1_label: labels.slot1Label ?? null,
+      slot_2_label: labels.slot2Label ?? null,
+      slot_3_label: labels.slot3Label ?? null,
+      slot_1_label_zh: labels.slot1LabelZh ?? null,
+      slot_2_label_zh: labels.slot2LabelZh ?? null,
+      slot_3_label_zh: labels.slot3LabelZh ?? null,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(`createSharedTextbook: ${error.message}`);
+  return toTextbook(data as SupabaseTextbookRow);
+}
+
+/**
+ * Update slot labels (and optionally name) on any textbook.
+ * Platform admin only for shared textbooks; families can only update own private textbooks.
+ * RLS is the enforcement — this function does a plain update with no extra filtering.
+ */
+export async function updateTextbookLabels(
+  id: string,
+  updates: TextbookLabelUpdates
+): Promise<Textbook> {
+  const payload: Record<string, unknown> = {
+    slot_1_label: updates.slot1Label ?? null,
+    slot_2_label: updates.slot2Label ?? null,
+    slot_3_label: updates.slot3Label ?? null,
+    slot_1_label_zh: updates.slot1LabelZh ?? null,
+    slot_2_label_zh: updates.slot2LabelZh ?? null,
+    slot_3_label_zh: updates.slot3LabelZh ?? null,
+  };
+  if (updates.name !== undefined) {
+    payload.name = updates.name.trim();
+  }
+  const { data, error } = await supabase
+    .from("textbooks")
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error) throw new Error(`updateTextbookLabels: ${error.message}`);
+  return toTextbook(data as SupabaseTextbookRow);
+}
+
+/**
+ * Delete a textbook by ID.
+ * Platform admin can delete any shared textbook.
+ * RLS enforces: families can only delete their own private textbooks.
+ */
+export async function deleteTextbook(id: string): Promise<void> {
+  const { error } = await supabase.from("textbooks").delete().eq("id", id);
+  if (error) throw new Error(`deleteTextbook: ${error.message}`);
+}
+
+/**
  * Return a map of wordId → ResolvedLessonTag[] for all words belonging to
  * the current family.  Used to populate the Lessons column and filter bars.
  */
@@ -880,8 +1089,8 @@ export async function getWordLessonTagsForFamily(): Promise<WordLessonTagsMap> {
     .from("word_lesson_tags")
     .select(
       `word_id,
-       lesson_tags ( id, textbook_id, grade, unit, lesson, created_at,
-         textbooks ( id, name, is_shared, family_id, created_by, created_at )
+       lesson_tags ( id, textbook_id, family_id, slot_1_value, slot_2_value, slot_3_value, created_at,
+         textbooks ( id, name, is_shared, family_id, created_by, created_at, slot_1_label, slot_2_label, slot_3_label )
        )`
     )
     .eq("family_id", familyId);
@@ -899,9 +1108,9 @@ export async function getWordLessonTagsForFamily(): Promise<WordLessonTagsMap> {
       lessonTagId: lt.id,
       textbookId: lt.textbook_id,
       textbookName: tb?.name ?? "",
-      grade: lt.grade,
-      unit: lt.unit,
-      lesson: lt.lesson,
+      slot1Value: lt.slot_1_value,
+      slot2Value: lt.slot_2_value,
+      slot3Value: lt.slot_3_value,
     };
     const existing = map.get(row.word_id) ?? [];
     existing.push(resolved);

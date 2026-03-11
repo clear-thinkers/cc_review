@@ -13,6 +13,8 @@ function makeWord(overrides: Partial<Word> = {}): Word {
     intervalDays: 3,
     ease: 21,
     nextReviewAt: 1000,
+    contentStatus: 'ready',
+    contentSource: null,
     ...overrides,
   };
 }

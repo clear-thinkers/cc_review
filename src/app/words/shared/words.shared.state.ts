@@ -18,6 +18,7 @@ import {
   getFlashcardContent,
   gradeWord,
   putFlashcardContent,
+  setWordContentReady,
   updateWallet,
   createLessonTagIfNew,
   assignWordLessonTags,
@@ -162,12 +163,14 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setAddTagTextbookId,
     addTagTextbookName,
     setAddTagTextbookName,
-    addTagGrade,
-    setAddTagGrade,
-    addTagUnit,
-    setAddTagUnit,
-    addTagLesson,
-    setAddTagLesson,
+    addTagSlot1Label,
+    setAddTagSlot1Label,
+    addTagSlot1Value,
+    setAddTagSlot1Value,
+    addTagSlot2Value,
+    setAddTagSlot2Value,
+    addTagSlot3Value,
+    setAddTagSlot3Value,
     wordTagsMap,
     setWordTagsMap,
   } = baseState;
@@ -237,6 +240,7 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setAdminNotice,
     adminJsonByKey,
     setAdminJsonByKey,
+    adminSavedByKey,
     setAdminSavedByKey,
     adminPreloading,
     setAdminPreloading,
@@ -662,10 +666,22 @@ const gradeLabels = getGradeLabels(str);
       return [];
     }
 
+    const hanziGroupSpans = new Map<number, number>();
     const characterGroupSpans = new Map<number, number>();
     const meaningGroupSpans = new Map<number, number>();
 
     let index = 0;
+    while (index < adminTableRows.length) {
+      const hanziKey = adminTableRows[index].character;
+      let hanziEnd = index + 1;
+      while (hanziEnd < adminTableRows.length && adminTableRows[hanziEnd].character === hanziKey) {
+        hanziEnd += 1;
+      }
+      hanziGroupSpans.set(index, hanziEnd - index);
+      index = hanziEnd;
+    }
+
+    index = 0;
     while (index < adminTableRows.length) {
       const groupKey = `${adminTableRows[index].character}||${adminTableRows[index].pronunciation}`;
       let end = index + 1;
@@ -711,6 +727,8 @@ const gradeLabels = getGradeLabels(str);
 
     return adminTableRows.map((row, rowIndex) => ({
       ...row,
+      showHanziCell: hanziGroupSpans.has(rowIndex),
+      hanziRowSpan: hanziGroupSpans.get(rowIndex) ?? 0,
       showCharacterCell: characterGroupSpans.has(rowIndex),
       characterRowSpan: characterGroupSpans.get(rowIndex) ?? 0,
       showMeaningCell: meaningGroupSpans.has(rowIndex),
@@ -820,9 +838,10 @@ const gradeLabels = getGradeLabels(str);
     setHanzi("");
     setAddTagSectionOpen(false);
     setAddTagTextbookId(null);
-    setAddTagGrade(null);
-    setAddTagUnit(null);
-    setAddTagLesson(null);
+    setAddTagSlot1Label(null);
+    setAddTagSlot1Value(null);
+    setAddTagSlot2Value(null);
+    setAddTagSlot3Value(null);
   }
 
   function resetFlashcardWordState() {
@@ -1571,6 +1590,52 @@ const gradeLabels = getGradeLabels(str);
     }
   }
 
+  // Approve a target: flip content_status → 'ready' for the current family's word.
+  // Only valid once content is saved (adminSavedByKey[key] === true) and the caller
+  // has verified the readiness gate (≥1 meaning + ≥1 phrase + ≥1 example).
+  async function handleAdminApprove(target: AdminTarget) {
+    setAdminSavingKey(target.key);
+    setAdminNotice(null);
+    try {
+      await setWordContentReady(target.character);
+      await refreshWords();
+      setAdminNotice(`${target.character} marked ready.`);
+    } catch (error) {
+      setAdminNotice(getErrorMessage(error, "Approve failed."));
+    } finally {
+      setAdminSavingKey(null);
+    }
+  }
+
+  // Add a target (character + pronunciation) to the admin table if not already present.
+  // Used when navigating from the Content Queue to curate a cross-family word.
+  // Existing saved content is NOT loaded (cross-family content is in a different family's row).
+  function injectAdminTarget(target: AdminTarget) {
+    setAdminTargets((previous) => {
+      if (previous.some((t) => t.key === target.key)) return previous;
+      return [target, ...previous];
+    });
+  }
+
+  // Async variant: looks up Xinhua pronunciation for hanzi, then injects all targets.
+  // If the hanzi already has targets in the table, this is a no-op.
+  async function injectAdminTargetByHanzi(hanzi: string) {
+    const existingKeys = new Set(adminTargets.map((t) => t.key));
+    const info = await getXinhuaFlashcardInfo(hanzi, { includeAllMatches: true });
+    const pronunciations = info?.pronunciations ?? [];
+    if (pronunciations.length === 0) return;
+    const newTargets: AdminTarget[] = [];
+    for (const p of pronunciations) {
+      const pronunciation = p.pinyin.trim();
+      if (!pronunciation) continue;
+      const key = buildFlashcardLlmRequestKey({ character: hanzi, pronunciation });
+      if (existingKeys.has(key)) continue;
+      newTargets.push({ character: hanzi, pronunciation, key });
+    }
+    if (newTargets.length === 0) return;
+    setAdminTargets((previous) => [...newTargets, ...previous.filter((t) => !newTargets.some((n) => n.key === t.key))]);
+  }
+
   async function handleAdminRegeneratePhrase(row: AdminTableRow) {
     const target = adminTargetByKey.get(row.targetKey);
     if (!target) {
@@ -2026,7 +2091,6 @@ const gradeLabels = getGradeLabels(str);
         const targetKeySet = new Set<string>();
         const skippedNoPronunciationChars: string[] = [];
 
-        setAdminNotice("Step 1: Loading character pronunciations and saved content...");
         const [xinhuaResults, allSavedContents] = await Promise.all([
           Promise.all(
             orderedChars.map(async (character) => {
@@ -2036,7 +2100,6 @@ const gradeLabels = getGradeLabels(str);
           ),
           getAllFlashcardContents(),
         ]);
-        setAdminNotice("Step 2: Data loaded. Building table...");
         for (const { character, pronunciations } of xinhuaResults) {
           if (pronunciations.length === 0) {
             skippedNoPronunciationChars.push(character);
@@ -2108,6 +2171,8 @@ const gradeLabels = getGradeLabels(str);
           setAdminNotice(
             `Skipped ${skippedNoPronunciationChars.length} char(s) without dictionary pronunciation: ${preview}${suffix}`
           );
+        } else {
+          setAdminNotice(null);
         }
       };
 
@@ -2240,7 +2305,8 @@ const gradeLabels = getGradeLabels(str);
       }
     }
 
-    if (addTagSectionOpen && (!resolvedTextbookId || !addTagGrade || !addTagUnit || !addTagLesson)) {
+    // Validation: textbook required; slot1Value required only if the textbook defines slot1Label
+    if (addTagSectionOpen && (!resolvedTextbookId || (addTagSlot1Label !== null && !addTagSlot1Value))) {
       setFormNotice(tagStr.partialTagError);
       return;
     }
@@ -2261,6 +2327,8 @@ const gradeLabels = getGradeLabels(str);
       nextReviewAt: 0,
       reviewCount: 0,
       testCount: 0,
+      contentStatus: 'pending' as const,
+      contentSource: null,
     }));
 
     if (newWords.length > 0) {
@@ -2268,7 +2336,7 @@ const gradeLabels = getGradeLabels(str);
     }
 
     // Assign lesson tag to all submitted characters (new + already-existing)
-    if (addTagSectionOpen && resolvedTextbookId && addTagGrade && addTagUnit && addTagLesson) {
+    if (addTagSectionOpen && resolvedTextbookId && addTagSlot1Value) {
       const allTargetIds = [
         ...newWords.map((w) => w.id),
         ...existingWords
@@ -2278,9 +2346,9 @@ const gradeLabels = getGradeLabels(str);
       if (allTargetIds.length > 0) {
         const lessonTag = await createLessonTagIfNew(
           resolvedTextbookId,
-          addTagGrade,
-          addTagUnit,
-          addTagLesson
+          addTagSlot1Value,
+          addTagSlot2Value,
+          addTagSlot3Value
         );
         await assignWordLessonTags(allTargetIds, lessonTag.id);
       }
@@ -2832,12 +2900,16 @@ const gradeLabels = getGradeLabels(str);
     adminEmptyTableMessage,
     adminTargetByKey,
     adminJsonByKey,
+    adminSavedByKey,
     adminRegeneratingKey,
     adminSavingKey,
     adminDeletingKey,
     handleAdminRegenerate,
     handleAdminSave,
+    handleAdminApprove,
     handleAdminDeleteTarget,
+    injectAdminTarget,
+    injectAdminTargetByHanzi,
     handleAdminAddMeaningRow,
     updateAdminPendingMeaningInput,
     handleAdminSavePendingMeaning,
@@ -2869,12 +2941,14 @@ const gradeLabels = getGradeLabels(str);
     setAddTagTextbookId,
     addTagTextbookName,
     setAddTagTextbookName,
-    addTagGrade,
-    setAddTagGrade,
-    addTagUnit,
-    setAddTagUnit,
-    addTagLesson,
-    setAddTagLesson,
+    addTagSlot1Label,
+    setAddTagSlot1Label,
+    addTagSlot1Value,
+    setAddTagSlot1Value,
+    addTagSlot2Value,
+    setAddTagSlot2Value,
+    addTagSlot3Value,
+    setAddTagSlot3Value,
     wordTagsMap,
   };
 

@@ -13,11 +13,8 @@ export const taggingStrings = {
       expandButton: "Assign to Lesson",
       collapseButton: "Clear tag",
       textbookPlaceholder: "Select a textbook…",
-      gradePlaceholder: "Select or create grade…",
-      unitPlaceholder: "Select or create unit…",
-      lessonPlaceholder: "Select or create lesson…",
       createOption: "+ Create \"{value}\"",
-      partialTagError: "Please complete all 4 levels or clear the tag.",
+      partialTagError: "Please select a textbook (and fill in any configured slots) or clear the tag.",
       loadingTextbooks: "Loading textbooks…",
       noTextbooks: "No textbooks yet.",
       creatingTextbook: "Creating…",
@@ -27,18 +24,18 @@ export const taggingStrings = {
       createNewCancel: "Cancel",
     },
 
-    // ─── Lessons column (All Characters / All Words table) ───────────────────
+    // ─── Tags column (All Characters / All Words table) ────────────────────
     column: {
-      header: "Lessons",
+      header: "Tags",
       noTags: "",
     },
 
     // ─── Filter bar (All Characters + Content Admin) ─────────────────────────
     filter: {
       textbookLabel: "Textbook",
-      gradeLabel: "Grade",
-      unitLabel: "Unit",
-      lessonLabel: "Lesson",
+      slot1Label: "Slot 1",
+      slot2Label: "Slot 2",
+      slot3Label: "Slot 3",
       allOption: "All",
       clearFilters: "Clear Filters",
       saveFilters: "Save Filters",
@@ -55,11 +52,8 @@ export const taggingStrings = {
       expandButton: "加标签",
       collapseButton: "清除标签",
       textbookPlaceholder: "选择教材…",
-      gradePlaceholder: "选择或创建年级…",
-      unitPlaceholder: "选择或创建单元…",
-      lessonPlaceholder: "选择或创建课…",
       createOption: "+ 创建\"{value}\"",
-      partialTagError: "请选择全部4级，或清除标签。",
+      partialTagError: "请选择教材（如有分层，请填写各层级），或清除标签。",
       loadingTextbooks: "加载教材中…",
       noTextbooks: "暂无教材。",
       creatingTextbook: "创建中…",
@@ -69,18 +63,18 @@ export const taggingStrings = {
       createNewCancel: "取消",
     },
 
-    // ─── Lessons column ──────────────────────────────────────────────────────
+    // ─── Tags column ─────────────────────────────────────────────────────────
     column: {
-      header: "课程",
+      header: "标签",
       noTags: "",
     },
 
     // ─── Filter bar ──────────────────────────────────────────────────────────
     filter: {
       textbookLabel: "教材",
-      gradeLabel: "年级",
-      unitLabel: "单元",
-      lessonLabel: "课",
+      slot1Label: "第1层",
+      slot2Label: "第2层",
+      slot3Label: "第3层",
       allOption: "全部",
       clearFilters: "清除筛选",
       saveFilters: "保存筛选",

@@ -30,8 +30,10 @@ export function canAccessRoute(
   switch (route) {
     case '/words/add':
     case '/words/admin':
-    case '/words/prompts':
       return role === 'parent';
+    
+    case '/words/prompts':
+      return false; // platform admin only (caught by isPlatformAdmin check above)
     
     case '/words/review/fill-test':
       return role === 'child';
@@ -43,6 +45,10 @@ export function canAccessRoute(
       return true; // Both roles allowed
 
     case '/words/debug':
+    case '/words/admin-textbooks':
+    case '/words/admin-queue':
+    case '/admin/queue':
+    case '/admin/textbooks':
       return isPlatformAdmin;
     
     default:

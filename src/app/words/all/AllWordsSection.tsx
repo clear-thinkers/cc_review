@@ -1,6 +1,8 @@
 "use client";
 
+import { useLocale } from "@/app/shared/locale";
 import { useSession } from "@/lib/authContext";
+import { taggingStrings } from "../shared/tagging.strings";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 
 export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
@@ -20,8 +22,10 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     wordTagsMap,
   } = vm;
 
+  const locale = useLocale();
   const session = useSession();
   const isChild = session?.role === "child";
+  const tagStr = taggingStrings[locale].column;
 
   if (page !== "all") {
     return null;
@@ -118,7 +122,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                   </button>
                 </th>
                 {!isChild && (
-                  <th className="px-3 py-2 text-left">Lessons</th>
+                  <th className="px-3 py-2 text-left">{tagStr.header}</th>
                 )}
                 {!isChild && <th className="px-3 py-2 text-left">{str.all.table.headers.actions}</th>}
               </tr>
@@ -140,7 +144,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                             key={tag.lessonTagId}
                             className="inline-block rounded bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-800"
                           >
-                            {tag.textbookName} · {tag.grade} · {tag.unit} · {tag.lesson}
+                            {[tag.textbookName, tag.slot1Value, tag.slot2Value, tag.slot3Value].filter(Boolean).join(' · ')}
                           </span>
                         ))}
                       </div>

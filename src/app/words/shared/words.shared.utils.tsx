@@ -79,8 +79,10 @@ export function getNavItems(
   isPlatformAdmin: boolean
 ): NavItem[] {
   const allItems: NavItem[] = [
+    { href: "/words/admin-textbooks", label: `${str.nav.adminTextbooks}`, page: "adminTextbooks" },
     { href: "/words/add", label: `${str.nav.addCharacters}`, page: "add" },
     { href: "/words/all", label: `${str.nav.allCharacters}`, page: "all" },
+    { href: "/words/admin-queue", label: `${str.nav.adminQueue}`, page: "adminQueue" },
     { href: "/words/admin", label: `${str.nav.contentAdmin}`, page: "admin" },
     { href: "/words/prompts", label: `${str.nav.aiPrompts}`, page: "prompts" },
     { href: "/words/debug", label: `${str.nav.debug}`, page: "debug" },

@@ -47,6 +47,8 @@ export type AdminPendingMeaning = {
 };
 
 export type AdminTableRenderRow = AdminTableRow & {
+  showHanziCell: boolean;
+  hanziRowSpan: number;
   showCharacterCell: boolean;
   characterRowSpan: number;
   showMeaningCell: boolean;

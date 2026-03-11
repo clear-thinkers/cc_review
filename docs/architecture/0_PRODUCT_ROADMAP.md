@@ -1,6 +1,6 @@
-﻿# 0_PRODUCT_ROADMAP.md
+# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-03-09_ (Admin-Configurable LLM Prompts complete)
+_Last updated: 2026-03-10_ (Content model redesign: pack purchase flow deferred to Phase 3; schema exists but UI deferred post-pilot)
 
 ---
 
@@ -35,7 +35,7 @@ Features are sequenced into three phases. **Do not begin a phase until the prior
 
 ### Phase 1 — Stability & Control
 
-Features now include a “Last touched” timestamp and a broader set of status icons so the roadmap speaks to velocity. Agents should update the `Status` cell as work moves from 📋 Planned → 🔄 In Progress → ✅ Done (or 🔒 Blocked) and set the date in `Last touched` each time changes are merged.
+Agents should update the `Status` cell as work moves from 📋 Planned → 🔄 In Progress → ✅ Done (or 🔒 Blocked) and set the date in `Last touched` each time changes are merged.
 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
@@ -44,39 +44,55 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | 4 | **Multi-Tenant Auth & User Model** | Replace localStorage PIN with Supabase Auth. Parent registers with email + password. Parent creates child profiles with PIN. Role model: parent / child / platform_admin. Family-scoped data isolation via Row Level Security. | `docs/feature-specs/2026-03-05-auth-and-user-model.md` | ✅ Done | 2026-03-09 |
 | 5 | **Supabase Schema & RLS Policies** | Retire IndexedDB entirely. Migrate all data (words, review_history, quiz_sessions, wallet, inventory) to Supabase Postgres. Define tables, foreign keys, and RLS policies enforcing family_id scoping. Platform admin bypasses RLS. | `docs/feature-specs/2026-03-05-supabase-schema-rls.md` | ✅ Done | 2026-03-05 |
 | 6 | **Role-Based Routing** | RouteGuard enforces permission matrix by session role. Blocked routes invisible in nav (not 403). Child: no add/edit/admin, has fill-test. Parent: no fill-test. Platform admin: full access. | `docs/feature-specs/2026-03-05-role-based-routing.md` | ✅ Done | 2026-03-05 |
-| 8 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | [`docs/feature-specs/2026-03-04-quiz-results-summary.md`](../feature-specs/2026-03-04-quiz-results-summary.md) | ✅ Done | 2026-03-04 |
+| 8 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. | `docs/feature-specs/2026-03-04-quiz-results-summary.md` | ✅ Done | 2026-03-04 |
 | 9 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | ✅ Done | 2026-03-05 |
 | 11 | **Rewards System — Coins** | Coins earned per quiz session (accuracy + completion based). `wallet` table. Persistent, cumulative balance across sessions. Track coin history and milestones. | `docs/feature-specs/2026-03-04-coin-rewards-system.md` | ✅ Done | 2026-03-05 |
 | 12 | **Service Layer Migration** | Replace all IndexedDB (Dexie) reads/writes with Supabase client calls via `src/lib/supabase-service.ts`. Delete `db.ts`, `auth.ts`, `debugUtilities.ts`. Remove `dexie` dependency. camelCase ↔ snake_case conversion in service layer. | `docs/feature-specs/2026-03-05-service-layer-migration.md` | ✅ Done | 2026-03-06 |
 
-### Phase 2 — Structure & Visibility
+---
+
+### Phase 2 — Structure, Visibility & Platform Content
 
 | # | Feature | Description | Spec | Status | Last touched |
 |---|---|---|---|---|---|
-| 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in Supabase. Separated by generation type (full / phrase / example / pinyin). | `docs/architecture/2026-03-09-admin-configurable-llm-prompts.md` | ✅ Done | 2026-03-09 |
-| 7 | **Character Level Tagging** | 4-level cascade tag system (Textbook → Grade → Unit → Lesson). New tables: `textbooks`, `lesson_tags`, `word_lesson_tags`. Tag assignment on `/words/add`; Lessons column + filter bar on `/words/all`; filter bar on `/words/admin`. Review scope filter deferred. | `docs/architecture/2026-03-09-character-level-tagging.md` | ✅ Done | 2026-03-09 |
-| 10 | **Bakery Shop** | Virtual bakery shop: purchase furniture, display items, decorations with earned coins. `inventory` and `shopState` tables. Spend coins to customize player environment. No real money, no scheduler impact. | [`docs/feature-specs/2026-03-04-coin-rewards-system.md`](../../feature-specs/2026-03-04-coin-rewards-system.md) | 📋 Planned | — |
+| 1 | **Admin-Configurable LLM Prompts** | `/admin/prompts` — view, edit, save, version, and reset AI prompt templates. Platform admin only. Stored in Supabase. Separated by generation type. | `docs/architecture/2026-03-09-admin-configurable-llm-prompts.md` | ✅ Done | 2026-03-09 |
+| 7 | **Character Tagging** | 4-level cascade tag system (Textbook → Slot 1 → Slot 2 → Slot 3). Flexible slot labels per textbook (supports curriculum and literary hierarchies). New tables: `textbooks`, `lesson_tags`, `word_lesson_tags`. Tag assignment on `/words/add`; Lessons column + filter bar on `/words/all`; filter bar on `/words/admin`. Mandatory for platform admin; optional for family parents. | `docs/feature-specs/2026-03-10-content-model-and-schema.md` | ✅ Done | 2026-03-10 |
+| 13 | **Content Model & Admin Queue** | `words.content_status` lifecycle (`pending` → `ready`). Due review queue filtered by `content_status = 'ready'`. Platform admin `/admin/queue` to process pending words across all families. Platform admin `/admin/textbooks` to manage textbooks. Family `/words/admin` revised: read/edit own content only, no AI generation, "Awaiting Content" section for pending words. | `docs/feature-specs/2026-03-10-content-model-and-schema.md` | ✅ Done | 2026-03-10 |
+| 14 | **Enrichment Requests** | Family parent can flag a character for more content. `content_requests` table. Admin fulfills via `/admin/requests` — adds phrases to family's `flashcard_contents`. One open request per character per family enforced at application layer. | `docs/feature-specs/2026-03-10-content-model-and-schema.md` | 📋 Planned | 2026-03-10 |
+| 10 | **Bakery Shop** | Virtual bakery shop: purchase furniture, display items, decorations with earned coins. `inventory` and `shopState` tables. Spend coins to customize player environment. No real money, no scheduler impact. | `docs/feature-specs/2026-03-04-coin-rewards-system.md` | 📋 Planned | — |
 
-## Fixed to be done
-2. The history table of quiz results is not displaying correctly in browser when user uses the app in phone (I tested using iphone)
+---
 
-## Minor UI updates
-3. Update app name， add app logo
+### Phase 3 — Pack Distribution (Post-Pilot)
+
+> **Do not build until Phase 2 is stable and pilot families are active.**
+> Schema for all pack tables is already deployed (`packs`, `pack_words`,
+> `pack_flashcard_contents`, `pack_purchases`). Only the UI and purchase
+> flow are deferred.
+
+| # | Feature | Description | Spec | Status | Last touched |
+|---|---|---|---|---|---|
+| 15 | **Pack Authoring** | Platform admin `/admin/packs` — create packs, assign words, attach curated content, set status (draft → published). Pack name auto-derived from slot values. | — | 📋 Planned | — |
+| 16 | **Pack Browse & Purchase** | Family-facing pack browser (route TBD). Parent browses published packs by textbook. On purchase: atomic copy of `pack_words` → `words` and `pack_flashcard_contents` → `flashcard_contents`. `pack_purchases` row written as idempotency guard. All packs free (price = 0.00) during pilot. | — | 📋 Planned | — |
+
 ---
 
 ## 3. Deferred — Do Not Build Yet
 
-These are explicitly out of scope. If a task implies one of these, stop and confirm before proceeding.
+These are explicitly out of scope for Phases 1 and 2. If a task implies one of these, stop and confirm before proceeding.
 
+- All Phase 3 features (pack authoring, pack browse/purchase UI) — schema exists; UI deferred post-pilot
 - Tier 2 or Tier 3 features of any kind
 - Reading comprehension or paragraph-level review modes
 - Streak bonuses or time-based reward mechanics
-- Bulk level-tag editing (noted as future in the level tagging spec)
-- Curated content packs and pack import flow (schema designed; build deferred post-pilot)
-- Content pack purchase / monetization flow
+- Bulk level-tag editing
+- Content pack purchase / monetization flow (real payments)
 - Mobile-native version or PWA packaging
 - Any new AI provider integration
 - Export or import of flashcard data
+- Pack versioning / content update distribution to existing purchasers
+- Family-to-family content sharing
+- Child-initiated enrichment requests (parent-only for now)
 
 ---
 
@@ -114,7 +130,7 @@ Tier 1 is complete when **all** of the following are true:
 **Architecture remains modular**
 - All new features respect layer boundaries (UI / Domain / Service / AI)
 - No live AI during review execution
-- All new IndexedDB tables normalized before write
+- No direct IndexedDB operations remaining
 
 Only after all criteria above are met should Tier 2 begin.
 
@@ -163,89 +179,13 @@ If any answer undermines Tier 1 stability, the feature is deferred.
 
 ---
 
-## 8. Next Implementation Sequence
+## 8. Known Issues & Minor Updates
 
-### Blocker Analysis (as of 2026-03-05)
+### Bug Fixes
+- Quiz results history table not displaying correctly on mobile (tested on iPhone) — layout fix needed
 
-**Feature 5 ✅ Done:**
-- Supabase schema + RLS policies deployed
-- Service layer refactor deferred until Feature 6 completes
-
-**Feature 4 ✅ Done (2026-03-05):**
-- `/register` → 3-step wizard → POST `/api/auth/register` (atomic; Auth account cleaned up on DB failure)
-- `/login` → Supabase `signInWithPassword()` → Layer 1 complete
-- `/profile-select` → renders family profiles from `useAuth().familyProfiles`
-- `/pin-entry` → on-screen PIN pad → POST `/api/auth/pin-verify` (scrypt + timingSafeEqual, server-side lockout at 5 attempts)
-- `SessionGuard` rewritten to use `useAuth()` — no localStorage reads
-- `AuthProvider` added to root layout
-- `WordsShell` reads avatar + logout from `useSession()` / `clearSession()`
-- Old `src/app/login/` folder (5 files) deleted
-
-**Feature 6 ✅ Done (2026-03-05):**
-- Permission matrix enforced: child cannot access add/admin; parent cannot access fill-test
-- RouteGuard component redirects blocked routes to `/words/review`
-- Navigation items filtered by role (blocked routes hidden from nav)
-- Fill-test buttons conditionally rendered (visible for children, hidden for parents)
-- All role checks use `canAccessRoute()` from `src/lib/permissions.ts`
-
-### Critical Path (Tier 1 Completion)
-
-```
-Feature 4 (Auth & User Model)
-  ├─ Supabase Auth integration
-  ├─ JWT enrichment (family_id, user_id claims)
-  ├─ Child PIN-based login
-  └─ Session persistence + auto-refresh
-         ↓
-Feature 6 (Role-Based Routing)
-  ├─ RouteGuard middleware
-  ├─ Route matrix by role (parent/child/admin)
-  └─ Nav visibility filtering
-         ↓
-Service Layer Refactor
-  ├─ Create src/lib/supabase.ts
-  ├─ Retire src/lib/db.ts (IndexedDB)
-  └─ Migrate all service calls
-         ↓
-Tier 1 Completion + Multi-Family Pilot
-  ├─ End-to-end testing (3 families)
-  ├─ RLS isolation verification
-  └─ Prod Supabase deployment
-```
-
-### Recommended Action Plan
-
-1. **✅ Done (2026-03-05):** Feature 4 (Auth & User Model) shipped on `feat/phase3`.
-
-2. **Immediately (next PR):** Implement Feature 6 (Role-Based Routing)
-   - Create RouteGuard component using `useSession().role` from Feature 4 auth context
-   - Build permission matrix for parent/child/admin roles
-   - Hide blocked routes from nav (don't show 403)
-   - Integration test: verify child cannot navigate to `/words/add` or `/words/admin`
-   - Target: 2026-03-07
-
-3. **After Feature 6 ships:** Service Layer Refactor
-   - Create `src/lib/supabase.ts` with domain-scoped service functions
-   - Translate all `src/lib/db.ts` calls to Supabase equivalents
-   - Convert camelCase (TypeScript) ↔ snake_case (Postgres) in service layer
-   - Retire `src/lib/db.ts` (IndexedDB)
-   - Functional equivalence test: verify same data shape in reads
-   - Target: 2026-03-14
-
-4. **Multi-Family Pilot (final Tier 1 step):**
-   - Create 3 test families in prod Supabase
-   - Verify RLS isolation (Family A user cannot read Family B words)
-   - Parent + child login flow with PIN entry
-   - Admin platform account bypass (can read/write all families)
-
-### Risks & Dependencies
-
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Auth spec incomplete | Blocks Features 4, 6, RLS tests | Confirm auth spec ready before Feature 4 starts |
-| JWT claims not injected | RLS policies cannot evaluate | Feature 4 must implement `/api/auth/enrich-session` |
-| Service layer not updated | App still reads from IndexedDB | Plan refactor immediately after Feature 6 |
-| Pilot families not set up | Cannot test prod RLS isolation | Manual setup via Supabase console or seed script |
+### Minor UI Updates
+- Update app name and add app logo
 
 ---
 
@@ -253,7 +193,7 @@ Tier 1 Completion + Multi-Family Pilot
 
 ```
 Character Review Tool
-  → Word Memory Engine (Tier 1 MVP)     ← current
+  → Word Memory Engine (Tier 1 MVP)          ← current
   → Context Reinforcement System (Tier 2)
   → Reading Readiness Platform (Tier 3)
   → Language Mastery Framework

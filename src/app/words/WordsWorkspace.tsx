@@ -2,6 +2,8 @@
 
 import AddSection from "./add/AddSection";
 import AdminSection from "./admin/AdminSection";
+import ContentQueueSection from "./admin-queue/ContentQueueSection";
+import TextbooksSection from "./admin-textbooks/TextbooksSection";
 import AllWordsSection from "./all/AllWordsSection";
 import DebugSection from "./debug/DebugSection";
 import PromptsSection from "./prompts/PromptsSection";
@@ -29,6 +31,8 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
       <FlashcardReviewSection vm={vm} />
       <FillTestReviewSection vm={vm} />
       <AdminSection vm={vm} />
+      <ContentQueueSection vm={vm} />
+      <TextbooksSection vm={vm} />
       <PromptsSection vm={vm} />
       <AllWordsSection vm={vm} />
       <ResultsSection vm={vm} />

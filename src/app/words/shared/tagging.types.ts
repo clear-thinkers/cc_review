@@ -1,8 +1,9 @@
 /**
  * Tagging Feature Types
  *
- * Types for the 4-level cascade tag system:
- * Textbook → Grade → Unit → Lesson
+ * Types for the slot-based cascade tag system.
+ * A Textbook defines up to 3 slot labels (slot1Label … slot3Label); a LessonTag
+ * stores the corresponding slot values (slot1Value … slot3Value), all nullable.
  *
  * Per BUILD_CONVENTIONS §1a: Types live adjacent to the features that use them.
  * This file is shared by add/, all/, and admin/ features.
@@ -17,14 +18,21 @@ export type Textbook = {
   familyId: string | null;
   createdBy: string | null;
   createdAt: number;
+  slot1Label: string | null;
+  slot2Label: string | null;
+  slot3Label: string | null;
+  slot1LabelZh: string | null;
+  slot2LabelZh: string | null;
+  slot3LabelZh: string | null;
 };
 
 export type LessonTag = {
   id: string;
   textbookId: string;
-  grade: string;
-  unit: string;
-  lesson: string;
+  familyId: string;
+  slot1Value: string | null;
+  slot2Value: string | null;
+  slot3Value: string | null;
   createdAt: number;
 };
 
@@ -43,22 +51,22 @@ export type ResolvedLessonTag = {
   lessonTagId: string;
   textbookId: string;
   textbookName: string;
-  grade: string;
-  unit: string;
-  lesson: string;
+  slot1Value: string | null;
+  slot2Value: string | null;
+  slot3Value: string | null;
 };
 
 // ─── Cascade dropdown state (used in AddSection and filter bars) ─────────────
 
 /**
  * Represents the user's active selection in the optional tag section.
- * All 4 levels must be non-null for the selection to be "complete".
+ * textbookId + slot1Value are the minimum for a "complete" selection.
  */
 export type TagCascadeSelection = {
   textbookId: string | null;
-  grade: string | null;
-  unit: string | null;
-  lesson: string | null;
+  slot1Value: string | null;
+  slot2Value: string | null;
+  slot3Value: string | null;
 };
 
 /**
@@ -67,8 +75,9 @@ export type TagCascadeSelection = {
  */
 export type TagFilter = {
   textbookId: string | null;
-  grade: string | null;
-  unit: string | null;
+  slot1Value: string | null;
+  slot2Value: string | null;
+  slot3Value: string | null;
   lessonTagId: string | null;
 };
 

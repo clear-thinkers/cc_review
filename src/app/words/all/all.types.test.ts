@@ -28,6 +28,8 @@ describe("All Words Types", () => {
         repetitions: 0,
         intervalDays: 1,
         ease: 2.5,
+        contentStatus: 'ready' as const,
+        contentSource: null,
       },
       reviewCount: 5,
       testCount: 2,

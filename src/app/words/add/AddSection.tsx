@@ -21,12 +21,13 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
     setAddTagTextbookId,
     addTagTextbookName: _addTagTextbookName,
     setAddTagTextbookName,
-    addTagGrade,
-    setAddTagGrade,
-    addTagUnit,
-    setAddTagUnit,
-    addTagLesson,
-    setAddTagLesson,
+    addTagSlot1Value,
+    setAddTagSlot1Value,
+    addTagSlot2Value,
+    setAddTagSlot2Value,
+    addTagSlot3Value,
+    setAddTagSlot3Value,
+    setAddTagSlot1Label,
   } = vm;
 
   const locale = useLocale();
@@ -37,6 +38,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [textbookInputValue, setTextbookInputValue] = useState("");
   const [textbookCreating, setTextbookCreating] = useState(false);
   const [textbookCreateMode, setTextbookCreateMode] = useState(false);
+  const [textbookCreateError, setTextbookCreateError] = useState<string | null>(null);
   const [lessonTags, setLessonTags] = useState<LessonTag[]>([]);
 
   // Load textbooks when section opens
@@ -73,19 +75,22 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
     if (match) {
       setAddTagTextbookId(match.id);
       setAddTagTextbookName(match.name);
+      setAddTagSlot1Label(match.slot1Label);
     } else {
       setAddTagTextbookId(null);
       setAddTagTextbookName("");
+      setAddTagSlot1Label(null);
     }
-    setAddTagGrade(null);
-    setAddTagUnit(null);
-    setAddTagLesson(null);
+    setAddTagSlot1Value(null);
+    setAddTagSlot2Value(null);
+    setAddTagSlot3Value(null);
   }
 
   async function handleCreateNewTextbook() {
     const trimmed = textbookInputValue.trim();
     if (!trimmed) return;
     setTextbookCreating(true);
+    setTextbookCreateError(null);
     try {
       const created = await createTextbook(trimmed);
       setTextbooks((prev) =>
@@ -93,27 +98,31 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
       );
       setTextbookInputValue("");
       setTextbookCreateMode(false);
+      setTextbookCreateError(null);
       setAddTagTextbookId(created.id);
       setAddTagTextbookName(created.name);
-      setAddTagGrade(null);
-      setAddTagUnit(null);
-      setAddTagLesson(null);
-    } catch {
-      // leave input so user can retry
+      setAddTagSlot1Label(created.slot1Label);
+      setAddTagSlot1Value(null);
+      setAddTagSlot2Value(null);
+      setAddTagSlot3Value(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("createTextbook failed:", msg);
+      setTextbookCreateError(msg);
     } finally {
       setTextbookCreating(false);
     }
   }
 
-  function handleGradeChange(grade: string) {
-    setAddTagGrade(grade || null);
-    setAddTagUnit(null);
-    setAddTagLesson(null);
+  function handleSlot1Change(value: string) {
+    setAddTagSlot1Value(value || null);
+    setAddTagSlot2Value(null);
+    setAddTagSlot3Value(null);
   }
 
-  function handleUnitChange(unit: string) {
-    setAddTagUnit(unit || null);
-    setAddTagLesson(null);
+  function handleSlot2Change(value: string) {
+    setAddTagSlot2Value(value || null);
+    setAddTagSlot3Value(null);
   }
 
   function handleToggleSection() {
@@ -122,9 +131,10 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
       setAddTagSectionOpen(false);
       setAddTagTextbookId(null);
       setAddTagTextbookName("");
-      setAddTagGrade(null);
-      setAddTagUnit(null);
-      setAddTagLesson(null);
+      setAddTagSlot1Label(null);
+      setAddTagSlot1Value(null);
+      setAddTagSlot2Value(null);
+      setAddTagSlot3Value(null);
       setTextbookInputValue("");
       setTextbookCreateMode(false);
     } else {
@@ -132,23 +142,32 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
   }
 
-  // Derive unique sorted values for datalists
-  const gradeOptions = addTagTextbookId
-    ? [...new Set(lessonTags.map((t) => t.grade))].sort()
+  // Derive selected textbook and locale-appropriate slot labels
+  const selectedTextbook = textbooks.find((tb) => tb.id === addTagTextbookId) ?? null;
+  const tagFilterStr = taggingStrings[locale].filter;
+  const slotLabel = (en: string | null, zh: string | null): string | null => {
+    const label = locale === "zh" ? (zh ?? en) : (en ?? zh);
+    return label;
+  };
+  const slot1LabelDisplay = selectedTextbook
+    ? (slotLabel(selectedTextbook.slot1Label, selectedTextbook.slot1LabelZh) ?? tagFilterStr.slot1Label)
+    : null;
+  const slot2LabelDisplay = selectedTextbook
+    ? (slotLabel(selectedTextbook.slot2Label, selectedTextbook.slot2LabelZh) ?? tagFilterStr.slot2Label)
+    : null;
+  const slot3LabelDisplay = selectedTextbook
+    ? (slotLabel(selectedTextbook.slot3Label, selectedTextbook.slot3LabelZh) ?? tagFilterStr.slot3Label)
+    : null;
+  const slot1Options = addTagTextbookId
+    ? [...new Set(lessonTags.map((t) => t.slot1Value).filter((v): v is string => v !== null))].sort()
     : [];
-  const unitOptions =
-    addTagTextbookId && addTagGrade
-      ? [...new Set(lessonTags.filter((t) => t.grade === addTagGrade).map((t) => t.unit))].sort()
+  const slot2Options =
+    addTagTextbookId && addTagSlot1Value
+      ? [...new Set(lessonTags.filter((t) => t.slot1Value === addTagSlot1Value).map((t) => t.slot2Value).filter((v): v is string => v !== null))].sort()
       : [];
-  const lessonOptions =
-    addTagTextbookId && addTagGrade && addTagUnit
-      ? [
-          ...new Set(
-            lessonTags
-              .filter((t) => t.grade === addTagGrade && t.unit === addTagUnit)
-              .map((t) => t.lesson)
-          ),
-        ].sort()
+  const slot3Options =
+    addTagTextbookId && addTagSlot1Value && addTagSlot2Value
+      ? [...new Set(lessonTags.filter((t) => t.slot1Value === addTagSlot1Value && t.slot2Value === addTagSlot2Value).map((t) => t.slot3Value).filter((v): v is string => v !== null))].sort()
       : [];
 
   if (page !== "add") {
@@ -240,61 +259,70 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                     </button>
                   </div>
                 )}
+                {textbookCreateMode && textbookCreateError && (
+                  <p className="mt-1 text-xs text-red-600">{textbookCreateError}</p>
+                )}
               </div>
 
-              {/* Grade */}
-              <div>
-                <label className="block text-xs text-gray-500">{tagStr.gradePlaceholder}</label>
-                <input
-                  list="tag-grade-list"
-                  className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-                  placeholder={tagStr.gradePlaceholder}
-                  value={addTagGrade ?? ""}
-                  onChange={(e) => handleGradeChange(e.target.value)}
-                  disabled={!addTagTextbookId && !textbookInputValue.trim()}
-                />
-                <datalist id="tag-grade-list">
-                  {gradeOptions.map((g) => (
-                    <option key={g} value={g} />
-                  ))}
-                </datalist>
-              </div>
+              {/* Slot 1 — shown only if textbook defines a slot 1 label */}
+              {slot1LabelDisplay && (
+                <div>
+                  <label className="block text-xs text-gray-500">{slot1LabelDisplay}</label>
+                  <input
+                    list="tag-slot1-list"
+                    className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    placeholder={slot1LabelDisplay}
+                    value={addTagSlot1Value ?? ""}
+                    onChange={(e) => handleSlot1Change(e.target.value)}
+                    disabled={!addTagTextbookId && !textbookInputValue.trim()}
+                  />
+                  <datalist id="tag-slot1-list">
+                    {slot1Options.map((v) => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
 
-              {/* Unit */}
-              <div>
-                <label className="block text-xs text-gray-500">{tagStr.unitPlaceholder}</label>
-                <input
-                  list="tag-unit-list"
-                  className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-                  placeholder={tagStr.unitPlaceholder}
-                  value={addTagUnit ?? ""}
-                  onChange={(e) => handleUnitChange(e.target.value)}
-                  disabled={!addTagGrade}
-                />
-                <datalist id="tag-unit-list">
-                  {unitOptions.map((u) => (
-                    <option key={u} value={u} />
-                  ))}
-                </datalist>
-              </div>
+              {/* Slot 2 — shown only if textbook defines a slot 2 label */}
+              {slot2LabelDisplay && (
+                <div>
+                  <label className="block text-xs text-gray-500">{slot2LabelDisplay}</label>
+                  <input
+                    list="tag-slot2-list"
+                    className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    placeholder={slot2LabelDisplay}
+                    value={addTagSlot2Value ?? ""}
+                    onChange={(e) => handleSlot2Change(e.target.value)}
+                    disabled={!addTagSlot1Value}
+                  />
+                  <datalist id="tag-slot2-list">
+                    {slot2Options.map((v) => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
 
-              {/* Lesson */}
-              <div>
-                <label className="block text-xs text-gray-500">{tagStr.lessonPlaceholder}</label>
-                <input
-                  list="tag-lesson-list"
-                  className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-                  placeholder={tagStr.lessonPlaceholder}
-                  value={addTagLesson ?? ""}
-                  onChange={(e) => setAddTagLesson(e.target.value || null)}
-                  disabled={!addTagUnit}
-                />
-                <datalist id="tag-lesson-list">
-                  {lessonOptions.map((l) => (
-                    <option key={l} value={l} />
-                  ))}
-                </datalist>
-              </div>
+              {/* Slot 3 — shown only if textbook defines a slot 3 label */}
+              {slot3LabelDisplay && (
+                <div>
+                  <label className="block text-xs text-gray-500">{slot3LabelDisplay}</label>
+                  <input
+                    list="tag-slot3-list"
+                    className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    placeholder={slot3LabelDisplay}
+                    value={addTagSlot3Value ?? ""}
+                    onChange={(e) => setAddTagSlot3Value(e.target.value || null)}
+                    disabled={!addTagSlot2Value}
+                  />
+                  <datalist id="tag-slot3-list">
+                    {slot3Options.map((v) => (
+                      <option key={v} value={v} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
             </div>
           )}
         </div>

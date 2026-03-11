@@ -19,6 +19,8 @@ export const wordsStrings = {
       addCharacters: "Add Characters",
       allCharacters: "All Characters",
       contentAdmin: "Content Admin",
+      adminQueue: "Content Queue",
+      adminTextbooks: "Textbooks",
       aiPrompts: "AI Prompts",
       debug: "Debug Tools",
       dueReview: "Due Review",
@@ -222,6 +224,25 @@ export const wordsStrings = {
       pageTitle: "Content Admin",
       pageDescription:
         "Preload and manage meanings, phrases, and examples. Review page reads only saved content.",
+      crossFamilyCuration: {
+        curatingLabel: "Curating from queue:",
+        generateButton: "Generate with AI",
+        generating: "Generating…",
+        contentJsonLabel: "Content JSON (edit before saving)",
+        generateNotice: "Content generated. Review and save.",
+        saveButton: "Save & Mark Ready",
+        saving: "Saving…",
+        cancelButton: "Cancel",
+      },
+      awaitingContent: {
+        sectionTitle: "Awaiting Content",
+        sectionDescription: "These characters have been added but have no flashcard content yet. The platform admin is preparing content — they will become reviewable once ready.",
+        noAwaitingWords: "All characters have content.",
+        tableHeaders: {
+          character: "Character",
+          dateAdded: "Date Added",
+        },
+      },
       stats: {
         characters: "All Characters",
         allTargets: "All Targets",
@@ -254,6 +275,7 @@ export const wordsStrings = {
       table: {
         headers: {
           character: "Character",
+          status: "Status",
           pronunciation: "Pronunciation",
           meaningZh: "Meaning",
           meaningEn: "Meaning",
@@ -264,9 +286,15 @@ export const wordsStrings = {
           includeInFillTest: "Include in tests",
           actions: "Actions",
         },
+        approvalStatus: {
+          pending: "Pending",
+          saved: "Saved",
+          ready: "Ready",
+        },
         actionButtons: {
           regenerate: "R",
           save: "S",
+          approve: "Approve",
           delete: "D",
           edit: "E",
           addMeaning: "+ Meaning",
@@ -275,10 +303,12 @@ export const wordsStrings = {
           cancel: "Cancel",
           fillTestOn: "Test On",
           fillTestOff: "Test Off",
+          approving: "Approving\u2026",
         },
         actionTooltips: {
           regenerate: "Regenerate all content",
           save: "Save",
+          approve: "Approve this character — marks it ready for review",
           delete: "Delete saved content",
           addMeaning: "Add meaning for this character/pronunciation",
           addPhrase: "Add phrase under this meaning",
@@ -407,6 +437,8 @@ export const wordsStrings = {
       addCharacters: "添加汉字",
       allCharacters: "全部汉字",
       contentAdmin: "内容管理",
+      adminQueue: "内容队列",
+      adminTextbooks: "教材管理",
       aiPrompts: "AI提示词",
       debug: "调试工具",
       dueReview: "待复习",
@@ -607,6 +639,25 @@ export const wordsStrings = {
     admin: {
       pageTitle: "内容管理",
       pageDescription: "预生成并管理闪卡的释义、词组、例句。用户端将直接读取已保存内容。",
+      crossFamilyCuration: {
+        curatingLabel: "正在从队列审核：",
+        generateButton: "AI 生成",
+        generating: "生成中…",
+        contentJsonLabel: "内容 JSON（保存前可编辑）",
+        generateNotice: "内容已生成。请检查后保存。",
+        saveButton: "保存并标记就绪",
+        saving: "保存中…",
+        cancelButton: "取消",
+      },
+      awaitingContent: {
+        sectionTitle: "等待内容",
+        sectionDescription: "这些汉字已添加，但尚无闪卡内容。平台管理员正在准备内容，完成后可进行复习。",
+        noAwaitingWords: "所有汉字均有内容。",
+        tableHeaders: {
+          character: "汉字",
+          dateAdded: "添加日期",
+        },
+      },
       stats: {
         characters: "总汉字",
         allTargets: "全部条目",
@@ -638,6 +689,7 @@ export const wordsStrings = {
       },      table: {
         headers: {
           character: "汉字",
+          status: "状态",
           pronunciation: "读音",
           meaningZh: "释义",
           meaningEn: "释义",
@@ -648,9 +700,15 @@ export const wordsStrings = {
           includeInFillTest: "录入填空题",
           actions: "操作",
         },
+        approvalStatus: {
+          pending: "待处理",
+          saved: "已保存",
+          ready: "已就绪",
+        },
         actionButtons: {
           regenerate: "重",
           save: "存",
+          approve: "批准",
           delete: "删",
           edit: "编",
           addMeaning: "+ 释义",
@@ -659,10 +717,12 @@ export const wordsStrings = {
           cancel: "取消",
           fillTestOn: "录入On",
           fillTestOff: "录入Off",
+          approving: "批准中\u2026",
         },
         actionTooltips: {
           regenerate: "重新生成全部内容",
           save: "保存",
+          approve: "批准该汉字——标记为可复习状态",
           delete: "删除已保存内容",
           addMeaning: "为该汉字/读音添加释义",
           addPhrase: "在该释义下添加词组",
