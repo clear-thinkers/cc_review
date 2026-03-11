@@ -48,9 +48,7 @@ export type AdminPendingMeaning = {
 
 export type AdminTableRenderRow = AdminTableRow & {
   showCharacterCell: boolean;
-  characterRowSpan: number;
   showMeaningCell: boolean;
-  meaningRowSpan: number;
 };
 
 export type AdminPhraseLocation = {
