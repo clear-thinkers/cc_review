@@ -5,8 +5,6 @@ export type { FillResult, FillSentence, FillTest, Placement, Tier };
 export type Word = {
   id: string;
   hanzi: string;
-  pinyin?: string;
-  meaning?: string;
   fillTest?: FillTest;
   createdAt: number;
 

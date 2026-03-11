@@ -63,8 +63,6 @@ interface SupabaseWordRow {
   id: string;
   family_id: string;
   hanzi: string;
-  pinyin: string | null;
-  meaning: string | null;
   created_at: string;
   repetitions: number;
   interval_days: number;
@@ -79,8 +77,6 @@ function toWord(row: SupabaseWordRow): Word {
   return {
     id: row.id,
     hanzi: row.hanzi,
-    pinyin: row.pinyin ?? undefined,
-    meaning: row.meaning ?? undefined,
     createdAt: new Date(row.created_at).getTime(),
     repetitions: row.repetitions,
     intervalDays: row.interval_days,
@@ -97,8 +93,6 @@ function fromWord(word: Word, familyId: string): Record<string, unknown> {
     id: word.id,
     family_id: familyId,
     hanzi: word.hanzi,
-    pinyin: word.pinyin ?? null,
-    meaning: word.meaning ?? null,
     created_at: new Date(word.createdAt).toISOString(),
     repetitions: word.repetitions,
     interval_days: word.intervalDays,
