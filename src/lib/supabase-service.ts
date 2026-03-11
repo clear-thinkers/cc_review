@@ -754,13 +754,13 @@ function toLessonTag(row: SupabaseLessonTagRow): LessonTag {
   };
 }
 
-/** Return all textbooks visible to the current family (shared + own). */
+/** Return textbooks created by the current family (excludes shared/admin-created ones). */
 export async function listTextbooks(): Promise<Textbook[]> {
   const { familyId } = await getSessionMetadata();
   const { data, error } = await supabase
     .from("textbooks")
     .select("*")
-    .or(`is_shared.eq.true,family_id.eq.${familyId}`)
+    .eq("family_id", familyId)
     .order("name");
   if (error) throw new Error(`listTextbooks: ${error.message}`);
   return (data as SupabaseTextbookRow[]).map(toTextbook);
