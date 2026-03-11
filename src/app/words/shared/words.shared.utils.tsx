@@ -374,10 +374,14 @@ function segmentCompactPinyin(compactPinyin: string, syllableCount: number): str
   }
 
   const results: string[][] = [];
+  let visits = 0;
+  const MAX_VISITS = 300;
+
   const dfs = (index: number, parts: string[]) => {
-    if (results.length > 4) {
+    if (results.length > 4 || visits > MAX_VISITS) {
       return;
     }
+    visits += 1;
 
     if (parts.length > syllableCount) {
       return;
@@ -398,6 +402,9 @@ function segmentCompactPinyin(compactPinyin: string, syllableCount: number): str
 
     const maxLen = Math.min(7, remainingChars - (remainingParts - 1));
     for (let len = 1; len <= maxLen; len += 1) {
+      if (visits > MAX_VISITS) {
+        return;
+      }
       const next = source.slice(index, index + len);
       if (!isLikelyPinyinSyllable(next)) {
         continue;
