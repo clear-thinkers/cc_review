@@ -875,6 +875,21 @@ export async function assignWordLessonTags(
 }
 
 /**
+ * Remove all lesson tag associations for the given word IDs belonging to
+ * the current family.  Leaves the lesson_tags and textbooks rows intact.
+ */
+export async function clearWordLessonTags(wordIds: string[]): Promise<void> {
+  if (wordIds.length === 0) return;
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("word_lesson_tags")
+    .delete()
+    .in("word_id", wordIds)
+    .eq("family_id", familyId);
+  if (error) throw new Error(`clearWordLessonTags: ${error.message}`);
+}
+
+/**
  * Return a map of wordId → ResolvedLessonTag[] for all words belonging to
  * the current family.  Used to populate the Lessons column and filter bars.
  */

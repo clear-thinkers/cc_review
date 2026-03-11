@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "@/lib/authContext";
 import { useLocale } from "@/app/shared/locale";
 import { taggingStrings } from "../shared/tagging.strings";
-import { assignWordLessonTags, createLessonTagIfNew, createTextbook, listLessonTags, listTextbooks } from "@/lib/supabase-service";
+import { assignWordLessonTags, clearWordLessonTags, createLessonTagIfNew, createTextbook, listLessonTags, listTextbooks } from "@/lib/supabase-service";
 import type { LessonTag, Textbook } from "../shared/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 
@@ -36,6 +36,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [selectedWordIds, setSelectedWordIds] = useState<string[]>([]);
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
+  const [tagClearing, setTagClearing] = useState(false);
 
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [textbooksLoading, setTextbooksLoading] = useState(false);
@@ -162,6 +163,27 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
   }
 
+  async function handleBatchClearTags(): Promise<void> {
+    setEditorNotice(null);
+
+    if (selectedWordIds.length === 0) {
+      setEditorNotice(allEditorStr.noSelection);
+      return;
+    }
+
+    setTagClearing(true);
+    try {
+      await clearWordLessonTags(selectedWordIds);
+      await refreshAllData();
+      setEditorNotice(allEditorStr.clearTagsSuccess.replace("{count}", String(selectedWordIds.length)));
+    } catch (error) {
+      console.error("[all-tags] Batch clear failed", error);
+      setEditorNotice(allEditorStr.clearTagsError);
+    } finally {
+      setTagClearing(false);
+    }
+  }
+
   async function handleBatchSave(): Promise<void> {
     setEditorNotice(null);
 
@@ -241,156 +263,175 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
         </div>
       </div>
 
-      {/* Filter bar — hidden for child role */}
+      {/* Batch tag editor — hidden for child role */}
 
       {!isChild && (
-        <div className="space-y-2 rounded-md border p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium">{allEditorStr.title}</p>
-            <p className="text-sm text-gray-600">
-              {allEditorStr.selectedCount.replace("{count}", String(selectedWordIds.length))}
-            </p>
-          </div>
-
+        <div className="space-y-2">
           {editorNotice ? <p className="text-sm text-blue-700">{editorNotice}</p> : null}
 
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <div>
-              <label className="block text-xs text-gray-500">{addTagStr.textbookPlaceholder}</label>
-              {!textbookCreateMode ? (
-                <select
-                  className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                  value={batchTextbookId ?? ""}
-                  onChange={(event) => {
-                    if (event.target.value === "__create__") {
-                      setTextbookCreateMode(true);
-                      return;
-                    }
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start">
+            {/* Batch Tag Assignment panel */}
+            <div className="flex-1 space-y-2 rounded-md border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium">{allEditorStr.title}</p>
+                <p className="text-sm text-gray-600">
+                  {allEditorStr.selectedCount.replace("{count}", String(selectedWordIds.length))}
+                </p>
+              </div>
 
-                    handleBatchTextbookSelect(event.target.value);
-                  }}
-                  disabled={textbooksLoading || editorSaving}
-                >
-                  <option value="">
-                    {textbooksLoading ? addTagStr.loadingTextbooks : addTagStr.textbookPlaceholder}
-                  </option>
-                  {textbooks.map((tb) => (
-                    <option key={tb.id} value={tb.id}>
-                      {tb.name}
-                    </option>
-                  ))}
-                  <option value="__create__">{addTagStr.createNewOption}</option>
-                </select>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <input
-                    className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                    placeholder={addTagStr.createNewPlaceholder}
-                    value={textbookInputValue}
-                    onChange={(event) => setTextbookInputValue(event.target.value)}
-                    disabled={textbookCreating || editorSaving}
-                  />
-                  <button
-                    type="button"
-                    className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
-                    onClick={() => void handleCreateNewTextbook()}
-                    disabled={!textbookInputValue.trim() || textbookCreating || editorSaving}
-                  >
-                    {textbookCreating ? addTagStr.creatingTextbook : addTagStr.createNewConfirm}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded border-2 border-gray-400 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
-                    onClick={() => {
-                      setTextbookCreateMode(false);
-                      setTextbookInputValue("");
-                    }}
-                    disabled={textbookCreating || editorSaving}
-                  >
-                    {addTagStr.createNewCancel}
-                  </button>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                <div>
+                  <label className="block text-xs text-gray-500">{addTagStr.textbookPlaceholder}</label>
+                  {!textbookCreateMode ? (
+                    <select
+                      className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                      value={batchTextbookId ?? ""}
+                      onChange={(event) => {
+                        if (event.target.value === "__create__") {
+                          setTextbookCreateMode(true);
+                          return;
+                        }
+
+                        handleBatchTextbookSelect(event.target.value);
+                      }}
+                      disabled={textbooksLoading || editorSaving}
+                    >
+                      <option value="">
+                        {textbooksLoading ? addTagStr.loadingTextbooks : addTagStr.textbookPlaceholder}
+                      </option>
+                      {textbooks.map((tb) => (
+                        <option key={tb.id} value={tb.id}>
+                          {tb.name}
+                        </option>
+                      ))}
+                      <option value="__create__">{addTagStr.createNewOption}</option>
+                    </select>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                        placeholder={addTagStr.createNewPlaceholder}
+                        value={textbookInputValue}
+                        onChange={(event) => setTextbookInputValue(event.target.value)}
+                        disabled={textbookCreating || editorSaving}
+                      />
+                      <button
+                        type="button"
+                        className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        onClick={() => void handleCreateNewTextbook()}
+                        disabled={!textbookInputValue.trim() || textbookCreating || editorSaving}
+                      >
+                        {textbookCreating ? addTagStr.creatingTextbook : addTagStr.createNewConfirm}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border-2 border-gray-400 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+                        onClick={() => {
+                          setTextbookCreateMode(false);
+                          setTextbookInputValue("");
+                        }}
+                        disabled={textbookCreating || editorSaving}
+                      >
+                        {addTagStr.createNewCancel}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                <div>
+                  <label className="block text-xs text-gray-500">{addTagStr.gradePlaceholder}</label>
+                  <input
+                    list="all-tag-grade-list"
+                    className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                    placeholder={addTagStr.gradePlaceholder}
+                    value={batchGrade ?? ""}
+                    onChange={(event) => {
+                      setBatchGrade(event.target.value || null);
+                      setBatchUnit(null);
+                      setBatchLesson(null);
+                    }}
+                    disabled={!batchTextbookId || editorSaving}
+                  />
+                  <datalist id="all-tag-grade-list">
+                    {gradeOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-500">{addTagStr.unitPlaceholder}</label>
+                  <input
+                    list="all-tag-unit-list"
+                    className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                    placeholder={addTagStr.unitPlaceholder}
+                    value={batchUnit ?? ""}
+                    onChange={(event) => {
+                      setBatchUnit(event.target.value || null);
+                      setBatchLesson(null);
+                    }}
+                    disabled={!batchGrade || editorSaving}
+                  />
+                  <datalist id="all-tag-unit-list">
+                    {unitOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-500">{addTagStr.lessonPlaceholder}</label>
+                  <input
+                    list="all-tag-lesson-list"
+                    className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                    placeholder={addTagStr.lessonPlaceholder}
+                    value={batchLesson ?? ""}
+                    onChange={(event) => setBatchLesson(event.target.value || null)}
+                    disabled={!batchUnit || editorSaving}
+                  />
+                  <datalist id="all-tag-lesson-list">
+                    {lessonOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border-2 border-emerald-600 bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-50"
+                  onClick={() => void handleBatchSave()}
+                  disabled={editorSaving}
+                  title={allEditorStr.tooltips.saveBatch}
+                >
+                  {editorSaving ? allEditorStr.savingBatch : allEditorStr.saveBatch}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
+                  onClick={() => setSelectedWordIds([])}
+                  disabled={selectedWordIds.length === 0 || editorSaving}
+                  title={allEditorStr.tooltips.clearSelection}
+                >
+                  {allEditorStr.clearSelection}
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs text-gray-500">{addTagStr.gradePlaceholder}</label>
-              <input
-                list="all-tag-grade-list"
-                className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                placeholder={addTagStr.gradePlaceholder}
-                value={batchGrade ?? ""}
-                onChange={(event) => {
-                  setBatchGrade(event.target.value || null);
-                  setBatchUnit(null);
-                  setBatchLesson(null);
-                }}
-                disabled={!batchTextbookId || editorSaving}
-              />
-              <datalist id="all-tag-grade-list">
-                {gradeOptions.map((option) => (
-                  <option key={option} value={option} />
-                ))}
-              </datalist>
+            {/* Clear Tags panel — separate to avoid confusion with tag assignment */}
+            <div className="shrink-0 space-y-2 rounded-md border p-3 lg:w-40">
+              <p className="text-sm font-medium">{allEditorStr.clearTags}</p>
+              <button
+                type="button"
+                className="w-full rounded-md border-2 border-rose-500 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-50"
+                onClick={() => void handleBatchClearTags()}
+                disabled={tagClearing || selectedWordIds.length === 0 || editorSaving}
+                title={allEditorStr.tooltips.clearTags}
+              >
+                {tagClearing ? allEditorStr.clearingTags : allEditorStr.clearTags}
+              </button>
             </div>
-
-            <div>
-              <label className="block text-xs text-gray-500">{addTagStr.unitPlaceholder}</label>
-              <input
-                list="all-tag-unit-list"
-                className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                placeholder={addTagStr.unitPlaceholder}
-                value={batchUnit ?? ""}
-                onChange={(event) => {
-                  setBatchUnit(event.target.value || null);
-                  setBatchLesson(null);
-                }}
-                disabled={!batchGrade || editorSaving}
-              />
-              <datalist id="all-tag-unit-list">
-                {unitOptions.map((option) => (
-                  <option key={option} value={option} />
-                ))}
-              </datalist>
-            </div>
-
-            <div>
-              <label className="block text-xs text-gray-500">{addTagStr.lessonPlaceholder}</label>
-              <input
-                list="all-tag-lesson-list"
-                className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                placeholder={addTagStr.lessonPlaceholder}
-                value={batchLesson ?? ""}
-                onChange={(event) => setBatchLesson(event.target.value || null)}
-                disabled={!batchUnit || editorSaving}
-              />
-              <datalist id="all-tag-lesson-list">
-                {lessonOptions.map((option) => (
-                  <option key={option} value={option} />
-                ))}
-              </datalist>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="rounded-md border-2 border-emerald-600 bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-50"
-              onClick={() => void handleBatchSave()}
-              disabled={editorSaving}
-              title={allEditorStr.tooltips.saveBatch}
-            >
-              {editorSaving ? allEditorStr.savingBatch : allEditorStr.saveBatch}
-            </button>
-            <button
-              type="button"
-              className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
-              onClick={() => setSelectedWordIds([])}
-              disabled={selectedWordIds.length === 0 || editorSaving}
-              title={allEditorStr.tooltips.clearSelection}
-            >
-              {allEditorStr.clearSelection}
-            </button>
           </div>
         </div>
       )}

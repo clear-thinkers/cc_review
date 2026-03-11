@@ -45,10 +45,15 @@ export const taggingStrings = {
       incompleteTagError: "Please complete Textbook, Grade, Unit, and Lesson.",
       saveSuccess: "Saved tags for {count} words.",
       saveError: "Failed to save tags. Please try again.",
+      clearTags: "Clear Tags",
+      clearingTags: "Clearing...",
+      clearTagsSuccess: "Cleared tags for {count} words.",
+      clearTagsError: "Failed to clear tags. Please try again.",
       tooltips: {
         selectAllVisible: "Select all rows currently visible in the table.",
         saveBatch: "Save the selected tag to all selected words.",
         clearSelection: "Clear all currently selected rows.",
+        clearTags: "Remove all lesson tags from all selected words.",
       },
     },
 
@@ -106,10 +111,15 @@ export const taggingStrings = {
       incompleteTagError: "请完整填写教材、年级、单元和课。",
       saveSuccess: "已为 {count} 个汉字保存标签。",
       saveError: "保存标签失败，请重试。",
+      clearTags: "清除标签",
+      clearingTags: "清除中...",
+      clearTagsSuccess: "已清除 {count} 个汉字的标签。",
+      clearTagsError: "清除标签失败，请重试。",
       tooltips: {
         selectAllVisible: "选择当前表格中可见的所有行。",
         saveBatch: "将所选标签保存到所有已选择的汉字。",
         clearSelection: "清除当前所有已选择行。",
+        clearTags: "移除所选汉字的所有标签。",
       },
     },
 
