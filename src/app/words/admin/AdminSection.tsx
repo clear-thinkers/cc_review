@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, memo, useCallback, useRef, useState, useEffect } from "react";
+import { useMemo, memo, useCallback, useRef, useState, useEffect, useTransition } from "react";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import type { WordsLocaleStrings } from "../shared/words.shared.types";
 import type {
@@ -474,6 +474,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
+  const [isPageTransitionPending, startPageTransition] = useTransition();
   const ITEMS_PER_PAGE = 25;
 
   // Extract unique tags from wordTagsMap for filter UI
@@ -832,7 +833,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       )}
 
       <div className="overflow-x-auto rounded-md border">
-        <table className="min-w-full table-fixed border-collapse text-sm">
+        <table className={`min-w-full table-fixed border-collapse text-sm transition-opacity${isPageTransitionPending ? " opacity-50" : ""}`}>
           <thead>
             <tr className="border-b bg-gray-50">
               <th className="w-[15%] px-3 py-2 text-left">
@@ -902,7 +903,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         <div className="flex items-center justify-center gap-2">
           <button
             type="button"
-            onClick={() => setCurrentPage(1)}
+            onClick={() => startPageTransition(() => setCurrentPage(1))}
             disabled={validPage === 1}
             className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
           >
@@ -910,7 +911,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           </button>
           <button
             type="button"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            onClick={() => startPageTransition(() => setCurrentPage((p) => Math.max(1, p - 1)))}
             disabled={validPage === 1}
             className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
           >
@@ -918,7 +919,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           </button>
           <button
             type="button"
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => startPageTransition(() => setCurrentPage((p) => Math.min(totalPages, p + 1)))}
             disabled={validPage === totalPages}
             className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
           >
@@ -926,7 +927,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           </button>
           <button
             type="button"
-            onClick={() => setCurrentPage(totalPages)}
+            onClick={() => startPageTransition(() => setCurrentPage(totalPages))}
             disabled={validPage === totalPages}
             className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
           >

@@ -80,7 +80,6 @@ import type {
   AdminPendingPhrase,
   AdminPhraseLocation,
   AdminStatsFilter,
-  AdminTableRenderRow,
   AdminTableRow,
   AdminTarget,
   AdminTargetContentStatus,
@@ -657,66 +656,6 @@ const gradeLabels = getGradeLabels(str);
 
     return rows;
   }, [flashcardLlmData, adminPendingByMeaningKey, adminPendingMeaningsByTargetKey, adminTargets]);
-  const adminTableRenderRows = useMemo<AdminTableRenderRow[]>(() => {
-    if (adminTableRows.length === 0) {
-      return [];
-    }
-
-    const characterGroupSpans = new Map<number, number>();
-    const meaningGroupSpans = new Map<number, number>();
-
-    let index = 0;
-    while (index < adminTableRows.length) {
-      const groupKey = `${adminTableRows[index].character}||${adminTableRows[index].pronunciation}`;
-      let end = index + 1;
-      while (
-        end < adminTableRows.length &&
-        `${adminTableRows[end].character}||${adminTableRows[end].pronunciation}` === groupKey
-      ) {
-        end += 1;
-      }
-
-      characterGroupSpans.set(index, end - index);
-      index = end;
-    }
-
-    index = 0;
-    while (index < adminTableRows.length) {
-      const groupKey = [
-        adminTableRows[index].character,
-        adminTableRows[index].pronunciation,
-        adminTableRows[index].meaningZh,
-        adminTableRows[index].meaningEn,
-        adminTableRows[index].rowType,
-        adminTableRows[index].pendingId ?? "",
-      ].join("||");
-      let end = index + 1;
-      while (
-        end < adminTableRows.length &&
-        [
-          adminTableRows[end].character,
-          adminTableRows[end].pronunciation,
-          adminTableRows[end].meaningZh,
-          adminTableRows[end].meaningEn,
-          adminTableRows[end].rowType,
-          adminTableRows[end].pendingId ?? "",
-        ].join("||") === groupKey
-      ) {
-        end += 1;
-      }
-
-      meaningGroupSpans.set(index, end - index);
-      index = end;
-    }
-
-    return adminTableRows.map((row, rowIndex) => ({
-      ...row,
-      showCharacterCell: characterGroupSpans.has(rowIndex),
-      characterRowSpan: characterGroupSpans.get(rowIndex) ?? 0,
-      showMeaningCell: meaningGroupSpans.has(rowIndex),
-      meaningRowSpan: meaningGroupSpans.get(rowIndex) ?? 0,
-    }));
-  }, [adminTableRows]);
   const adminTargetByKey = useMemo(() => {
     const map = new Map<string, AdminTarget>();
     for (const target of adminTargets) {
