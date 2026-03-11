@@ -10,6 +10,35 @@ import type {
 } from "./admin.types";
 import { renderPhraseWithPinyin, renderSentenceWithPinyin } from "../shared/words.shared.utils";
 
+function computeRenderRows(rows: AdminTableRow[]): AdminTableRenderRow[] {
+  if (rows.length === 0) return [];
+  const characterGroupSpans = new Map<number, number>();
+  const meaningGroupSpans = new Map<number, number>();
+  let index = 0;
+  while (index < rows.length) {
+    const groupKey = `${rows[index].character}||${rows[index].pronunciation}`;
+    let end = index + 1;
+    while (end < rows.length && `${rows[end].character}||${rows[end].pronunciation}` === groupKey) end++;
+    characterGroupSpans.set(index, end - index);
+    index = end;
+  }
+  index = 0;
+  while (index < rows.length) {
+    const groupKey = [rows[index].character, rows[index].pronunciation, rows[index].meaningZh, rows[index].meaningEn, rows[index].rowType, rows[index].pendingId ?? ""].join("||");
+    let end = index + 1;
+    while (end < rows.length && [rows[end].character, rows[end].pronunciation, rows[end].meaningZh, rows[end].meaningEn, rows[end].rowType, rows[end].pendingId ?? ""].join("||") === groupKey) end++;
+    meaningGroupSpans.set(index, end - index);
+    index = end;
+  }
+  return rows.map((row, i) => ({
+    ...row,
+    showCharacterCell: characterGroupSpans.has(i),
+    characterRowSpan: characterGroupSpans.get(i) ?? 0,
+    showMeaningCell: meaningGroupSpans.has(i),
+    meaningRowSpan: meaningGroupSpans.get(i) ?? 0,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Memoised table row â€” prevents re-render when only URL filter params change.
 // React.memo does a shallow prop comparison; all handler props come from the
@@ -404,7 +433,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminRefreshingAllPinyin,
     adminProgressText,
     adminNotice,
-    adminTableRenderRows,
+    adminTableRows,
     adminVisibleTargetKeySet,
     adminEmptyTableMessage,
     adminTargetByKey,
@@ -472,10 +501,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     );
   }, [vm.wordTagsMap]);
 
-  // Apply filters to admin render rows
+  // Apply filters to admin rows
   const filteredByStatsAdminRenderRows = useMemo(
-    () => adminTableRenderRows.filter((r) => adminVisibleTargetKeySet.has(r.targetKey)),
-    [adminTableRenderRows, adminVisibleTargetKeySet]
+    () => adminTableRows.filter((r) => adminVisibleTargetKeySet.has(r.targetKey)),
+    [adminTableRows, adminVisibleTargetKeySet]
   );
 
   // Apply default filters
@@ -517,7 +546,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const validPage = Math.max(1, Math.min(currentPage, totalPages || 1));
   const paginatedAdminRenderRows = useMemo(() => {
     const startIdx = (validPage - 1) * ITEMS_PER_PAGE;
-    return filteredAdminRenderRows.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+    const pageRows = filteredAdminRenderRows.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+    return computeRenderRows(pageRows);
   }, [filteredAdminRenderRows, validPage]);
 
   // Reset to page 1 when filters change

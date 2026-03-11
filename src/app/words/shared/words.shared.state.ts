@@ -2825,7 +2825,7 @@ const gradeLabels = getGradeLabels(str);
     adminRefreshingAllPinyin,
     adminProgressText,
     adminNotice,
-    adminTableRenderRows,
+    adminTableRows,
     adminVisibleTargetKeySet,
     adminEmptyTableMessage,
     adminTargetByKey,
