@@ -2026,7 +2026,6 @@ const gradeLabels = getGradeLabels(str);
         const targetKeySet = new Set<string>();
         const skippedNoPronunciationChars: string[] = [];
 
-        setAdminNotice("Step 1: Loading character pronunciations and saved content...");
         const [xinhuaResults, allSavedContents] = await Promise.all([
           Promise.all(
             orderedChars.map(async (character) => {
@@ -2036,7 +2035,6 @@ const gradeLabels = getGradeLabels(str);
           ),
           getAllFlashcardContents(),
         ]);
-        setAdminNotice("Step 2: Data loaded. Building table...");
         for (const { character, pronunciations } of xinhuaResults) {
           if (pronunciations.length === 0) {
             skippedNoPronunciationChars.push(character);

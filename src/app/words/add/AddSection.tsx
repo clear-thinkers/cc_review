@@ -39,6 +39,13 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [textbookCreateMode, setTextbookCreateMode] = useState(false);
   const [lessonTags, setLessonTags] = useState<LessonTag[]>([]);
 
+  const [gradeCreateMode, setGradeCreateMode] = useState(false);
+  const [gradeInputValue, setGradeInputValue] = useState("");
+  const [unitCreateMode, setUnitCreateMode] = useState(false);
+  const [unitInputValue, setUnitInputValue] = useState("");
+  const [lessonCreateMode, setLessonCreateMode] = useState(false);
+  const [lessonInputValue, setLessonInputValue] = useState("");
+
   // Load textbooks when section opens
   useEffect(() => {
     if (!addTagSectionOpen) return;
@@ -80,6 +87,12 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
     setAddTagGrade(null);
     setAddTagUnit(null);
     setAddTagLesson(null);
+    setGradeCreateMode(false);
+    setGradeInputValue("");
+    setUnitCreateMode(false);
+    setUnitInputValue("");
+    setLessonCreateMode(false);
+    setLessonInputValue("");
   }
 
   async function handleCreateNewTextbook() {
@@ -109,11 +122,17 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
     setAddTagGrade(grade || null);
     setAddTagUnit(null);
     setAddTagLesson(null);
+    setUnitCreateMode(false);
+    setUnitInputValue("");
+    setLessonCreateMode(false);
+    setLessonInputValue("");
   }
 
   function handleUnitChange(unit: string) {
     setAddTagUnit(unit || null);
     setAddTagLesson(null);
+    setLessonCreateMode(false);
+    setLessonInputValue("");
   }
 
   function handleToggleSection() {
@@ -127,6 +146,12 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
       setAddTagLesson(null);
       setTextbookInputValue("");
       setTextbookCreateMode(false);
+      setGradeCreateMode(false);
+      setGradeInputValue("");
+      setUnitCreateMode(false);
+      setUnitInputValue("");
+      setLessonCreateMode(false);
+      setLessonInputValue("");
     } else {
       setAddTagSectionOpen(true);
     }
@@ -245,55 +270,172 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
               {/* Grade */}
               <div>
                 <label className="block text-xs text-gray-500">{tagStr.gradePlaceholder}</label>
-                <input
-                  list="tag-grade-list"
-                  className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-                  placeholder={tagStr.gradePlaceholder}
-                  value={addTagGrade ?? ""}
-                  onChange={(e) => handleGradeChange(e.target.value)}
-                  disabled={!addTagTextbookId && !textbookInputValue.trim()}
-                />
-                <datalist id="tag-grade-list">
-                  {gradeOptions.map((g) => (
-                    <option key={g} value={g} />
-                  ))}
-                </datalist>
+                {!gradeCreateMode ? (
+                  <select
+                    className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    value={addTagGrade ?? ""}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setGradeCreateMode(true);
+                        return;
+                      }
+                      handleGradeChange(e.target.value);
+                    }}
+                    disabled={!addTagTextbookId && !textbookInputValue.trim()}
+                  >
+                    <option value="">{tagStr.gradePlaceholder}</option>
+                    {gradeOptions.map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                    <option value="__custom__">{tagStr.customValueOption}</option>
+                  </select>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                      placeholder={tagStr.gradePlaceholder}
+                      value={gradeInputValue}
+                      onChange={(e) => setGradeInputValue(e.target.value)}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleGradeChange(gradeInputValue);
+                        setGradeCreateMode(false);
+                        setGradeInputValue("");
+                      }}
+                      disabled={!gradeInputValue.trim()}
+                      className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                    >
+                      {tagStr.createNewConfirm}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGradeCreateMode(false);
+                        setGradeInputValue("");
+                      }}
+                      className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      {tagStr.createNewCancel}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Unit */}
               <div>
                 <label className="block text-xs text-gray-500">{tagStr.unitPlaceholder}</label>
-                <input
-                  list="tag-unit-list"
-                  className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-                  placeholder={tagStr.unitPlaceholder}
-                  value={addTagUnit ?? ""}
-                  onChange={(e) => handleUnitChange(e.target.value)}
-                  disabled={!addTagGrade}
-                />
-                <datalist id="tag-unit-list">
-                  {unitOptions.map((u) => (
-                    <option key={u} value={u} />
-                  ))}
-                </datalist>
+                {!unitCreateMode ? (
+                  <select
+                    className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    value={addTagUnit ?? ""}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setUnitCreateMode(true);
+                        return;
+                      }
+                      handleUnitChange(e.target.value);
+                    }}
+                    disabled={!addTagGrade}
+                  >
+                    <option value="">{tagStr.unitPlaceholder}</option>
+                    {unitOptions.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                    <option value="__custom__">{tagStr.customValueOption}</option>
+                  </select>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                      placeholder={tagStr.unitPlaceholder}
+                      value={unitInputValue}
+                      onChange={(e) => setUnitInputValue(e.target.value)}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleUnitChange(unitInputValue);
+                        setUnitCreateMode(false);
+                        setUnitInputValue("");
+                      }}
+                      disabled={!unitInputValue.trim()}
+                      className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                    >
+                      {tagStr.createNewConfirm}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUnitCreateMode(false);
+                        setUnitInputValue("");
+                      }}
+                      className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      {tagStr.createNewCancel}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Lesson */}
               <div>
                 <label className="block text-xs text-gray-500">{tagStr.lessonPlaceholder}</label>
-                <input
-                  list="tag-lesson-list"
-                  className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-                  placeholder={tagStr.lessonPlaceholder}
-                  value={addTagLesson ?? ""}
-                  onChange={(e) => setAddTagLesson(e.target.value || null)}
-                  disabled={!addTagUnit}
-                />
-                <datalist id="tag-lesson-list">
-                  {lessonOptions.map((l) => (
-                    <option key={l} value={l} />
-                  ))}
-                </datalist>
+                {!lessonCreateMode ? (
+                  <select
+                    className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    value={addTagLesson ?? ""}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setLessonCreateMode(true);
+                        return;
+                      }
+                      setAddTagLesson(e.target.value || null);
+                    }}
+                    disabled={!addTagUnit}
+                  >
+                    <option value="">{tagStr.lessonPlaceholder}</option>
+                    {lessonOptions.map((l) => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                    <option value="__custom__">{tagStr.customValueOption}</option>
+                  </select>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                      placeholder={tagStr.lessonPlaceholder}
+                      value={lessonInputValue}
+                      onChange={(e) => setLessonInputValue(e.target.value)}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddTagLesson(lessonInputValue || null);
+                        setLessonCreateMode(false);
+                        setLessonInputValue("");
+                      }}
+                      disabled={!lessonInputValue.trim()}
+                      className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                    >
+                      {tagStr.createNewConfirm}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLessonCreateMode(false);
+                        setLessonInputValue("");
+                      }}
+                      className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      {tagStr.createNewCancel}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

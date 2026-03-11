@@ -37,6 +37,14 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
   const [tagClearing, setTagClearing] = useState(false);
+  const [batchTagSectionOpen, setBatchTagSectionOpen] = useState(false);
+
+  const [batchGradeCreateMode, setBatchGradeCreateMode] = useState(false);
+  const [batchGradeInputValue, setBatchGradeInputValue] = useState("");
+  const [batchUnitCreateMode, setBatchUnitCreateMode] = useState(false);
+  const [batchUnitInputValue, setBatchUnitInputValue] = useState("");
+  const [batchLessonCreateMode, setBatchLessonCreateMode] = useState(false);
+  const [batchLessonInputValue, setBatchLessonInputValue] = useState("");
 
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [textbooksLoading, setTextbooksLoading] = useState(false);
@@ -51,14 +59,99 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [batchUnit, setBatchUnit] = useState<string | null>(null);
   const [batchLesson, setBatchLesson] = useState<string | null>(null);
 
+  // Filter state
+  const [filterDueNow, setFilterDueNow] = useState(false);
+  const [filterFamiliarityOperator, setFilterFamiliarityOperator] = useState<"<=" | ">=">("<=");
+  const [filterFamiliarityValue, setFilterFamiliarityValue] = useState<number | "">("");
+  const [filterSelectedTagIds, setFilterSelectedTagIds] = useState<string[]>([]);
+  const [filterSectionOpen, setFilterSectionOpen] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
+
+  // Extract unique tags from wordTagsMap for filter UI
+  const availableTagsWithIds = useMemo(() => {
+    const tagMap = new Map<string, { id: string; textbookName: string; grade: string; unit: string; lesson: string }>();
+    wordTagsMap.forEach((tags) => {
+      tags.forEach((tag) => {
+        const key = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+        if (!tagMap.has(key)) {
+          tagMap.set(key, {
+            id: tag.lessonTagId,
+            textbookName: tag.textbookName,
+            grade: tag.grade,
+            unit: tag.unit,
+            lesson: tag.lesson,
+          });
+        }
+      });
+    });
+    return Array.from(tagMap.values()).sort((a, b) =>
+      `${a.textbookName}${a.grade}${a.unit}${a.lesson}`.localeCompare(
+        `${b.textbookName}${b.grade}${b.unit}${b.lesson}`,
+        "zh-Hans-CN"
+      )
+    );
+  }, [wordTagsMap]);
+
   const visibleWordIds = useMemo(
     () => sortedAllWords.map(({ word }) => word.id),
     [sortedAllWords]
   );
 
+  // Apply filters to sorted words
+  const filteredWords = useMemo(() => {
+    const now = Date.now();
+    return sortedAllWords.filter(({ word, familiarity }) => {
+      // Filter: Due now
+      if (filterDueNow) {
+        const isDue = (word.nextReviewAt || 0) <= now;
+        if (!isDue) return false;
+      }
+
+      // Filter: Familiarity
+      if (filterFamiliarityValue !== "") {
+        const threshold = Number(filterFamiliarityValue);
+        if (filterFamiliarityOperator === "<=") {
+          if (familiarity > threshold) return false;
+        } else if (filterFamiliarityOperator === ">=") {
+          if (familiarity < threshold) return false;
+        }
+      }
+
+      // Filter: Tags (AND logic - word must have all selected tags)
+      if (filterSelectedTagIds.length > 0) {
+        const wordTags = wordTagsMap.get(word.id) ?? [];
+        const wordTagIds = new Set(wordTags.map((t) => t.lessonTagId));
+        const hasAllSelectedTags = filterSelectedTagIds.every((tagId) => wordTagIds.has(tagId));
+        if (!hasAllSelectedTags) return false;
+      }
+
+      return true;
+    });
+  }, [sortedAllWords, filterDueNow, filterFamiliarityOperator, filterFamiliarityValue, filterSelectedTagIds, wordTagsMap]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredWords.length / ITEMS_PER_PAGE);
+  const validPage = Math.max(1, Math.min(currentPage, totalPages || 1));
+  const paginatedWords = useMemo(() => {
+    const startIdx = (validPage - 1) * ITEMS_PER_PAGE;
+    return filteredWords.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+  }, [filteredWords, validPage]);
+
+  // Reset to page 1 when filters change
   useEffect(() => {
-    setSelectedWordIds((previous) => previous.filter((id) => visibleWordIds.includes(id)));
-  }, [visibleWordIds]);
+    setCurrentPage(1);
+  }, [filterDueNow, filterFamiliarityValue, filterSelectedTagIds]);
+
+  // Update the visibleWordIds to use paginatedWords instead of sortedAllWords
+  useEffect(() => {
+    setSelectedWordIds((previous) => {
+      const paginatedWordIds = paginatedWords.map(({ word }) => word.id);
+      return previous.filter((id) => paginatedWordIds.includes(id));
+    });
+  }, [paginatedWords]);
 
   useEffect(() => {
     if (isChild) {
@@ -71,6 +164,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       .catch(() => setTextbooks([]))
       .finally(() => setTextbooksLoading(false));
   }, [isChild]);
+
+  const paginatedWordIds = useMemo(() => paginatedWords.map(({ word }) => word.id), [paginatedWords]);
 
   useEffect(() => {
     if (!batchTextbookId) {
@@ -102,7 +197,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       : [];
 
   const allVisibleSelected =
-    visibleWordIds.length > 0 && visibleWordIds.every((id) => selectedWordIds.includes(id));
+    paginatedWordIds.length > 0 && paginatedWordIds.every((id) => selectedWordIds.includes(id));
 
   function toggleWordSelection(wordId: string, checked: boolean): void {
     setSelectedWordIds((previous) => {
@@ -117,11 +212,11 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   function toggleAllVisibleSelection(checked: boolean): void {
     setSelectedWordIds((previous) => {
       if (checked) {
-        const merged = new Set([...previous, ...visibleWordIds]);
+        const merged = new Set([...previous, ...paginatedWordIds]);
         return [...merged];
       }
 
-      return previous.filter((id) => !visibleWordIds.includes(id));
+      return previous.filter((id) => !paginatedWordIds.includes(id));
     });
   }
 
@@ -137,6 +232,12 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     setBatchGrade(null);
     setBatchUnit(null);
     setBatchLesson(null);
+    setBatchGradeCreateMode(false);
+    setBatchGradeInputValue("");
+    setBatchUnitCreateMode(false);
+    setBatchUnitInputValue("");
+    setBatchLessonCreateMode(false);
+    setBatchLessonInputValue("");
   }
 
   async function handleCreateNewTextbook(): Promise<void> {
@@ -156,6 +257,12 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       setBatchGrade(null);
       setBatchUnit(null);
       setBatchLesson(null);
+      setBatchGradeCreateMode(false);
+      setBatchGradeInputValue("");
+      setBatchUnitCreateMode(false);
+      setBatchUnitInputValue("");
+      setBatchLessonCreateMode(false);
+      setBatchLessonInputValue("");
       setTextbookInputValue("");
       setTextbookCreateMode(false);
     } finally {
@@ -235,6 +342,30 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
   }
 
+  function handleBatchTagToggle(): void {
+    if (batchTagSectionOpen) {
+      setBatchGradeCreateMode(false);
+      setBatchGradeInputValue("");
+      setBatchUnitCreateMode(false);
+      setBatchUnitInputValue("");
+      setBatchLessonCreateMode(false);
+      setBatchLessonInputValue("");
+    }
+    setBatchTagSectionOpen((open) => !open);
+  }
+
+  function clearAllFilters(): void {
+    setFilterDueNow(false);
+    setFilterFamiliarityOperator("<=");
+    setFilterFamiliarityValue("");
+    setFilterSelectedTagIds([]);
+    setCurrentPage(1);
+  }
+
+  function handleFilterSectionToggle(): void {
+    setFilterSectionOpen((open) => !open);
+  }
+
   if (page !== "all") {
     return null;
   }
@@ -263,21 +394,137 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
         </div>
       </div>
 
+      {/* Default Filters Bar */}
+      <div className="rounded-lg border p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleFilterSectionToggle}
+            className="text-sm text-blue-600 underline"
+          >
+            {str.all.filters.title}
+          </button>
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            className="text-xs text-blue-600 underline disabled:opacity-50"
+            disabled={!filterDueNow && filterFamiliarityValue === "" && filterSelectedTagIds.length === 0}
+          >
+            {str.all.filters.clearButton}
+          </button>
+        </div>
+
+        {filterSectionOpen && (
+          <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
+            {/* Due Now + Familiarity in flex row on the left */}
+            <div className="flex gap-12 items-start">
+              {/* Due Now Filter */}
+              <div className="pt-6">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterDueNow}
+                  onChange={(e) => setFilterDueNow(e.target.checked)}
+                  title={str.all.filters.dueNow.tooltip}
+                />
+                <span className="text-sm">{str.all.filters.dueNow.label}</span>
+              </label>
+            </div>
+
+            {/* Familiarity Filter */}
+            <div className="flex-grow space-y-1">
+              <label className="block text-xs text-gray-600">{str.all.filters.familiarity.label}</label>
+              <div className="flex gap-2 items-center">
+                <select
+                  className="flex-shrink-0 rounded-md border px-2 py-1 text-sm"
+                  value={filterFamiliarityOperator}
+                  onChange={(e) => setFilterFamiliarityOperator(e.target.value as "<=" | ">=")}
+                  title={str.all.filters.familiarity.tooltip}
+                >
+                  <option value="<=">{str.all.filters.familiarity.operators.lessThanOrEqual}</option>
+                  <option value=">=">{str.all.filters.familiarity.operators.greaterThanOrEqual}</option>
+                </select>
+                <input
+                  type="number"
+                  className="flex-grow rounded-md border px-2 py-1 text-sm"
+                  min="0"
+                  max="100"
+                  placeholder={str.all.filters.familiarity.valueLabel}
+                  value={filterFamiliarityValue}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFilterFamiliarityValue(val === "" ? "" : Math.max(0, Math.min(100, Number(val))));
+                  }}
+                  title={str.all.filters.familiarity.tooltip}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Tags Filter */}
+          <div className="space-y-1 pt-0">
+            <label className="block text-xs text-gray-600">{str.all.filters.tags.label}</label>
+            <details className="group">
+              <summary className="cursor-pointer rounded-md border px-2 py-1 text-sm bg-gray-50 hover:bg-gray-100">
+                {filterSelectedTagIds.length === 0
+                  ? str.all.filters.tags.placeholder
+                  : `${filterSelectedTagIds.length} selected`}
+              </summary>
+              <div className="mt-2 space-y-1 max-h-96 overflow-y-auto border rounded-md p-2 bg-white">
+                {availableTagsWithIds.length === 0 ? (
+                  <p className="text-xs text-gray-500 py-2">{str.all.filters.tags.placeholder}</p>
+                ) : (
+                  availableTagsWithIds.map((tag) => {
+                    const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+                    const isSelected = filterSelectedTagIds.includes(tag.id);
+                    return (
+                      <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFilterSelectedTagIds((prev) => [...prev, tag.id]);
+                            } else {
+                              setFilterSelectedTagIds((prev) => prev.filter((id) => id !== tag.id));
+                            }
+                          }}
+                        />
+                        <span>{tagDisplay}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </details>
+          </div>
+        </div>
+        )}
+      </div>
+
       {/* Batch tag editor — hidden for child role */}
 
       {!isChild && (
-        <div className="space-y-2">
-          {editorNotice ? <p className="text-sm text-blue-700">{editorNotice}</p> : null}
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={handleBatchTagToggle}
+              className="text-sm text-blue-600 underline"
+            >
+              {allEditorStr.title}
+            </button>
+          </div>
 
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-start">
-            {/* Batch Tag Assignment panel */}
-            <div className="flex-1 space-y-2 rounded-md border p-3">
+          {batchTagSectionOpen && (
+            <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium">{allEditorStr.title}</p>
                 <p className="text-sm text-gray-600">
                   {allEditorStr.selectedCount.replace("{count}", String(selectedWordIds.length))}
                 </p>
               </div>
+
+              {editorNotice ? <p className="text-sm text-blue-700">{editorNotice}</p> : null}
 
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div>
@@ -340,60 +587,191 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
 
                 <div>
                   <label className="block text-xs text-gray-500">{addTagStr.gradePlaceholder}</label>
-                  <input
-                    list="all-tag-grade-list"
-                    className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                    placeholder={addTagStr.gradePlaceholder}
-                    value={batchGrade ?? ""}
-                    onChange={(event) => {
-                      setBatchGrade(event.target.value || null);
-                      setBatchUnit(null);
-                      setBatchLesson(null);
-                    }}
-                    disabled={!batchTextbookId || editorSaving}
-                  />
-                  <datalist id="all-tag-grade-list">
-                    {gradeOptions.map((option) => (
-                      <option key={option} value={option} />
-                    ))}
-                  </datalist>
+                  {!batchGradeCreateMode ? (
+                    <select
+                      className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                      value={batchGrade ?? ""}
+                      onChange={(event) => {
+                        if (event.target.value === "__custom__") {
+                          setBatchGradeCreateMode(true);
+                          return;
+                        }
+                        setBatchGrade(event.target.value || null);
+                        setBatchUnit(null);
+                        setBatchLesson(null);
+                        setBatchUnitCreateMode(false);
+                        setBatchUnitInputValue("");
+                        setBatchLessonCreateMode(false);
+                        setBatchLessonInputValue("");
+                      }}
+                      disabled={!batchTextbookId || editorSaving}
+                    >
+                      <option value="">{addTagStr.gradePlaceholder}</option>
+                      {gradeOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                      <option value="__custom__">{addTagStr.customValueOption}</option>
+                    </select>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                        placeholder={addTagStr.gradePlaceholder}
+                        value={batchGradeInputValue}
+                        onChange={(event) => setBatchGradeInputValue(event.target.value)}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        onClick={() => {
+                          setBatchGrade(batchGradeInputValue || null);
+                          setBatchUnit(null);
+                          setBatchLesson(null);
+                          setBatchUnitCreateMode(false);
+                          setBatchUnitInputValue("");
+                          setBatchLessonCreateMode(false);
+                          setBatchLessonInputValue("");
+                          setBatchGradeCreateMode(false);
+                          setBatchGradeInputValue("");
+                        }}
+                        disabled={!batchGradeInputValue.trim() || editorSaving}
+                      >
+                        {addTagStr.createNewConfirm}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border-2 border-gray-400 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+                        onClick={() => {
+                          setBatchGradeCreateMode(false);
+                          setBatchGradeInputValue("");
+                        }}
+                        disabled={editorSaving}
+                      >
+                        {addTagStr.createNewCancel}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs text-gray-500">{addTagStr.unitPlaceholder}</label>
-                  <input
-                    list="all-tag-unit-list"
-                    className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                    placeholder={addTagStr.unitPlaceholder}
-                    value={batchUnit ?? ""}
-                    onChange={(event) => {
-                      setBatchUnit(event.target.value || null);
-                      setBatchLesson(null);
-                    }}
-                    disabled={!batchGrade || editorSaving}
-                  />
-                  <datalist id="all-tag-unit-list">
-                    {unitOptions.map((option) => (
-                      <option key={option} value={option} />
-                    ))}
-                  </datalist>
+                  {!batchUnitCreateMode ? (
+                    <select
+                      className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                      value={batchUnit ?? ""}
+                      onChange={(event) => {
+                        if (event.target.value === "__custom__") {
+                          setBatchUnitCreateMode(true);
+                          return;
+                        }
+                        setBatchUnit(event.target.value || null);
+                        setBatchLesson(null);
+                        setBatchLessonCreateMode(false);
+                        setBatchLessonInputValue("");
+                      }}
+                      disabled={!batchGrade || editorSaving}
+                    >
+                      <option value="">{addTagStr.unitPlaceholder}</option>
+                      {unitOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                      <option value="__custom__">{addTagStr.customValueOption}</option>
+                    </select>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                        placeholder={addTagStr.unitPlaceholder}
+                        value={batchUnitInputValue}
+                        onChange={(event) => setBatchUnitInputValue(event.target.value)}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        onClick={() => {
+                          setBatchUnit(batchUnitInputValue || null);
+                          setBatchLesson(null);
+                          setBatchLessonCreateMode(false);
+                          setBatchLessonInputValue("");
+                          setBatchUnitCreateMode(false);
+                          setBatchUnitInputValue("");
+                        }}
+                        disabled={!batchUnitInputValue.trim() || editorSaving}
+                      >
+                        {addTagStr.createNewConfirm}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border-2 border-gray-400 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+                        onClick={() => {
+                          setBatchUnitCreateMode(false);
+                          setBatchUnitInputValue("");
+                        }}
+                        disabled={editorSaving}
+                      >
+                        {addTagStr.createNewCancel}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs text-gray-500">{addTagStr.lessonPlaceholder}</label>
-                  <input
-                    list="all-tag-lesson-list"
-                    className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
-                    placeholder={addTagStr.lessonPlaceholder}
-                    value={batchLesson ?? ""}
-                    onChange={(event) => setBatchLesson(event.target.value || null)}
-                    disabled={!batchUnit || editorSaving}
-                  />
-                  <datalist id="all-tag-lesson-list">
-                    {lessonOptions.map((option) => (
-                      <option key={option} value={option} />
-                    ))}
-                  </datalist>
+                  {!batchLessonCreateMode ? (
+                    <select
+                      className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                      value={batchLesson ?? ""}
+                      onChange={(event) => {
+                        if (event.target.value === "__custom__") {
+                          setBatchLessonCreateMode(true);
+                          return;
+                        }
+                        setBatchLesson(event.target.value || null);
+                      }}
+                      disabled={!batchUnit || editorSaving}
+                    >
+                      <option value="">{addTagStr.lessonPlaceholder}</option>
+                      {lessonOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                      <option value="__custom__">{addTagStr.customValueOption}</option>
+                    </select>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="w-full rounded-md border px-2 py-1 text-sm disabled:opacity-50"
+                        placeholder={addTagStr.lessonPlaceholder}
+                        value={batchLessonInputValue}
+                        onChange={(event) => setBatchLessonInputValue(event.target.value)}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        onClick={() => {
+                          setBatchLesson(batchLessonInputValue || null);
+                          setBatchLessonCreateMode(false);
+                          setBatchLessonInputValue("");
+                        }}
+                        disabled={!batchLessonInputValue.trim() || editorSaving}
+                      >
+                        {addTagStr.createNewConfirm}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border-2 border-gray-400 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+                        onClick={() => {
+                          setBatchLessonCreateMode(false);
+                          setBatchLessonInputValue("");
+                        }}
+                        disabled={editorSaving}
+                      >
+                        {addTagStr.createNewCancel}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -402,37 +780,32 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                   type="button"
                   className="rounded-md border-2 border-emerald-600 bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-50"
                   onClick={() => void handleBatchSave()}
-                  disabled={editorSaving}
+                  disabled={editorSaving || tagClearing}
                   title={allEditorStr.tooltips.saveBatch}
                 >
                   {editorSaving ? allEditorStr.savingBatch : allEditorStr.saveBatch}
                 </button>
                 <button
                   type="button"
+                  className="rounded-md border-2 border-rose-500 bg-rose-50 px-4 py-2 font-medium text-rose-700 disabled:opacity-50"
+                  onClick={() => void handleBatchClearTags()}
+                  disabled={tagClearing || selectedWordIds.length === 0 || editorSaving}
+                  title={allEditorStr.tooltips.clearTags}
+                >
+                  {tagClearing ? allEditorStr.clearingTags : allEditorStr.clearTags}
+                </button>
+                <button
+                  type="button"
                   className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
                   onClick={() => setSelectedWordIds([])}
-                  disabled={selectedWordIds.length === 0 || editorSaving}
+                  disabled={selectedWordIds.length === 0 || editorSaving || tagClearing}
                   title={allEditorStr.tooltips.clearSelection}
                 >
                   {allEditorStr.clearSelection}
                 </button>
               </div>
             </div>
-
-            {/* Clear Tags panel — separate to avoid confusion with tag assignment */}
-            <div className="shrink-0 space-y-2 rounded-md border p-3 lg:w-40">
-              <p className="text-sm font-medium">{allEditorStr.clearTags}</p>
-              <button
-                type="button"
-                className="w-full rounded-md border-2 border-rose-500 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 disabled:opacity-50"
-                onClick={() => void handleBatchClearTags()}
-                disabled={tagClearing || selectedWordIds.length === 0 || editorSaving}
-                title={allEditorStr.tooltips.clearTags}
-              >
-                {tagClearing ? allEditorStr.clearingTags : allEditorStr.clearTags}
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -440,8 +813,20 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
         <p>{str.common.loading}</p>
       ) : words.length === 0 ? (
         <p>{str.all.noCharacters}</p>
+      ) : filteredWords.length === 0 && (filterDueNow || filterFamiliarityValue !== "" || filterSelectedTagIds.length > 0) ? (
+        <div className="flex items-center justify-between rounded-lg border p-4 bg-blue-50">
+          <p>{str.all.filters.noMatch}</p>
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            className="text-sm text-blue-600 underline font-medium"
+          >
+            {str.all.filters.clearButton}
+          </button>
+        </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="space-y-3">
+          <div className="overflow-x-auto rounded-lg border">
           <table className="min-w-full border-collapse text-sm">
             <thead>
               <tr className="border-b">
@@ -520,7 +905,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
               </tr>
             </thead>
             <tbody>
-              {sortedAllWords.map(({ word, reviewCount, testCount, familiarity }) => (
+              {paginatedWords.map(({ word, reviewCount, testCount, familiarity }) => (
                 <tr key={word.id} className="border-b align-top">
                   {!isChild && (
                     <td className="px-3 py-2">
@@ -580,6 +965,56 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
               ))}
             </tbody>
           </table>
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between rounded-lg border bg-gray-50 p-3">
+              <div className="text-sm text-gray-600">
+                {str.all.pagination.pageInfo
+                  .replace("{current}", String(validPage))
+                  .replace("{total}", String(totalPages))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded border px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={validPage === 1}
+                  title={str.all.pagination.firstButton}
+                >
+                  {str.all.pagination.firstButton}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+                  onClick={() => setCurrentPage(validPage - 1)}
+                  disabled={validPage === 1}
+                  title={str.all.pagination.previousButton}
+                >
+                  {str.all.pagination.previousButton}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+                  onClick={() => setCurrentPage(validPage + 1)}
+                  disabled={validPage === totalPages}
+                  title={str.all.pagination.nextButton}
+                >
+                  {str.all.pagination.nextButton}
+                </button>
+                <button
+                  type="button"
+                  className="rounded border px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={validPage === totalPages}
+                  title={str.all.pagination.lastButton}
+                >
+                  {str.all.pagination.lastButton}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>

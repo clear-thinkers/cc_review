@@ -240,17 +240,18 @@ export const wordsStrings = {
         excludedForTesting: "Filter table to targets excluded for testing.",
       },
       buttons: {
-        preload: "Preload targets with missing content",
-        preloading: "Preloading...",
+        preload: "Generate phrases and examples for all characters (AI)",
+        preloading: "Generating...",
         cancelPreload: "Cancel",
         cancellingPreload: "Cancelling...",
         refreshAllPinyin: "Regenerate missing pinyin",
         refreshingAllPinyin: "Regenerating...",
       },
       buttonTooltips: {
-        preload: "Generate content for all characters/pronunciations that are missing content",
+        preload: "Generate content for all characters/pronunciations that are missing content. Estimated wait time: ~2 min (20 words), ~5 min (50 words), ~12 min (100 words).",
         refreshAllPinyin: "Batch regenerate missing pinyin for all saved phrases and examples",
       },
+      preloadWarning: "⏱️ Estimated generation time: ~2 min for 20 characters, ~5 min for 50 characters, ~12 min for 100 characters.",
       table: {
         headers: {
           character: "Character",
@@ -333,6 +334,26 @@ export const wordsStrings = {
         noContentToRefresh: "No saved content to refresh pinyin.",
         pinyinRefreshFinished: "Pinyin refresh finished. Refreshed {refreshed}, failed {failed}.",
       },
+      filters: {
+        title: "Default Filters",
+        clearButton: "Clear Filters",
+        dueNow: {
+          label: "Due now",
+          tooltip: "Show only characters due for review now (from their words)",
+        },
+        tags: {
+          label: "Tags",
+          placeholder: "Select tags (multi-select)",
+          tooltip: "Filter by one or more tags (must have all selected)",
+        },
+      },
+      pagination: {
+        pageInfo: "Page {current} of {total}",
+        firstButton: "⏮",
+        previousButton: "◀",
+        nextButton: "▶",
+        lastButton: "⏭",
+      },
     },
 
     // ============= ALL CHARACTERS PAGE =============
@@ -346,6 +367,39 @@ export const wordsStrings = {
         avgFamiliarity: "Avg Familiarity",
       },
       noCharacters: "No characters yet.",
+      filters: {
+        title: "Default Filters",
+        clearButton: "Clear Filters",
+        noMatch: "No characters match the selected filters.",
+        dueNow: {
+          label: "Due now",
+          tooltip: "Show only characters due for review now",
+        },
+        familiarity: {
+          label: "Familiarity",
+          operatorLabel: "Operator",
+          valueLabel: "Value (0-100)",
+          operators: {
+            lessThanOrEqual: "≤",
+            greaterThanOrEqual: "≥",
+          },
+          tooltip: "Filter by familiarity level",
+        },
+        tags: {
+          label: "Tags",
+          placeholder: "Select tags (multi-select)",
+          tooltip: "Filter by one or more tags",
+          searchPlaceholder: "Search tags...",
+        },
+      },
+      pagination: {
+        itemsPerPage: "Items per page",
+        pageInfo: "Page {current} of {total}",
+        previousButton: "Previous",
+        nextButton: "Next",
+        firstButton: "First",
+        lastButton: "Last",
+      },
       table: {
         headers: {
           character: "Character",
@@ -625,17 +679,18 @@ export const wordsStrings = {
         excludedForTesting: "筛选表格以显示已排除测试的目标。",
       },
       buttons: {
-        preload: "预生成未保存内容",
-        preloading: "预生成中...",
+        preload: "AI一键生成词组例句",
+        preloading: "生成中...",
         cancelPreload: "取消",
         cancellingPreload: "取消中...",
         refreshAllPinyin: "批量生成拼音",
         refreshingAllPinyin: "生成中...",
       },
       buttonTooltips: {
-        preload: "为所有丢失内容的汉字/发音组合生成内容",
+        preload: "为所有丢失内容的汉字/发音组合生成内容。预计等待时间：约2分钟（20个汉字）、约5分钟（50个汉字）、约12分钟（100个汉字）。",
         refreshAllPinyin: "批量生成所有已保存短语和例句的缺失拼音",
-      },      table: {
+      },
+      preloadWarning: "⏱️ 预计生成时间：20个汉字需约2分钟、50个汉字需约5分钟、100个汉字需约12分钟。",      table: {
         headers: {
           character: "汉字",
           pronunciation: "读音",
@@ -718,6 +773,26 @@ export const wordsStrings = {
         noContentToRefresh: "无保存内容可生成拼音。",
         pinyinRefreshFinished: "拼音生成完成。已生成 {refreshed} 个，失败 {failed} 个。",
       },
+      filters: {
+        title: "默认筛选",
+        clearButton: "清除筛选",
+        dueNow: {
+          label: "当前待复习",
+          tooltip: "只显示当前待复习的汉字（仅根据其词汇）",
+        },
+        tags: {
+          label: "标签",
+          placeholder: "选择标签（多选）",
+          tooltip: "按一个或多个标签筛选（必须拥有所有选定标签）",
+        },
+      },
+      pagination: {
+        pageInfo: "第 {current} 页，共 {total} 页",
+        firstButton: "⏮",
+        previousButton: "◀",
+        nextButton: "▶",
+        lastButton: "⏭",
+      },
     },
 
     // ============= ALL CHARACTERS PAGE =============
@@ -731,6 +806,39 @@ export const wordsStrings = {
         avgFamiliarity: "平均熟悉度",
       },
       noCharacters: "暂无汉字。",
+      filters: {
+        title: "默认筛选",
+        clearButton: "清除筛选",
+        noMatch: "没有汉字匹配所选筛选条件。",
+        dueNow: {
+          label: "当前待复习",
+          tooltip: "只显示当前待复习的汉字",
+        },
+        familiarity: {
+          label: "熟悉度",
+          operatorLabel: "操作符",
+          valueLabel: "值 (0-100)",
+          operators: {
+            lessThanOrEqual: "≤",
+            greaterThanOrEqual: "≥",
+          },
+          tooltip: "按熟悉度等级筛选",
+        },
+        tags: {
+          label: "标签",
+          placeholder: "选择标签（多选）",
+          tooltip: "按一个或多个标签筛选",
+          searchPlaceholder: "搜索标签...",
+        },
+      },
+      pagination: {
+        itemsPerPage: "每页项目数",
+        pageInfo: "第 {current} 页，共 {total} 页",
+        previousButton: "上一页",
+        nextButton: "下一页",
+        firstButton: "首页",
+        lastButton: "末页",
+      },
       table: {
         headers: {
           character: "汉字",

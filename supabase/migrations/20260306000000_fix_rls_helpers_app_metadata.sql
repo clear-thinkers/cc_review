@@ -10,6 +10,7 @@
 create or replace function current_family_id()
 returns uuid
 language sql stable
+set search_path = 'public'
 as $$
   select nullif(
     current_setting('request.jwt.claims', true)::jsonb -> 'app_metadata' ->> 'family_id',
@@ -20,6 +21,7 @@ $$;
 create or replace function current_user_id()
 returns uuid
 language sql stable
+set search_path = 'public'
 as $$
   select nullif(
     current_setting('request.jwt.claims', true)::jsonb -> 'app_metadata' ->> 'user_id',
@@ -30,6 +32,7 @@ $$;
 create or replace function is_platform_admin()
 returns boolean
 language sql stable
+set search_path = 'public'
 as $$
   select coalesce(
     (current_setting('request.jwt.claims', true)::jsonb -> 'app_metadata' ->> 'is_platform_admin')::boolean,

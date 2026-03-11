@@ -18,6 +18,7 @@
 create or replace function current_jwt_role()
 returns text
 language sql stable
+set search_path = 'public'
 as $$
   select current_setting('request.jwt.claims', true)::jsonb -> 'app_metadata' ->> 'role'
 $$;

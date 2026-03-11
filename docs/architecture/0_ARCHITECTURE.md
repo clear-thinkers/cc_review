@@ -58,8 +58,8 @@ These rules govern all character ingestion via `/words/add`:
 
 These rules govern the inventory view at `/words/all`:
 
-1. The page renders all rows from the local `words` table.
-2. Summary cards are computed from in-memory `words` state:
+1. The page renders all rows from the local `words` table, subject to filtering and pagination.
+2. Summary cards are computed from in-memory `words` state (before filters applied):
    - `Total Characters`: `words.length`
    - `Times Reviewed`: sum of `reviewCount` with fallback to `repetitions`
    - `Times Tested`: sum of `testCount`
@@ -72,18 +72,24 @@ These rules govern the inventory view at `/words/all`:
 8. `Delete` removes the row from Supabase immediately (no confirmation dialog).
 9. `Reset` and `Delete` action buttons are hidden for child profiles. Only parents and platform admins can reset or delete words.
 10. The page does not call AI generation routes.
-10. The page does not generate or edit flashcard/admin content.
-11. The page does not deduplicate historical duplicate rows; it renders stored data as-is.
-12. The page does not paginate or virtualize large datasets.
-13. The page owns display/sorting behavior only; scheduler logic remains in `scheduler.ts`.
-14. A **Tags column** displays cascade tag pills (`TextbookName · Grade · Unit · Lesson`) for non-child roles. Multiple tags stack vertically; no tags = empty cell.
-15. A **filter bar** (Textbook / Grade / Unit / Lesson dropdowns) is shown for non-child roles when tag data exists. Cascade dropdowns reset lower levels on parent-level change.
-16. Filter logic is AND: a word is shown only if it matches all set filter levels.
-17. Filter state persists via URL search params (`?textbook=...&grade=...&unit=...&lesson=...`). A [Clear Filters] button resets all four.
+11. The page does not generate or edit flashcard/admin content.
+12. The page does not deduplicate historical duplicate rows; it renders stored data as-is.
+13. **Pagination**: The table shows 50 words per page. Navigation uses First, Previous, Next, Last buttons. Page info shows "Page X of Y". Pagination applies after all filters.
+14. The page owns display/sorting behavior only; scheduler logic remains in `scheduler.ts`.
+15. A **Tags column** displays cascade tag pills (`TextbookName · Grade · Unit · Lesson`) for non-child roles. Multiple tags stack vertically; no tags = empty cell.
+16. **Default Filter Bar** (always visible at top): Three filter sections for non-child roles:
+    - **Due Now**: Checkbox to show only characters with `nextReviewAt <= now` (or `0`/empty).
+    - **Familiarity**: Operator dropdown (`<=` or `>=`) and number input (0-100) to filter by `getMemorizationProbability(word)`.
+    - **Tags (Cascade)**: Multi-select dropdown showing all available cascade tags (format: `TextbookName · Grade · Unit · Lesson`). AND logic: word must have ALL selected tags to be shown.
+17. Default filters can be individually toggled on/off; a [Clear Filters] button resets all three.
 18. When filters are active and no words match, "No characters match the selected filters." is shown with a Clear Filters link.
-19. Non-child users can multi-select words in the table and batch-assign a single 4-level cascade tag (Textbook / Grade / Unit / Lesson) to all selected words.
-20. Batch tag assignment uses existing tag creation and assignment services; duplicate assignments are ignored by upsert behavior.
-21. Child users cannot access tag batch editing controls on `/words/all`.
+19. Default filter state does NOT persist via URL params (session-only).
+20. **Legacy Tag Filter Bar** (Textbook / Grade / Unit / Lesson dropdowns) is shown for non-child roles when tag data exists (after default filters). Cascade dropdowns reset lower levels on parent-level change. AND logic applies to this bar as well.
+21. Legacy filter logic is AND: a word is shown only if it matches all set filter levels.
+22. Legacy filter state persists via URL search params (`?textbook=...&grade=...&unit=...&lesson=...`). A [Clear Filters] button resets all four.
+23. Non-child users can multi-select words in the table and batch-assign a single 4-level cascade tag (Textbook / Grade / Unit / Lesson) to all selected words.
+24. Batch tag assignment uses existing tag creation and assignment services; duplicate assignments are ignored by upsert behavior.
+25. Child users cannot access tag batch editing controls on `/words/all`.
 
 ### Content Admin Curation Rules
 

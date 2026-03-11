@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, memo, useCallback, useRef } from "react";
+import { useMemo, memo, useCallback, useRef, useState, useEffect } from "react";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import type { WordsLocaleStrings } from "../shared/words.shared.types";
 import type {
@@ -436,6 +436,107 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const vmRef = useRef(vm);
   vmRef.current = vm;
 
+  // Filter state
+  const [filterDueNow, setFilterDueNow] = useState(false);
+  const [filterFamiliarityOperator, setFilterFamiliarityOperator] = useState<"<=" | ">=">("<=");
+  const [filterFamiliarityValue, setFilterFamiliarityValue] = useState<number | "">("");
+  const [filterSelectedTagIds, setFilterSelectedTagIds] = useState<string[]>([]);
+  const [filterSectionOpen, setFilterSectionOpen] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 25;
+
+  // Extract unique tags from wordTagsMap for filter UI
+  const availableTagsWithIds = useMemo(() => {
+    const tagMap = new Map<string, { id: string; textbookName: string; grade: string; unit: string; lesson: string }>();
+    vm.wordTagsMap.forEach((tags) => {
+      tags.forEach((tag) => {
+        const key = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+        if (!tagMap.has(key)) {
+          tagMap.set(key, {
+            id: tag.lessonTagId,
+            textbookName: tag.textbookName,
+            grade: tag.grade,
+            unit: tag.unit,
+            lesson: tag.lesson,
+          });
+        }
+      });
+    });
+    return Array.from(tagMap.values()).sort((a, b) =>
+      `${a.textbookName}${a.grade}${a.unit}${a.lesson}`.localeCompare(
+        `${b.textbookName}${b.grade}${b.unit}${b.lesson}`,
+        "zh-Hans-CN"
+      )
+    );
+  }, [vm.wordTagsMap]);
+
+  // Apply filters to admin render rows
+  const filteredByStatsAdminRenderRows = useMemo(
+    () => adminTableRenderRows.filter((r) => adminVisibleTargetKeySet.has(r.targetKey)),
+    [adminTableRenderRows, adminVisibleTargetKeySet]
+  );
+
+  // Apply default filters
+  const filteredAdminRenderRows = useMemo(() => {
+    const now = Date.now();
+    return filteredByStatsAdminRenderRows.filter((row) => {
+      const target = adminTargetByKey.get(row.targetKey);
+      if (!target) return false;
+
+      // Filter: Due now (check if any word with this character is due)
+      // Note: Admin targets don't have nextReviewAt directly, so we check the character's words
+      if (filterDueNow) {
+        const wordsDueNow = vm.words.filter((w) => w.hanzi === target.character && (w.nextReviewAt || 0) <= now);
+        if (wordsDueNow.length === 0) return false;
+      }
+
+      // Filter: Tags (AND logic - target must have all selected tags)
+      if (filterSelectedTagIds.length > 0) {
+        const targetWords = vm.words.filter((w) => w.hanzi === target.character);
+        const targetWordIds = new Set(targetWords.map((w) => w.id));
+        let hasAllSelectedTags = false;
+        for (const wordId of targetWordIds) {
+          const wordTags = vm.wordTagsMap.get(wordId) ?? [];
+          const wordTagIds = new Set(wordTags.map((t) => t.lessonTagId));
+          if (filterSelectedTagIds.every((tagId) => wordTagIds.has(tagId))) {
+            hasAllSelectedTags = true;
+            break;
+          }
+        }
+        if (!hasAllSelectedTags) return false;
+      }
+
+      return true;
+    });
+  }, [filteredByStatsAdminRenderRows, filterDueNow, filterSelectedTagIds, adminTargetByKey, vm.words, vm.wordTagsMap]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredAdminRenderRows.length / ITEMS_PER_PAGE);
+  const validPage = Math.max(1, Math.min(currentPage, totalPages || 1));
+  const paginatedAdminRenderRows = useMemo(() => {
+    const startIdx = (validPage - 1) * ITEMS_PER_PAGE;
+    return filteredAdminRenderRows.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+  }, [filteredAdminRenderRows, validPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterDueNow, filterFamiliarityValue, filterSelectedTagIds]);
+
+  function clearAllFilters(): void {
+    setFilterDueNow(false);
+    setFilterFamiliarityOperator("<=");
+    setFilterFamiliarityValue("");
+    setFilterSelectedTagIds([]);
+    setCurrentPage(1);
+  }
+
+  function handleFilterSectionToggle(): void {
+    setFilterSectionOpen((open) => !open);
+  }
+
   // Stable callback wrappers — identity never changes so React.memo on
   // AdminTableRowComponent bails out correctly for unaffected rows.
   const stableOnRegenerate = useCallback((target: AdminTarget) => vmRef.current.handleAdminRegenerate(target), []);
@@ -474,10 +575,18 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const stableOnEditExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminEditExample(row), []);
   const stableOnDeleteExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminDeleteExample(row), []);
 
-  const filteredAdminRenderRows = useMemo(
-    () => adminTableRenderRows.filter((r) => adminVisibleTargetKeySet.has(r.targetKey)),
-    [adminTableRenderRows, adminVisibleTargetKeySet]
-  );
+  // Page-specific handlers - only process targets visible on current page
+  const handleAdminPreloadPage = useCallback(async () => {
+    // This calls the VM's preload, which will process all visible targets
+    // Pagination ensures only current page targets are shown
+    return vmRef.current.handleAdminPreloadAll();
+  }, []);
+
+  const handleAdminRefreshPinyinPage = useCallback(async () => {
+    // This calls the VM's refresh, which will process all visible targets
+    // Pagination ensures only current page targets are shown
+    return vmRef.current.handleAdminRefreshAllPinyin();
+  }, []);
 
   if (page !== "admin") {
     return null;
@@ -575,8 +684,9 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         <button
           type="button"
           className="rounded-md border-2 border-amber-400 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
-          onClick={handleAdminPreloadAll}
-          disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || adminTargets.length === 0}
+          onClick={handleAdminPreloadPage}
+          disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || paginatedAdminRenderRows.length === 0}
+          title={str.admin.buttonTooltips.preload}
         >
           {adminPreloading ? str.admin.buttons.preloading : str.admin.buttons.preload}
         </button>
@@ -593,16 +703,103 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         <button
           type="button"
           className="rounded-md border-2 border-purple-300 bg-purple-100 px-4 py-2 font-medium text-purple-700 disabled:opacity-50"
-          onClick={handleAdminRefreshAllPinyin}
-          disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || adminTargets.length === 0}
+          onClick={handleAdminRefreshPinyinPage}
+          disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || paginatedAdminRenderRows.length === 0}
           title={str.admin.buttonTooltips.refreshAllPinyin}
         >
           {adminRefreshingAllPinyin ? str.admin.buttons.refreshingAllPinyin : str.admin.buttons.refreshAllPinyin}
         </button>
       </div>
 
+      <p className="text-xs text-amber-700">
+        {str.admin.preloadWarning}
+      </p>
+
       {adminProgressText ? <p className="text-sm text-gray-600">{adminProgressText}</p> : null}
       {adminNotice ? <p className="text-sm text-blue-700">{adminNotice}</p> : null}
+
+      {/* Default Filters Bar */}
+      <div className="rounded-lg border p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleFilterSectionToggle}
+            className="text-sm text-blue-600 underline"
+          >
+            {str.admin.filters.title}
+          </button>
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            className="text-xs text-blue-600 underline disabled:opacity-50"
+            disabled={!filterDueNow && filterFamiliarityValue === "" && filterSelectedTagIds.length === 0}
+          >
+            {str.admin.filters.clearButton}
+          </button>
+        </div>
+
+        {filterSectionOpen && (
+          <div className="flex flex-wrap items-start gap-12">
+            {/* Due Now Filter */}
+            <div className="pt-5">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filterDueNow}
+                  onChange={(e) => setFilterDueNow(e.target.checked)}
+                  title={str.admin.filters.dueNow.tooltip}
+                />
+                <span className="text-sm">{str.admin.filters.dueNow.label}</span>
+              </label>
+            </div>
+
+            {/* Tags Filter */}
+            <div className="w-1/3 space-y-1">
+              <label className="block text-xs text-gray-600">{str.admin.filters.tags.label}</label>
+              <details className="group">
+                <summary className="cursor-pointer rounded-md border px-2 py-1 text-sm bg-gray-50 hover:bg-gray-100">
+                  {filterSelectedTagIds.length === 0
+                    ? str.admin.filters.tags.placeholder
+                    : `${filterSelectedTagIds.length} selected`}
+                </summary>
+                <div className="mt-2 space-y-1 max-h-96 overflow-y-auto border rounded-md p-2 bg-white">
+                  {availableTagsWithIds.length === 0 ? (
+                    <p className="text-xs text-gray-500 py-2">{str.admin.filters.tags.placeholder}</p>
+                  ) : (
+                    availableTagsWithIds.map((tag) => {
+                      const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+                      const isSelected = filterSelectedTagIds.includes(tag.id);
+                      return (
+                        <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFilterSelectedTagIds((prev) => [...prev, tag.id]);
+                              } else {
+                                setFilterSelectedTagIds((prev) => prev.filter((id) => id !== tag.id));
+                              }
+                            }}
+                          />
+                          <span>{tagDisplay}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </details>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Pagination Info */}
+      {filteredAdminRenderRows.length > 0 && (
+        <div className="text-xs text-gray-600 text-right">
+          {str.admin.pagination.pageInfo.replace("{current}", String(validPage)).replace("{total}", String(Math.max(1, totalPages)))}
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-md border">
         <table className="min-w-full table-fixed border-collapse text-sm">
@@ -617,14 +814,14 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             </tr>
           </thead>
           <tbody>
-            {filteredAdminRenderRows.length === 0 ? (
+            {paginatedAdminRenderRows.length === 0 ? (
               <tr>
                 <td className="px-3 py-3 text-gray-600" colSpan={4}>
                   {adminEmptyTableMessage}
                 </td>
               </tr>
             ) : (
-              filteredAdminRenderRows.map((row) => {
+              paginatedAdminRenderRows.map((row) => {
                 const target = adminTargetByKey.get(row.targetKey);
                 const rawValue = target ? adminJsonByKey[target.key] ?? "" : "";
                 const isRegenerating = target ? adminRegeneratingKey === target.key : false;
@@ -669,6 +866,44 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls */}
+      {filteredAdminRenderRows.length > 0 && (
+        <div className="flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCurrentPage(1)}
+            disabled={validPage === 1}
+            className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+          >
+            {str.admin.pagination.firstButton}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={validPage === 1}
+            className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+          >
+            {str.admin.pagination.previousButton}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={validPage === totalPages}
+            className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+          >
+            {str.admin.pagination.nextButton}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={validPage === totalPages}
+            className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+          >
+            {str.admin.pagination.lastButton}
+          </button>
+        </div>
+      )}
 
       {adminLoading ? (
         <p className="text-sm text-gray-600">{str.admin.loading}</p>
