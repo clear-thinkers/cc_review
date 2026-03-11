@@ -23,6 +23,8 @@ export type DictionaryDetailEntry = {
   char: string;
   pronunciations?: DictionaryPronunciationEntry[];
   word?: DictionaryPronunciationEntry[];
+  // Trimmed format: simple pinyin array
+  pinyin?: string[];
 };
 
 export type XinhuaDataset = {
@@ -143,7 +145,35 @@ async function fetchDatasetArray<T>(path: string, label: string, fetcher: Fetche
 }
 
 function extractDetailPronunciations(detailEntry: DictionaryDetailEntry | undefined): XinhuaFlashcardPronunciation[] {
-  const words = Array.isArray(detailEntry?.pronunciations) ? detailEntry.pronunciations : detailEntry?.word;
+  if (!detailEntry) {
+    return [];
+  }
+
+  // Handle trimmed format: direct pinyin array
+  if (Array.isArray(detailEntry.pinyin) && detailEntry.pinyin.length > 0) {
+    const seen = new Set<string>();
+    const result: XinhuaFlashcardPronunciation[] = [];
+
+    for (const p of detailEntry.pinyin) {
+      const pinyin = normalizeText(p);
+      if (!pinyin || seen.has(pinyin)) {
+        continue;
+      }
+
+      seen.add(pinyin);
+      result.push({
+        pinyin,
+        explanations: [],
+      });
+    }
+
+    if (result.length > 0) return result;
+  }
+
+  // Handle original format: pronunciations or word arrays
+  const words = Array.isArray(detailEntry.pronunciations)
+    ? detailEntry.pronunciations
+    : detailEntry.word;
   if (!Array.isArray(words) || words.length === 0) {
     return [];
   }
