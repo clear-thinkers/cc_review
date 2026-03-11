@@ -3,6 +3,7 @@
 import type { Word } from "@/lib/types";
 import type { FlashcardLlmResponse } from "@/lib/flashcardLlm";
 import type { WordsLocaleStrings } from "../../shared/words.shared.types";
+import { getAlignedPinyinTokens, isHanziCharacter } from "./flashcard.ruby";
 import "./flashcard.styles.css";
 
 export interface FlashcardCardProps {
@@ -13,21 +14,6 @@ export interface FlashcardCardProps {
   showPinyin?: boolean;
 }
 
-const HANZI_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
-const PINYIN_CLEAN_REGEX = /[^\p{L}\p{M}0-9]/gu;
-
-function isHanziCharacter(character: string): boolean {
-  return HANZI_REGEX.test(character);
-}
-
-function splitPinyinTokens(pinyin: string): string[] {
-  return pinyin
-    .trim()
-    .split(/\s+/)
-    .map((token) => token.replace(PINYIN_CLEAN_REGEX, ""))
-    .filter(Boolean);
-}
-
 function renderRubyLine(
   text: string,
   pinyin: string,
@@ -35,7 +21,7 @@ function renderRubyLine(
   showPinyin: boolean = false
 ) {
   const characters = Array.from(text || "");
-  const pinyinTokens = splitPinyinTokens(pinyin || "");
+  const pinyinTokens = getAlignedPinyinTokens(text || "", pinyin || "");
   let pinyinIndex = 0;
 
   return (
@@ -50,16 +36,10 @@ function renderRubyLine(
             key={`${variant}-${index}-${character}`}
             className={`flashcard-ruby-unit ${isHanzi ? "flashcard-ruby-unit-hanzi" : "flashcard-ruby-unit-plain"}`}
           >
-            {showPinyin ? (
-              pinyinForCharacter ? (
-                <span className={`flashcard-ruby-pinyin flashcard-ruby-pinyin-${variant}`}>
-                  {pinyinForCharacter.toLowerCase()}
-                </span>
-              ) : (
-                <span className="flashcard-ruby-pinyin-placeholder" aria-hidden="true">
-                  ·
-                </span>
-              )
+            {showPinyin && pinyinForCharacter ? (
+              <span className={`flashcard-ruby-pinyin flashcard-ruby-pinyin-${variant}`}>
+                {pinyinForCharacter.toLowerCase()}
+              </span>
             ) : null}
             <span className={`flashcard-ruby-text flashcard-ruby-text-${variant}`}>
               {character}

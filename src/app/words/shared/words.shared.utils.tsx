@@ -422,7 +422,7 @@ export function tokenizePinyinSyllables(pinyin: string): string[] {
   return normalized.match(PINYIN_SYLLABLE_RE) ?? [];
 }
 
-function alignPinyinPartsForCount(partCount: number, pinyin: string): string[] {
+export function alignPinyinPartsForCount(partCount: number, pinyin: string): string[] {
   const normalized = pinyin.trim();
   if (!normalized) {
     return Array(partCount).fill("");

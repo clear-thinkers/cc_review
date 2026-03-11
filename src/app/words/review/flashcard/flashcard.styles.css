@@ -101,12 +101,6 @@
   white-space: nowrap;
 }
 
-.flashcard-ruby-pinyin-placeholder {
-  visibility: hidden;
-  line-height: 1.2;
-  font-size: inherit;
-}
-
 .flashcard-ruby-pinyin-character {
   font-size: 12px;
 }
