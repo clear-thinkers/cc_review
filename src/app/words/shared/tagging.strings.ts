@@ -29,8 +29,27 @@ export const taggingStrings = {
 
     // ─── Lessons column (All Characters / All Words table) ───────────────────
     column: {
-      header: "Lessons",
+      header: "Tags",
       noTags: "",
+    },
+
+    // ─── All Characters page batch tag editor ───────────────────────────────
+    allEditor: {
+      title: "Batch Tag Assignment",
+      selectedCount: "Selected: {count}",
+      selectAllVisible: "Select all visible",
+      clearSelection: "Clear selection",
+      saveBatch: "Save tags",
+      savingBatch: "Saving...",
+      noSelection: "Select at least one word.",
+      incompleteTagError: "Please complete Textbook, Grade, Unit, and Lesson.",
+      saveSuccess: "Saved tags for {count} words.",
+      saveError: "Failed to save tags. Please try again.",
+      tooltips: {
+        selectAllVisible: "Select all rows currently visible in the table.",
+        saveBatch: "Save the selected tag to all selected words.",
+        clearSelection: "Clear all currently selected rows.",
+      },
     },
 
     // ─── Filter bar (All Characters + Content Admin) ─────────────────────────
@@ -71,8 +90,27 @@ export const taggingStrings = {
 
     // ─── Lessons column ──────────────────────────────────────────────────────
     column: {
-      header: "课程",
+      header: "标签",
       noTags: "",
+    },
+
+    // ─── 全部汉字页面批量标签编辑 ─────────────────────────────────────────────
+    allEditor: {
+      title: "批量加标签",
+      selectedCount: "已选择：{count}",
+      selectAllVisible: "全选当前列表",
+      clearSelection: "清除选择",
+      saveBatch: "保存标签",
+      savingBatch: "保存中...",
+      noSelection: "请至少选择一个汉字。",
+      incompleteTagError: "请完整填写教材、年级、单元和课。",
+      saveSuccess: "已为 {count} 个汉字保存标签。",
+      saveError: "保存标签失败，请重试。",
+      tooltips: {
+        selectAllVisible: "选择当前表格中可见的所有行。",
+        saveBatch: "将所选标签保存到所有已选择的汉字。",
+        clearSelection: "清除当前所有已选择行。",
+      },
     },
 
     // ─── Filter bar ──────────────────────────────────────────────────────────

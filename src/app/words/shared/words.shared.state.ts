@@ -2861,6 +2861,7 @@ const gradeLabels = getGradeLabels(str);
     toggleAllWordsSort,
     getSortIndicator,
     sortedAllWords,
+    refreshAllData: refreshAll,
     resetWord,
     removeWord,
     addTagSectionOpen,

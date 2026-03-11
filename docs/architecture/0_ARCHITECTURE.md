@@ -76,11 +76,14 @@ These rules govern the inventory view at `/words/all`:
 11. The page does not deduplicate historical duplicate rows; it renders stored data as-is.
 12. The page does not paginate or virtualize large datasets.
 13. The page owns display/sorting behavior only; scheduler logic remains in `scheduler.ts`.
-14. A **Lessons column** displays cascade tag pills (`TextbookName · Grade · Unit · Lesson`) for non-child roles. Multiple tags stack vertically; no tags = empty cell.
+14. A **Tags column** displays cascade tag pills (`TextbookName · Grade · Unit · Lesson`) for non-child roles. Multiple tags stack vertically; no tags = empty cell.
 15. A **filter bar** (Textbook / Grade / Unit / Lesson dropdowns) is shown for non-child roles when tag data exists. Cascade dropdowns reset lower levels on parent-level change.
 16. Filter logic is AND: a word is shown only if it matches all set filter levels.
 17. Filter state persists via URL search params (`?textbook=...&grade=...&unit=...&lesson=...`). A [Clear Filters] button resets all four.
 18. When filters are active and no words match, "No characters match the selected filters." is shown with a Clear Filters link.
+19. Non-child users can multi-select words in the table and batch-assign a single 4-level cascade tag (Textbook / Grade / Unit / Lesson) to all selected words.
+20. Batch tag assignment uses existing tag creation and assignment services; duplicate assignments are ignored by upsert behavior.
+21. Child users cannot access tag batch editing controls on `/words/all`.
 
 ### Content Admin Curation Rules
 

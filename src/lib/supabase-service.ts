@@ -38,6 +38,7 @@ export type FlashcardContentEntry = {
 interface SessionMetadata {
   familyId: string;
   userId: string;
+  authUserId: string;
 }
 
 async function getSessionMetadata(): Promise<SessionMetadata> {
@@ -49,7 +50,11 @@ async function getSessionMetadata(): Promise<SessionMetadata> {
   if (!meta?.family_id || !meta?.user_id) {
     throw new Error("JWT missing family_id or user_id in app_metadata");
   }
-  return { familyId: meta.family_id as string, userId: meta.user_id as string };
+  return {
+    familyId: meta.family_id as string,
+    userId: meta.user_id as string,
+    authUserId: session.user.id,
+  };
 }
 
 // ─── Internal: Word row converters ──────────────────────────────────────────
@@ -732,9 +737,9 @@ interface SupabaseLessonTagRow {
   id: string;
   textbook_id: string;
   family_id: string;
-  grade: string;
-  unit: string;
-  lesson: string;
+  slot_1_value: string | null;
+  slot_2_value: string | null;
+  slot_3_value: string | null;
   created_at: string;
 }
 
@@ -742,9 +747,9 @@ function toLessonTag(row: SupabaseLessonTagRow): LessonTag {
   return {
     id: row.id,
     textbookId: row.textbook_id,
-    grade: row.grade,
-    unit: row.unit,
-    lesson: row.lesson,
+    grade: row.slot_1_value ?? "",
+    unit: row.slot_2_value ?? "",
+    lesson: row.slot_3_value ?? "",
     createdAt: new Date(row.created_at).getTime(),
   };
 }
@@ -767,7 +772,7 @@ export async function listTextbooks(): Promise<Textbook[]> {
  * belongs to this family (case-insensitive dedup).
  */
 export async function createTextbook(name: string): Promise<Textbook> {
-  const { familyId, userId } = await getSessionMetadata();
+  const { familyId, authUserId } = await getSessionMetadata();
   const trimmedName = name.trim();
 
   // Check for existing family textbook with the same name (case-insensitive)
@@ -782,7 +787,7 @@ export async function createTextbook(name: string): Promise<Textbook> {
 
   const { data: created, error: writeErr } = await supabase
     .from("textbooks")
-    .insert({ name: trimmedName, is_shared: false, family_id: familyId, created_by: userId })
+    .insert({ name: trimmedName, is_shared: false, family_id: familyId, created_by: authUserId })
     .select("*")
     .single();
   if (writeErr) throw new Error(`createTextbook insert: ${writeErr.message}`);
@@ -802,11 +807,11 @@ export async function listLessonTags(
     .from("lesson_tags")
     .select("*")
     .eq("textbook_id", textbookId)
-    .order("grade")
-    .order("unit")
-    .order("lesson");
-  if (grade !== undefined) query = query.eq("grade", grade);
-  if (unit !== undefined) query = query.eq("unit", unit);
+    .order("slot_1_value")
+    .order("slot_2_value")
+    .order("slot_3_value");
+  if (grade !== undefined) query = query.eq("slot_1_value", grade);
+  if (unit !== undefined) query = query.eq("slot_2_value", unit);
   const { data, error } = await query;
   if (error) throw new Error(`listLessonTags: ${error.message}`);
   return (data as SupabaseLessonTagRow[]).map(toLessonTag);
@@ -832,16 +837,16 @@ export async function createLessonTagIfNew(
     .from("lesson_tags")
     .select("*")
     .eq("textbook_id", textbookId)
-    .eq("grade", normGrade)
-    .eq("unit", normUnit)
-    .eq("lesson", normLesson)
+    .eq("slot_1_value", normGrade)
+    .eq("slot_2_value", normUnit)
+    .eq("slot_3_value", normLesson)
     .maybeSingle();
   if (readErr) throw new Error(`createLessonTagIfNew read: ${readErr.message}`);
   if (existing) return toLessonTag(existing as SupabaseLessonTagRow);
 
   const { data: created, error: writeErr } = await supabase
     .from("lesson_tags")
-    .insert({ textbook_id: textbookId, family_id: familyId, grade: normGrade, unit: normUnit, lesson: normLesson })
+    .insert({ textbook_id: textbookId, family_id: familyId, slot_1_value: normGrade, slot_2_value: normUnit, slot_3_value: normLesson })
     .select("*")
     .single();
   if (writeErr) throw new Error(`createLessonTagIfNew insert: ${writeErr.message}`);
@@ -880,7 +885,7 @@ export async function getWordLessonTagsForFamily(): Promise<WordLessonTagsMap> {
     .from("word_lesson_tags")
     .select(
       `word_id,
-       lesson_tags ( id, textbook_id, grade, unit, lesson, created_at,
+       lesson_tags ( id, textbook_id, slot_1_value, slot_2_value, slot_3_value, family_id, created_at,
          textbooks ( id, name, is_shared, family_id, created_by, created_at )
        )`
     )
@@ -899,9 +904,9 @@ export async function getWordLessonTagsForFamily(): Promise<WordLessonTagsMap> {
       lessonTagId: lt.id,
       textbookId: lt.textbook_id,
       textbookName: tb?.name ?? "",
-      grade: lt.grade,
-      unit: lt.unit,
-      lesson: lt.lesson,
+      grade: lt.slot_1_value ?? "",
+      unit: lt.slot_2_value ?? "",
+      lesson: lt.slot_3_value ?? "",
     };
     const existing = map.get(row.word_id) ?? [];
     existing.push(resolved);
