@@ -401,6 +401,12 @@ export const wordsStrings = {
         lastButton: "Last",
       },
       table: {
+        summary: {
+          filteredLabel: "Filtered",
+          noFiltersApplied: "No filters applied",
+          selectedLabel: "Selected",
+          separator: " | ",
+        },
         headers: {
           character: "Character",
           dateAdded: "Date Added",
@@ -840,6 +846,12 @@ export const wordsStrings = {
         lastButton: "末页",
       },
       table: {
+        summary: {
+          filteredLabel: "筛选后",
+          noFiltersApplied: "未应用筛选",
+          selectedLabel: "已选择",
+          separator: " | ",
+        },
         headers: {
           character: "汉字",
           dateAdded: "添加日期",
@@ -890,4 +902,3 @@ export const wordsStrings = {
     },
   },
 };
-

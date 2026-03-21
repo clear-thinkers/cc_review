@@ -36,6 +36,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [selectedWordIds, setSelectedWordIds] = useState<string[]>([]);
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
+  const [editorAction, setEditorAction] = useState<"add" | "update" | null>(null);
   const [tagClearing, setTagClearing] = useState(false);
   const [batchTagSectionOpen, setBatchTagSectionOpen] = useState(false);
 
@@ -166,6 +167,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   }, [isChild]);
 
   const paginatedWordIds = useMemo(() => paginatedWords.map(({ word }) => word.id), [paginatedWords]);
+  const hasActiveFilters =
+    filterDueNow || filterFamiliarityValue !== "" || filterSelectedTagIds.length > 0;
 
   useEffect(() => {
     if (!batchTextbookId) {
@@ -291,14 +294,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
   }
 
-  async function handleBatchSave(): Promise<void> {
-    setEditorNotice(null);
-
-    if (selectedWordIds.length === 0) {
-      setEditorNotice(allEditorStr.noSelection);
-      return;
-    }
-
+  async function resolveBatchLessonTag(): Promise<LessonTag | null> {
     let resolvedTextbookId = batchTextbookId;
     if (!resolvedTextbookId && batchTextbookName.trim()) {
       try {
@@ -312,25 +308,40 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
 
     if (!resolvedTextbookId || !batchGrade || !batchUnit || !batchLesson) {
       setEditorNotice(allEditorStr.incompleteTagError);
+      return null;
+    }
+
+    const selectedTextbook = textbooks.find((tb) => tb.id === resolvedTextbookId);
+    if (selectedTextbook?.isShared) {
+      // Shared textbook lesson tags can conflict across families under RLS.
+      // Resolve to a family-owned textbook with the same name for safe writes.
+      const familyOwned = await createTextbook(selectedTextbook.name);
+      resolvedTextbookId = familyOwned.id;
+      setBatchTextbookId(familyOwned.id);
+      setBatchTextbookName(familyOwned.name);
+      setTextbooks((previous) =>
+        previous.some((tb) => tb.id === familyOwned.id) ? previous : [...previous, familyOwned]
+      );
+    }
+
+    return createLessonTagIfNew(resolvedTextbookId, batchGrade, batchUnit, batchLesson);
+  }
+
+  async function handleBatchSave(): Promise<void> {
+    setEditorNotice(null);
+
+    if (selectedWordIds.length === 0) {
+      setEditorNotice(allEditorStr.noSelection);
       return;
     }
 
     setEditorSaving(true);
+    setEditorAction("add");
     try {
-      const selectedTextbook = textbooks.find((tb) => tb.id === resolvedTextbookId);
-      if (selectedTextbook?.isShared) {
-        // Shared textbook lesson tags can conflict across families under RLS.
-        // Resolve to a family-owned textbook with the same name for safe writes.
-        const familyOwned = await createTextbook(selectedTextbook.name);
-        resolvedTextbookId = familyOwned.id;
-        setBatchTextbookId(familyOwned.id);
-        setBatchTextbookName(familyOwned.name);
-        setTextbooks((previous) =>
-          previous.some((tb) => tb.id === familyOwned.id) ? previous : [...previous, familyOwned]
-        );
+      const lessonTag = await resolveBatchLessonTag();
+      if (!lessonTag) {
+        return;
       }
-
-      const lessonTag = await createLessonTagIfNew(resolvedTextbookId, batchGrade, batchUnit, batchLesson);
       await assignWordLessonTags(selectedWordIds, lessonTag.id);
       await refreshAllData();
       setEditorNotice(allEditorStr.saveSuccess.replace("{count}", String(selectedWordIds.length)));
@@ -339,6 +350,36 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       setEditorNotice(allEditorStr.saveError);
     } finally {
       setEditorSaving(false);
+      setEditorAction(null);
+    }
+  }
+
+  async function handleBatchUpdateTags(): Promise<void> {
+    setEditorNotice(null);
+
+    if (selectedWordIds.length === 0) {
+      setEditorNotice(allEditorStr.noSelection);
+      return;
+    }
+
+    setEditorSaving(true);
+    setEditorAction("update");
+    try {
+      const lessonTag = await resolveBatchLessonTag();
+      if (!lessonTag) {
+        return;
+      }
+
+      await clearWordLessonTags(selectedWordIds);
+      await assignWordLessonTags(selectedWordIds, lessonTag.id);
+      await refreshAllData();
+      setEditorNotice(allEditorStr.updateTagsSuccess.replace("{count}", String(selectedWordIds.length)));
+    } catch (error) {
+      console.error("[all-tags] Batch update failed", error);
+      setEditorNotice(allEditorStr.updateTagsError);
+    } finally {
+      setEditorSaving(false);
+      setEditorAction(null);
     }
   }
 
@@ -783,7 +824,16 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                   disabled={editorSaving || tagClearing}
                   title={allEditorStr.tooltips.saveBatch}
                 >
-                  {editorSaving ? allEditorStr.savingBatch : allEditorStr.saveBatch}
+                  {editorSaving && editorAction === "add" ? allEditorStr.savingBatch : allEditorStr.saveBatch}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border-2 border-sky-300 bg-sky-50 px-4 py-2 font-medium text-sky-800 disabled:opacity-50"
+                  onClick={() => void handleBatchUpdateTags()}
+                  disabled={selectedWordIds.length === 0 || editorSaving || tagClearing}
+                  title={allEditorStr.tooltips.updateTags}
+                >
+                  {editorSaving && editorAction === "update" ? allEditorStr.updatingTags : allEditorStr.updateTags}
                 </button>
                 <button
                   type="button"
@@ -826,6 +876,21 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
         </div>
       ) : (
         <div className="space-y-3">
+          {!isChild ? (
+            <p className="text-sm text-gray-600">
+              {hasActiveFilters ? (
+                <>
+                  {str.all.table.summary.filteredLabel}{" "}
+                  <span className="font-semibold text-blue-700">{filteredWords.length}</span>
+                </>
+              ) : (
+                str.all.table.summary.noFiltersApplied
+              )}
+              {str.all.table.summary.separator}
+              {str.all.table.summary.selectedLabel}{" "}
+              <span className="font-semibold text-blue-700">{selectedWordIds.length}</span>
+            </p>
+          ) : null}
           <div className="overflow-x-auto rounded-lg border">
           <table className="min-w-full border-collapse text-sm">
             <thead>
