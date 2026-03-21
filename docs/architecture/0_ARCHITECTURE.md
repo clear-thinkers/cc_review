@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-03-06_ (Login & auth rules updated to two-layer Supabase model; remaining IndexedDB references removed)
+_Last updated: 2026-03-21_ (Content Admin row deletion and hidden-target persistence documented)
 
 ---
 
@@ -53,6 +53,7 @@ These rules govern all character ingestion via `/words/add`:
 10. If the section is collapsed or untouched, no tag is applied and no validation is performed.
 11. Tag assignment is performed after words are written; skipped (existing) words do not receive a tag assignment.
 12. Children cannot access `/words/add` — the route is blocked; tag UI is not visible to child profiles.
+13. Submitting Hanzi to `/words/add` also clears any matching `hidden_admin_targets` rows for that family, restoring previously deleted Content Admin rows for those characters.
 
 ### All Characters Inventory Rules
 
@@ -80,7 +81,7 @@ These rules govern the inventory view at `/words/all`:
 16. **Default Filter Bar** (always visible at top): Three filter sections for non-child roles:
     - **Due Now**: Checkbox to show only characters with `nextReviewAt <= now` (or `0`/empty).
     - **Familiarity**: Operator dropdown (`<=` or `>=`) and number input (0-100) to filter by `getMemorizationProbability(word)`.
-    - **Tags (Cascade)**: Multi-select dropdown showing all available cascade tags (format: `TextbookName · Grade · Unit · Lesson`). AND logic: word must have ALL selected tags to be shown.
+    - **Tags (Cascade)**: Multi-select dropdown showing all available cascade tags (format: `TextbookName · Grade · Unit · Lesson`). OR logic: word must have ANY selected tag to be shown.
 17. Default filters can be individually toggled on/off; a [Clear Filters] button resets all three.
 18. When filters are active and no words match, "No characters match the selected filters." is shown with a Clear Filters link.
 19. Default filter state does NOT persist via URL params (session-only).
@@ -110,9 +111,17 @@ These rules govern content curation at `/words/admin`:
 9. Preload generation skips targets that already have persisted content and continues non-fatally on per-target failures.
 10. Characters with no dictionary pronunciation are skipped with notice; this is not a fatal load error.
 11. Preload batch execution uses a fixed concurrency of 3 (`Promise.allSettled`). Batch size is capped at 3 to avoid saturating the AI provider with concurrent requests from a single session. No per-character retry — a failed character is counted and skipped; the loop continues. The completion notice reports total succeeded and total failed counts. Batch size must not be increased without validating provider rate limits.
-12. A **tag filter bar** (Textbook / Grade / Unit / Lesson) is displayed above the character list when tag data exists. Same AND logic and cascade behavior as `/words/all`.
+12. A **tag filter bar** (Textbook / Grade / Unit / Lesson) is displayed above the character list when tag data exists. Same cascade behavior as `/words/all`; Content Admin tag matching uses OR logic within a target's associated word tags.
 13. Characters with no tags are hidden when any filter is active.
 14. No Lessons column is added to the admin table (filter-only in this phase).
+15. Target-level destructive actions are split:
+   - `C/清` clears saved `flashcard_contents` only and keeps the row visible.
+   - `D/删` deletes the entire Content Admin row for that `character|pronunciation` pair.
+16. The `D/删` row-delete action requires a confirmation dialog before mutation.
+17. The app must not allow deleting the last remaining Content Admin pronunciation row for a character. If attempted, a blocking popup instructs the user to delete the character from `/words/all` instead.
+18. Deleted Content Admin rows are persisted in `hidden_admin_targets` and excluded from future admin target derivation for that family.
+19. Re-adding a Hanzi on `/words/add` restores any hidden Content Admin targets for that Hanzi across all pronunciations in the current family.
+20. Content Admin pagination must not split a character across pages. If a page boundary would cut through a character's rows, the entire character block stays together on the earlier page, even when that page exceeds the nominal row count.
 
 ### Due Review Queue Rules
 
@@ -349,6 +358,17 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `examples` | jsonb | Array of Example objects: `{ zh, pinyin, en, include_in_fill_test }` |
 | `updated_at` | timestamptz | Server timestamp |
 | **Primary key** | | `(id, family_id)` — composite key enforces scoped uniqueness |
+
+**`hidden_admin_targets` table** — family-scoped exclusions for Content Admin rows
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `character` | text | Hanzi whose admin row is hidden |
+| `pronunciation` | text | Pinyin variant hidden for this family |
+| `created_at` | timestamptz | Server timestamp |
+| **Unique constraint** | | `(family_id, character, pronunciation)` |
 
 **`quiz_sessions` table** — completed fill-test session records, immutable audit
 
@@ -617,4 +637,3 @@ All code must follow the conventions in `0_BUILD_CONVENTIONS.md`:
   - Each type file has a companion `*.types.test.ts` for validation
 - **Component file structure:** Feature-scoped route + page + shared-contract structure
 - **Test coverage required:** All new features must include unit and integration tests
-

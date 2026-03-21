@@ -23,6 +23,9 @@ import {
   assignWordLessonTags,
   createTextbook,
   getWordLessonTagsForFamily,
+  listHiddenAdminTargets,
+  deleteAdminTargetRow,
+  restoreHiddenAdminTargetsForHanzi,
 } from "@/lib/supabase-service";
 import { gradeFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -83,6 +86,7 @@ import type {
   AdminTableRow,
   AdminTarget,
   AdminTargetContentStatus,
+  HiddenAdminTarget,
   FlashcardExampleGenerationRequest,
   FlashcardExampleGenerationResponse,
   FlashcardExamplePinyinGenerationRequest,
@@ -230,6 +234,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
   const {
     adminTargets,
     setAdminTargets,
+    hiddenAdminTargets,
+    setHiddenAdminTargets,
     adminLoading,
     setAdminLoading,
     adminNotice,
@@ -502,6 +508,10 @@ const gradeLabels = getGradeLabels(str);
     () => new Set(adminTargets.map((target) => target.character)).size,
     [adminTargets]
   );
+  const hiddenAdminTargetKeySet = useMemo(
+    () => new Set(hiddenAdminTargets.map((target) => target.key)),
+    [hiddenAdminTargets]
+  );
   const adminVisibleTargets = useMemo(
     () => {
       if (adminStatsFilter === "characters" || adminStatsFilter === "targets") {
@@ -705,19 +715,22 @@ const gradeLabels = getGradeLabels(str);
 
   const adminEmptyTableMessage = useMemo(() => {
     if (adminStatsFilter === "missing_content") {
-      return "No missing targets.";
+      return str.admin.emptyTableMessages.missingContent;
     }
     if (adminStatsFilter === "with_content") {
-      return "No targets with content.";
+      return str.admin.emptyTableMessages.withContent;
     }
     if (adminStatsFilter === "ready_for_testing") {
-      return "No targets ready for testing.";
+      return str.admin.emptyTableMessages.readyForTesting;
     }
     if (adminStatsFilter === "excluded_for_testing") {
-      return "No targets excluded for testing.";
+      return str.admin.emptyTableMessages.excludedForTesting;
     }
-    return "No table data yet. Preload or save content first.";
-  }, [adminStatsFilter]);
+    if (adminTargets.length === 0 && hiddenAdminTargets.length > 0) {
+      return str.admin.emptyTableMessages.allRowsDeleted;
+    }
+    return str.admin.emptyTableMessages.default;
+  }, [adminStatsFilter, adminTargets.length, hiddenAdminTargets.length, str.admin.emptyTableMessages]);
 
   function toggleAllWordsSort(nextKey: AllWordsSortKey) {
     if (allWordsSortKey === nextKey) {
@@ -1026,6 +1039,22 @@ const gradeLabels = getGradeLabels(str);
       ...previous,
       [key]: value,
     }));
+  }
+
+  function clearAdminTransientStateForTarget(targetKey: string): void {
+    setAdminPendingPhrases((previous) =>
+      previous.filter((item) => item.targetKey !== targetKey)
+    );
+    setAdminPendingMeanings((previous) =>
+      previous.filter((item) => item.targetKey !== targetKey)
+    );
+    setAdminEditingExampleRowKey((previous) => {
+      if (!previous) {
+        return null;
+      }
+      const editingRow = adminTableRows.find((row) => row.rowKey === previous);
+      return editingRow?.targetKey === targetKey ? null : previous;
+    });
   }
 
   function showAdminManualEditPopup(message: string) {
@@ -1480,19 +1509,14 @@ const gradeLabels = getGradeLabels(str);
     }
   }
 
-  async function handleAdminDeleteTarget(target: AdminTarget) {
+  async function handleAdminClearSavedContent(target: AdminTarget) {
     setAdminDeletingKey(target.key);
     setAdminNotice(null);
 
     try {
       await deleteFlashcardContent(target.character, target.pronunciation);
       updateAdminJson(target.key, "");
-      setAdminPendingPhrases((previous) =>
-        previous.filter((item) => item.targetKey !== target.key)
-      );
-      setAdminPendingMeanings((previous) =>
-        previous.filter((item) => item.targetKey !== target.key)
-      );
+      clearAdminTransientStateForTarget(target.key);
       setAdminSavedByKey((previous) => ({
         ...previous,
         [target.key]: false,
@@ -1502,9 +1526,69 @@ const gradeLabels = getGradeLabels(str);
         delete next[target.key];
         return next;
       });
-      setAdminNotice(`Deleted saved content for ${target.character} / ${target.pronunciation}.`);
+      setAdminNotice(
+        str.admin.messages.clearContentSuccess
+          .replace("{character}", target.character)
+          .replace("{pronunciation}", target.pronunciation)
+      );
     } catch (error) {
-      setAdminNotice(getErrorMessage(error, "Delete failed."));
+      setAdminNotice(getErrorMessage(error, str.admin.messages.clearContentError));
+    } finally {
+      setAdminDeletingKey(null);
+    }
+  }
+
+  async function handleAdminDeleteRow(target: AdminTarget) {
+    const hasAnotherPronunciationForCharacter = adminTargets.some(
+      (item) => item.character === target.character && item.key !== target.key
+    );
+    if (!hasAnotherPronunciationForCharacter) {
+      window.alert(str.admin.table.cannotDeleteLastPronunciation);
+      setAdminNotice(str.admin.table.cannotDeleteLastPronunciation);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      str.admin.table.confirmDeleteRow
+        .replace("{character}", target.character)
+        .replace("{pronunciation}", target.pronunciation)
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setAdminDeletingKey(target.key);
+    setAdminNotice(null);
+
+    try {
+      await deleteAdminTargetRow(target.character, target.pronunciation);
+      clearAdminTransientStateForTarget(target.key);
+      setAdminTargets((previous) => previous.filter((item) => item.key !== target.key));
+      setHiddenAdminTargets((previous) =>
+        hiddenAdminTargetKeySet.has(target.key) ? previous : [...previous, target]
+      );
+      setAdminJsonByKey((previous) => {
+        const next = { ...previous };
+        delete next[target.key];
+        return next;
+      });
+      setAdminSavedByKey((previous) => {
+        const next = { ...previous };
+        delete next[target.key];
+        return next;
+      });
+      setFlashcardLlmData((previous) => {
+        const next = { ...previous };
+        delete next[target.key];
+        return next;
+      });
+      setAdminNotice(
+        str.admin.messages.deleteRowSuccess
+          .replace("{character}", target.character)
+          .replace("{pronunciation}", target.pronunciation)
+      );
+    } catch (error) {
+      setAdminNotice(getErrorMessage(error, str.admin.messages.deleteRowError));
     } finally {
       setAdminDeletingKey(null);
     }
@@ -1965,7 +2049,7 @@ const gradeLabels = getGradeLabels(str);
         const targetKeySet = new Set<string>();
         const skippedNoPronunciationChars: string[] = [];
 
-        const [xinhuaResults, allSavedContents] = await Promise.all([
+        const [xinhuaResults, allSavedContents, hiddenTargets] = await Promise.all([
           Promise.all(
             orderedChars.map(async (character) => {
               const info = await getXinhuaFlashcardInfo(character, { includeAllMatches: true });
@@ -1973,7 +2057,9 @@ const gradeLabels = getGradeLabels(str);
             })
           ),
           getAllFlashcardContents(),
+          listHiddenAdminTargets(),
         ]);
+        const hiddenTargetKeys = new Set(hiddenTargets.map((target) => target.key));
         for (const { character, pronunciations } of xinhuaResults) {
           if (pronunciations.length === 0) {
             skippedNoPronunciationChars.push(character);
@@ -1987,7 +2073,7 @@ const gradeLabels = getGradeLabels(str);
             }
 
             const key = buildFlashcardLlmRequestKey({ character, pronunciation });
-            if (targetKeySet.has(key)) {
+            if (targetKeySet.has(key) || hiddenTargetKeys.has(key)) {
               continue;
             }
 
@@ -2028,6 +2114,7 @@ const gradeLabels = getGradeLabels(str);
         // as non-urgent and yields to the browser between chunks, preventing
         // the main thread from freezing while the table is built.
         startTransition(() => {
+          setHiddenAdminTargets(hiddenTargets);
           setAdminTargets(nextTargets);
           setAdminSavedByKey(nextSavedByKey);
           setAdminJsonByKey((previous) => ({
@@ -2203,6 +2290,8 @@ const gradeLabels = getGradeLabels(str);
     if (newWords.length > 0) {
       await addWords(newWords);
     }
+
+    await restoreHiddenAdminTargetsForHanzi(parsedCharacters);
 
     // Assign lesson tag to all submitted characters (new + already-existing)
     if (addTagSectionOpen && resolvedTextbookId && addTagGrade && addTagUnit && addTagLesson) {
@@ -2749,6 +2838,7 @@ const gradeLabels = getGradeLabels(str);
     getAdminStatsCardClass,
     handleAdminStatsFilterClick,
     isAdminStatsFilterActive,
+    adminStatsFilter,
     adminUniqueCharacterCount,
     adminTargets,
     adminTargetsWithContentCount,
@@ -2774,7 +2864,8 @@ const gradeLabels = getGradeLabels(str);
     adminDeletingKey,
     handleAdminRegenerate,
     handleAdminSave,
-    handleAdminDeleteTarget,
+    handleAdminClearSavedContent,
+    handleAdminDeleteRow,
     handleAdminAddMeaningRow,
     updateAdminPendingMeaningInput,
     handleAdminSavePendingMeaning,
@@ -2831,6 +2922,3 @@ const gradeLabels = getGradeLabels(str);
 }
 
 export type UseWordsWorkspaceStateReturn = ReturnType<typeof useWordsWorkspaceState>;
-
-
-

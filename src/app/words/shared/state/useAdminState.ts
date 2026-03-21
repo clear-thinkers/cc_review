@@ -4,10 +4,12 @@ import type {
   AdminPendingPhrase,
   AdminStatsFilter,
   AdminTarget,
+  HiddenAdminTarget,
 } from "../../admin/admin.types";
 
 export function useAdminState() {
   const [adminTargets, setAdminTargets] = useState<AdminTarget[]>([]);
+  const [hiddenAdminTargets, setHiddenAdminTargets] = useState<HiddenAdminTarget[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminNotice, setAdminNotice] = useState<string | null>(null);
   const [adminJsonByKey, setAdminJsonByKey] = useState<Record<string, string>>({});
@@ -28,6 +30,8 @@ export function useAdminState() {
   return {
     adminTargets,
     setAdminTargets,
+    hiddenAdminTargets,
+    setHiddenAdminTargets,
     adminLoading,
     setAdminLoading,
     adminNotice,

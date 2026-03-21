@@ -14,6 +14,12 @@ export type AdminTarget = {
   key: string;
 };
 
+export type HiddenAdminTarget = {
+  character: string;
+  pronunciation: string;
+  key: string;
+};
+
 export type AdminTableRow = {
   rowKey: string;
   targetKey: string;

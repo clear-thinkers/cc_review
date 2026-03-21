@@ -268,6 +268,8 @@ export const wordsStrings = {
         actionButtons: {
           regenerate: "R",
           save: "S",
+          clearContent: "C",
+          deleteRow: "D",
           delete: "D",
           edit: "E",
           addMeaning: "+ Meaning",
@@ -280,6 +282,8 @@ export const wordsStrings = {
         actionTooltips: {
           regenerate: "Regenerate all content",
           save: "Save",
+          clearContent: "Clear saved content",
+          deleteRow: "Delete this row from Content Admin",
           delete: "Delete saved content",
           addMeaning: "Add meaning for this character/pronunciation",
           addPhrase: "Add phrase under this meaning",
@@ -292,6 +296,14 @@ export const wordsStrings = {
           regenerateExample: "Regenerate example",
           editExample: "Edit example inline",
           deleteExample: "Delete this example row",
+        },
+        confirmDeleteRow:
+          "Delete {character} ({pronunciation}) from Content Admin? Saved content for this row will also be removed.",
+        cannotDeleteLastPronunciation:
+          "You can't delete the last pronunciation for this character from Content Admin. Delete the character from the All Characters page instead.",
+        summary: {
+          filteredLabel: "Filtered",
+          noFiltersApplied: "No filters applied",
         },
         placeholders: {
           newMeaning: "Enter new meaning",
@@ -310,12 +322,17 @@ export const wordsStrings = {
       },
       loading: "Loading admin targets...",
       noTargets: "No targets yet. Add characters first.",
+      noVisibleTargets: "No Content Admin rows are visible. Re-add a character to restore deleted rows.",
       preloadingProgress: "Preloading {current}/{total}: {character} / {pronunciation}",
       preloadingBatchProgress: "Preloading {from}\u2013{to} / {total}...",
       preloadResult: "Preload finished. Generated {generated}, skipped {skipped}, failed {failed}.",
       preloadCancelled: "Preload cancelled. Generated {generated}, skipped {skipped}, failed {failed}.",
       messages: {
         saveMeaning: "Saved {character} / {pronunciation}.",
+        clearContentSuccess: "Cleared saved content for {character} / {pronunciation}.",
+        clearContentError: "Could not clear saved content. Please try again.",
+        deleteRowSuccess: "Deleted row for {character} / {pronunciation}.",
+        deleteRowError: "Could not delete this row. Please try again.",
         deleteEmpty: "Deleted empty (no content).",
         deleteWithContent: "Deleted with content.",
         noContentForExclude: "Cannot exclude entry with no content.",
@@ -333,6 +350,14 @@ export const wordsStrings = {
         exampleMustInclude: "Example must include the phrase.",
         noContentToRefresh: "No saved content to refresh pinyin.",
         pinyinRefreshFinished: "Pinyin refresh finished. Refreshed {refreshed}, failed {failed}.",
+      },
+      emptyTableMessages: {
+        missingContent: "No missing targets.",
+        withContent: "No targets with content.",
+        readyForTesting: "No targets ready for testing.",
+        excludedForTesting: "No targets excluded for testing.",
+        allRowsDeleted: "No Content Admin rows are visible. Re-add a character to restore deleted rows.",
+        default: "No table data yet. Preload or save content first.",
       },
       filters: {
         title: "Default Filters",
@@ -418,6 +443,7 @@ export const wordsStrings = {
         },
         buttons: {
           reset: "Reset",
+          resetting: "Resetting...",
           delete: "Delete",
         },
         tooltips: {
@@ -696,7 +722,8 @@ export const wordsStrings = {
         preload: "为所有丢失内容的汉字/发音组合生成内容。预计等待时间：约2分钟（20个汉字）、约5分钟（50个汉字）、约12分钟（100个汉字）。",
         refreshAllPinyin: "批量生成所有已保存短语和例句的缺失拼音",
       },
-      preloadWarning: "⏱️ 预计生成时间：20个汉字需约2分钟、50个汉字需约5分钟、100个汉字需约12分钟。",      table: {
+      preloadWarning: "⏱️ 预计生成时间：20个汉字需约2分钟、50个汉字需约5分钟、100个汉字需约12分钟。",
+      table: {
         headers: {
           character: "汉字",
           pronunciation: "读音",
@@ -712,6 +739,8 @@ export const wordsStrings = {
         actionButtons: {
           regenerate: "重",
           save: "存",
+          clearContent: "清",
+          deleteRow: "删",
           delete: "删",
           edit: "编",
           addMeaning: "+ 释义",
@@ -724,6 +753,8 @@ export const wordsStrings = {
         actionTooltips: {
           regenerate: "重新生成全部内容",
           save: "保存",
+          clearContent: "清除已保存内容",
+          deleteRow: "从内容管理中删除此行",
           delete: "删除已保存内容",
           addMeaning: "为该汉字/读音添加释义",
           addPhrase: "在该释义下添加词组",
@@ -736,6 +767,14 @@ export const wordsStrings = {
           regenerateExample: "重新生成例句",
           editExample: "行内编辑例句",
           deleteExample: "删除该例句行",
+        },
+        confirmDeleteRow:
+          "要从内容管理中删除 {character}（{pronunciation}）这一行吗？该行已保存的内容也会一并删除。",
+        cannotDeleteLastPronunciation:
+          "不能删除这个汉字在内容管理中的最后一个读音条目。请到 全部汉字 页面删除该汉字。",
+        summary: {
+          filteredLabel: "筛选后",
+          noFiltersApplied: "未应用筛选",
         },
         placeholders: {
           newMeaning: "输入新释义",
@@ -754,6 +793,7 @@ export const wordsStrings = {
       },
       loading: "正在加载内容条目...",
       noTargets: "暂无可管理内容（请先添加汉字）",
+      noVisibleTargets: "当前没有可见的内容管理条目。重新添加汉字可恢复已删除行。",
       preloadingProgress: "预生成进度 {current}/{total}: {character} / {pronunciation}",
       preloadingBatchProgress: "预生成 {from}\u2013{to} / {total}...",
       preloadResult:
@@ -761,6 +801,10 @@ export const wordsStrings = {
       preloadCancelled: "预生成已取消。生成 {generated} 个，跳过 {skipped} 个，失败 {failed} 个。",
       messages: {
         saveMeaning: "已保存 {character} / {pronunciation}。",
+        clearContentSuccess: "已清除 {character} / {pronunciation} 的已保存内容。",
+        clearContentError: "清除已保存内容失败。请重试。",
+        deleteRowSuccess: "已删除 {character} / {pronunciation} 这一行。",
+        deleteRowError: "删除该行失败。请重试。",
         deleteEmpty: "已删除空条目（无内容）。",
         deleteWithContent: "已删除含内容条目。",
         noContentForExclude: "无法排除没有内容的条目。",
@@ -778,6 +822,14 @@ export const wordsStrings = {
         exampleMustInclude: "例句需要包含短语。",
         noContentToRefresh: "无保存内容可生成拼音。",
         pinyinRefreshFinished: "拼音生成完成。已生成 {refreshed} 个，失败 {failed} 个。",
+      },
+      emptyTableMessages: {
+        missingContent: "没有缺少内容的条目。",
+        withContent: "没有有内容的条目。",
+        readyForTesting: "没有可用于测试的条目。",
+        excludedForTesting: "没有排除测试的条目。",
+        allRowsDeleted: "当前没有可见的内容管理条目。重新添加汉字可恢复已删除行。",
+        default: "暂无表格数据。请先预生成或保存内容。",
       },
       filters: {
         title: "默认筛选",
@@ -863,6 +915,7 @@ export const wordsStrings = {
         },
         buttons: {
           reset: "重置",
+          resetting: "重置中...",
           delete: "删除",
         },
         tooltips: {

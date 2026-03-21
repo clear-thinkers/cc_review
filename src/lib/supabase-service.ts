@@ -22,6 +22,7 @@ import type {
   WordLessonTagsMap,
   ResolvedLessonTag,
 } from "@/app/words/shared/tagging.types";
+import type { HiddenAdminTarget } from "@/app/words/admin/admin.types";
 
 // ─── Exported types (moved from db.ts) ─────────────────────────────────────
 
@@ -364,6 +365,78 @@ export async function deleteFlashcardContentByHanzi(hanzi: string): Promise<void
     .eq("family_id", familyId)
     .like("id", `${hanzi}|%`);
   if (error) throw new Error(`deleteFlashcardContentByHanzi: ${error.message}`);
+}
+
+interface SupabaseHiddenAdminTargetRow {
+  character: string;
+  pronunciation: string;
+  created_at: string;
+}
+
+function toHiddenAdminTarget(row: SupabaseHiddenAdminTargetRow): HiddenAdminTarget {
+  const character = row.character.trim();
+  const pronunciation = row.pronunciation.trim();
+  return {
+    character,
+    pronunciation,
+    key: makeFlashcardContentKey(character, pronunciation),
+  };
+}
+
+export async function listHiddenAdminTargets(): Promise<HiddenAdminTarget[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("hidden_admin_targets")
+    .select("character, pronunciation, created_at")
+    .eq("family_id", familyId)
+    .order("character")
+    .order("pronunciation");
+  if (error) throw new Error(`listHiddenAdminTargets: ${error.message}`);
+  return (data as SupabaseHiddenAdminTargetRow[]).map(toHiddenAdminTarget);
+}
+
+export async function deleteAdminTargetRow(
+  character: string,
+  pronunciation: string
+): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const trimmedCharacter = character.trim();
+  const trimmedPronunciation = pronunciation.trim();
+  const key = makeFlashcardContentKey(trimmedCharacter, trimmedPronunciation);
+
+  const { error: hideError } = await supabase
+    .from("hidden_admin_targets")
+    .upsert(
+      {
+        family_id: familyId,
+        character: trimmedCharacter,
+        pronunciation: trimmedPronunciation,
+      },
+      { onConflict: "family_id,character,pronunciation", ignoreDuplicates: true }
+    );
+  if (hideError) throw new Error(`deleteAdminTargetRow hide: ${hideError.message}`);
+
+  const { error: deleteError } = await supabase
+    .from("flashcard_contents")
+    .delete()
+    .eq("id", key)
+    .eq("family_id", familyId);
+  if (deleteError) throw new Error(`deleteAdminTargetRow content: ${deleteError.message}`);
+}
+
+export async function restoreHiddenAdminTargetsForHanzi(hanziList: string[]): Promise<void> {
+  const normalized = Array.from(new Set(hanziList.map((hanzi) => hanzi.trim()).filter(Boolean)));
+  if (normalized.length === 0) {
+    return;
+  }
+
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("hidden_admin_targets")
+    .delete()
+    .eq("family_id", familyId)
+    .in("character", normalized);
+  if (error) throw new Error(`restoreHiddenAdminTargetsForHanzi: ${error.message}`);
 }
 
 // ─── Quiz Sessions ──────────────────────────────────────────────────────────

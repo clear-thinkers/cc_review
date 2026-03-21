@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "@/lib/authContext";
 import { useLocale } from "@/app/shared/locale";
 import { taggingStrings } from "../shared/tagging.strings";
-import { assignWordLessonTags, clearWordLessonTags, createLessonTagIfNew, createTextbook, listLessonTags, listTextbooks } from "@/lib/supabase-service";
+import { assignWordLessonTags, clearWordLessonTags, createLessonTagIfNew, createTextbook, listLessonTags, listTextbooks, putWord } from "@/lib/supabase-service";
 import type { LessonTag, Textbook } from "../shared/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 
@@ -46,6 +46,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
   const [editorAction, setEditorAction] = useState<"add" | "update" | null>(null);
+  const [batchResetting, setBatchResetting] = useState(false);
   const [tagClearing, setTagClearing] = useState(false);
   const [batchTagSectionOpen, setBatchTagSectionOpen] = useState(false);
 
@@ -130,12 +131,12 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
         }
       }
 
-      // Filter: Tags (AND logic - word must have all selected tags)
+      // Filter: Tags (OR logic - word must have any selected tag)
       if (filterSelectedTagIds.length > 0) {
         const wordTags = wordTagsMap.get(word.id) ?? [];
         const wordTagIds = new Set(wordTags.map((t) => t.lessonTagId));
-        const hasAllSelectedTags = filterSelectedTagIds.every((tagId) => wordTagIds.has(tagId));
-        if (!hasAllSelectedTags) return false;
+        const hasAnySelectedTag = filterSelectedTagIds.some((tagId) => wordTagIds.has(tagId));
+        if (!hasAnySelectedTag) return false;
       }
 
       return true;
@@ -306,6 +307,43 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       setEditorNotice(allEditorStr.clearTagsError);
     } finally {
       setTagClearing(false);
+    }
+  }
+
+  async function handleBatchResetSelected(): Promise<void> {
+    if (selectedWordIds.length === 0) {
+      return;
+    }
+
+    const selectedWords = words.filter((word) => selectedWordIds.includes(word.id));
+    if (selectedWords.length === 0) {
+      setSelectedWordIds([]);
+      return;
+    }
+
+    setBatchResetting(true);
+    try {
+      const resetTimestamp = Date.now();
+      await Promise.all(
+        selectedWords.map((word) =>
+          putWord({
+            ...word,
+            createdAt: resetTimestamp,
+            repetitions: 0,
+            intervalDays: 0,
+            ease: 21,
+            nextReviewAt: 0,
+            reviewCount: 0,
+            testCount: 0,
+          })
+        )
+      );
+      await refreshAllData();
+      setSelectedWordIds([]);
+    } catch (error) {
+      console.error("[all-reset] Batch reset failed", error);
+    } finally {
+      setBatchResetting(false);
     }
   }
 
@@ -895,19 +933,30 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       ) : (
         <div className="space-y-3">
           {!isChild ? (
-            <p className="text-sm text-gray-600">
-              {hasActiveFilters ? (
-                <>
-                  {str.all.table.summary.filteredLabel}{" "}
-                  <span className="font-semibold text-blue-700">{filteredWords.length}</span>
-                </>
-              ) : (
-                str.all.table.summary.noFiltersApplied
-              )}
-              {str.all.table.summary.separator}
-              {str.all.table.summary.selectedLabel}{" "}
-              <span className="font-semibold text-blue-700">{selectedWordIds.length}</span>
-            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-gray-600">
+                {hasActiveFilters ? (
+                  <>
+                    {str.all.table.summary.filteredLabel}{" "}
+                    <span className="font-semibold text-blue-700">{filteredWords.length}</span>
+                  </>
+                ) : (
+                  str.all.table.summary.noFiltersApplied
+                )}
+                {str.all.table.summary.separator}
+                {str.all.table.summary.selectedLabel}{" "}
+                <span className="font-semibold text-blue-700">{selectedWordIds.length}</span>
+              </p>
+              <button
+                type="button"
+                className="rounded-full border-2 border-amber-400 bg-amber-100 px-4 py-1 text-sm font-medium text-amber-900 disabled:opacity-50"
+                onClick={() => void handleBatchResetSelected()}
+                disabled={selectedWordIds.length === 0 || batchResetting || editorSaving || tagClearing}
+                title={str.all.table.tooltips.reset}
+              >
+                {batchResetting ? str.all.table.buttons.resetting : str.all.table.buttons.reset}
+              </button>
+            </div>
           ) : null}
           <div className="overflow-x-auto rounded-lg border">
           <table className="min-w-full border-collapse text-sm">

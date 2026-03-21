@@ -37,6 +37,56 @@ function computeRenderRows(rows: AdminTableRow[]): AdminTableRenderRow[] {
   }));
 }
 
+export function paginateAdminRowsByCharacter(
+  rows: AdminTableRow[],
+  itemsPerPage: number
+): AdminTableRow[][] {
+  if (rows.length === 0) {
+    return [[]];
+  }
+
+  const characterGroups: AdminTableRow[][] = [];
+  let currentGroup: AdminTableRow[] = [];
+
+  for (const row of rows) {
+    if (currentGroup.length === 0 || currentGroup[0].character === row.character) {
+      currentGroup.push(row);
+      continue;
+    }
+
+    characterGroups.push(currentGroup);
+    currentGroup = [row];
+  }
+
+  if (currentGroup.length > 0) {
+    characterGroups.push(currentGroup);
+  }
+
+  const pages: AdminTableRow[][] = [];
+  let currentPageRows: AdminTableRow[] = [];
+
+  for (const group of characterGroups) {
+    if (currentPageRows.length === 0) {
+      currentPageRows = [...group];
+      continue;
+    }
+
+    if (currentPageRows.length + group.length > itemsPerPage) {
+      pages.push(currentPageRows);
+      currentPageRows = [...group];
+      continue;
+    }
+
+    currentPageRows = [...currentPageRows, ...group];
+  }
+
+  if (currentPageRows.length > 0) {
+    pages.push(currentPageRows);
+  }
+
+  return pages.length > 0 ? pages : [[]];
+}
+
 // ---------------------------------------------------------------------------
 // Memoised table row â€” prevents re-render when only URL filter params change.
 // React.memo does a shallow prop comparison; all handler props come from the
@@ -57,7 +107,8 @@ type AdminTableRowComponentProps = {
   str: WordsLocaleStrings;
   onRegenerate: (target: AdminTarget) => void;
   onSave: (target: AdminTarget) => void;
-  onDeleteTarget: (target: AdminTarget) => void;
+  onClearContent: (target: AdminTarget) => void;
+  onDeleteRow: (target: AdminTarget) => void;
   onAddMeaningRow: (targetKey: string) => void;
   onUpdatePendingMeaningInput: (
     pendingId: string,
@@ -91,7 +142,8 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   str,
   onRegenerate,
   onSave,
-  onDeleteTarget,
+  onClearContent,
+  onDeleteRow,
   onAddMeaningRow,
   onUpdatePendingMeaningInput,
   onSavePendingMeaning,
@@ -145,12 +197,21 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
+                  className="rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => onClearContent(target)}
+                  title={str.admin.table.actionTooltips.clearContent}
+                >
+                  {str.admin.table.actionButtons.clearContent}
+                </button>
+                <button
+                  type="button"
                   className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
                   disabled={busy}
-                  onClick={() => onDeleteTarget(target)}
-                  title={str.admin.table.actionTooltips.delete}
+                  onClick={() => onDeleteRow(target)}
+                  title={str.admin.table.actionTooltips.deleteRow}
                 >
-                  {str.admin.table.actionButtons.delete}
+                  {str.admin.table.actionButtons.deleteRow}
                 </button>
                 <button
                   type="button"
@@ -424,6 +485,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminMissingCount,
     adminTargetsReadyForTestingCount,
     adminTargetsExcludedForTestingCount,
+    adminStatsFilter,
     handleAdminPreloadAll,
     cancelAdminPreload,
     adminPreloadCancelling,
@@ -443,7 +505,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminDeletingKey,
     handleAdminRegenerate,
     handleAdminSave,
-    handleAdminDeleteTarget,
+    handleAdminClearSavedContent,
+    handleAdminDeleteRow,
     handleAdminAddMeaningRow,
     updateAdminPendingMeaningInput,
     handleAdminSavePendingMeaning,
@@ -475,7 +538,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [isPageTransitionPending, startPageTransition] = useTransition();
-  const ITEMS_PER_PAGE = 15;
+  const ITEMS_PER_PAGE = 25;
 
   // Extract unique tags from wordTagsMap for filter UI
   const availableTagsWithIds = useMemo(() => {
@@ -522,34 +585,46 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         if (wordsDueNow.length === 0) return false;
       }
 
-      // Filter: Tags (AND logic - target must have all selected tags)
+      // Filter: Tags (OR logic - target must have any selected tag)
       if (filterSelectedTagIds.length > 0) {
         const targetWords = vm.words.filter((w) => w.hanzi === target.character);
         const targetWordIds = new Set(targetWords.map((w) => w.id));
-        let hasAllSelectedTags = false;
+        let hasAnySelectedTag = false;
         for (const wordId of targetWordIds) {
           const wordTags = vm.wordTagsMap.get(wordId) ?? [];
           const wordTagIds = new Set(wordTags.map((t) => t.lessonTagId));
-          if (filterSelectedTagIds.every((tagId) => wordTagIds.has(tagId))) {
-            hasAllSelectedTags = true;
+          if (filterSelectedTagIds.some((tagId) => wordTagIds.has(tagId))) {
+            hasAnySelectedTag = true;
             break;
           }
         }
-        if (!hasAllSelectedTags) return false;
+        if (!hasAnySelectedTag) return false;
       }
 
       return true;
     });
   }, [filteredByStatsAdminRenderRows, filterDueNow, filterSelectedTagIds, adminTargetByKey, vm.words, vm.wordTagsMap]);
+  const filteredAdminTargetCount = useMemo(
+    () => new Set(filteredAdminRenderRows.map((row) => row.targetKey)).size,
+    [filteredAdminRenderRows]
+  );
+  const adminHasActiveCountFilter =
+    (adminStatsFilter !== "targets" && adminStatsFilter !== "characters") ||
+    filterDueNow ||
+    filterSelectedTagIds.length > 0;
+
+  const adminRowPages = useMemo(
+    () => paginateAdminRowsByCharacter(filteredAdminRenderRows, ITEMS_PER_PAGE),
+    [filteredAdminRenderRows]
+  );
 
   // Calculate pagination
-  const totalPages = Math.ceil(filteredAdminRenderRows.length / ITEMS_PER_PAGE);
+  const totalPages = adminRowPages.length;
   const validPage = Math.max(1, Math.min(currentPage, totalPages || 1));
   const paginatedAdminRenderRows = useMemo(() => {
-    const startIdx = (validPage - 1) * ITEMS_PER_PAGE;
-    const pageRows = filteredAdminRenderRows.slice(startIdx, startIdx + ITEMS_PER_PAGE);
+    const pageRows = adminRowPages[validPage - 1] ?? [];
     return computeRenderRows(pageRows);
-  }, [filteredAdminRenderRows, validPage]);
+  }, [adminRowPages, validPage]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -572,7 +647,14 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   // AdminTableRowComponent bails out correctly for unaffected rows.
   const stableOnRegenerate = useCallback((target: AdminTarget) => vmRef.current.handleAdminRegenerate(target), []);
   const stableOnSave = useCallback((target: AdminTarget) => vmRef.current.handleAdminSave(target), []);
-  const stableOnDeleteTarget = useCallback((target: AdminTarget) => vmRef.current.handleAdminDeleteTarget(target), []);
+  const stableOnClearContent = useCallback(
+    (target: AdminTarget) => vmRef.current.handleAdminClearSavedContent(target),
+    []
+  );
+  const stableOnDeleteRow = useCallback(
+    (target: AdminTarget) => vmRef.current.handleAdminDeleteRow(target),
+    []
+  );
   const stableOnAddMeaningRow = useCallback((targetKey: string) => vmRef.current.handleAdminAddMeaningRow(targetKey), []);
   const stableOnUpdatePendingMeaningInput = useCallback(
     (pendingId: string, field: "meaningZhInput" | "phraseInput" | "exampleInput", value: string) =>
@@ -832,6 +914,19 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         </div>
       )}
 
+      {!adminLoading && adminTargets.length > 0 ? (
+        <p className="text-sm text-gray-700">
+          {adminHasActiveCountFilter ? (
+            <>
+              {str.admin.table.summary.filteredLabel}{" "}
+              <span className="font-semibold text-blue-600">{filteredAdminTargetCount}</span>
+            </>
+          ) : (
+            str.admin.table.summary.noFiltersApplied
+          )}
+        </p>
+      ) : null}
+
       <div className="overflow-x-auto rounded-md border">
         <table className={`min-w-full table-fixed border-collapse text-sm transition-opacity${isPageTransitionPending ? " opacity-50" : ""}`}>
           <thead>
@@ -874,7 +969,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     str={str}
                     onRegenerate={stableOnRegenerate}
                     onSave={stableOnSave}
-                    onDeleteTarget={stableOnDeleteTarget}
+                    onClearContent={stableOnClearContent}
+                    onDeleteRow={stableOnDeleteRow}
                     onAddMeaningRow={stableOnAddMeaningRow}
                     onUpdatePendingMeaningInput={stableOnUpdatePendingMeaningInput}
                     onSavePendingMeaning={stableOnSavePendingMeaning}
@@ -939,10 +1035,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       {adminLoading ? (
         <p className="text-sm text-gray-600">{str.admin.loading}</p>
       ) : adminTargets.length === 0 ? (
-        <p className="text-sm text-gray-600">{str.admin.noTargets}</p>
+        <p className="text-sm text-gray-600">
+          {vm.words.length === 0 ? str.admin.noTargets : str.admin.noVisibleTargets}
+        </p>
       ) : null}
     </section>
   );
 }
-
-
