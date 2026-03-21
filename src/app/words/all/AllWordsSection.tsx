@@ -8,6 +8,15 @@ import { assignWordLessonTags, clearWordLessonTags, createLessonTagIfNew, create
 import type { LessonTag, Textbook } from "../shared/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 
+function appendSelectedOption(options: string[], selectedValue: string | null): string[] {
+  const trimmedValue = selectedValue?.trim();
+  if (!trimmedValue || options.includes(trimmedValue)) {
+    return options;
+  }
+
+  return [...options, trimmedValue].sort();
+}
+
 export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const {
     page,
@@ -182,21 +191,27 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   }, [batchTextbookId]);
 
   const gradeOptions = batchTextbookId
-    ? [...new Set(lessonTags.map((item) => item.grade))].sort()
+    ? appendSelectedOption([...new Set(lessonTags.map((item) => item.grade))].sort(), batchGrade)
     : [];
   const unitOptions =
     batchTextbookId && batchGrade
-      ? [...new Set(lessonTags.filter((item) => item.grade === batchGrade).map((item) => item.unit))].sort()
+      ? appendSelectedOption(
+          [...new Set(lessonTags.filter((item) => item.grade === batchGrade).map((item) => item.unit))].sort(),
+          batchUnit
+        )
       : [];
   const lessonOptions =
     batchTextbookId && batchGrade && batchUnit
-      ? [
-          ...new Set(
-            lessonTags
-              .filter((item) => item.grade === batchGrade && item.unit === batchUnit)
-              .map((item) => item.lesson)
-          ),
-        ].sort()
+      ? appendSelectedOption(
+          [
+            ...new Set(
+              lessonTags
+                .filter((item) => item.grade === batchGrade && item.unit === batchUnit)
+                .map((item) => item.lesson)
+            ),
+          ].sort(),
+          batchLesson
+        )
       : [];
 
   const allVisibleSelected =
@@ -666,7 +681,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                         type="button"
                         className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                         onClick={() => {
-                          setBatchGrade(batchGradeInputValue || null);
+                          const customGrade = batchGradeInputValue.trim();
+                          setBatchGrade(customGrade || null);
                           setBatchUnit(null);
                           setBatchLesson(null);
                           setBatchUnitCreateMode(false);
@@ -732,7 +748,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                         type="button"
                         className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                         onClick={() => {
-                          setBatchUnit(batchUnitInputValue || null);
+                          const customUnit = batchUnitInputValue.trim();
+                          setBatchUnit(customUnit || null);
                           setBatchLesson(null);
                           setBatchLessonCreateMode(false);
                           setBatchLessonInputValue("");
@@ -792,7 +809,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                         type="button"
                         className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                         onClick={() => {
-                          setBatchLesson(batchLessonInputValue || null);
+                          const customLesson = batchLessonInputValue.trim();
+                          setBatchLesson(customLesson || null);
                           setBatchLessonCreateMode(false);
                           setBatchLessonInputValue("");
                         }}

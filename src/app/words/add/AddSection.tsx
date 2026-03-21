@@ -7,6 +7,15 @@ import type { Textbook, LessonTag } from "../shared/tagging.types";
 import { useLocale } from "@/app/shared/locale";
 import { taggingStrings } from "../shared/tagging.strings";
 
+function appendSelectedOption(options: string[], selectedValue: string | null): string[] {
+  const trimmedValue = selectedValue?.trim();
+  if (!trimmedValue || options.includes(trimmedValue)) {
+    return options;
+  }
+
+  return [...options, trimmedValue].sort();
+}
+
 export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
   const {
     page,
@@ -159,21 +168,27 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
 
   // Derive unique sorted values for datalists
   const gradeOptions = addTagTextbookId
-    ? [...new Set(lessonTags.map((t) => t.grade))].sort()
+    ? appendSelectedOption([...new Set(lessonTags.map((t) => t.grade))].sort(), addTagGrade)
     : [];
   const unitOptions =
     addTagTextbookId && addTagGrade
-      ? [...new Set(lessonTags.filter((t) => t.grade === addTagGrade).map((t) => t.unit))].sort()
+      ? appendSelectedOption(
+          [...new Set(lessonTags.filter((t) => t.grade === addTagGrade).map((t) => t.unit))].sort(),
+          addTagUnit
+        )
       : [];
   const lessonOptions =
     addTagTextbookId && addTagGrade && addTagUnit
-      ? [
-          ...new Set(
-            lessonTags
-              .filter((t) => t.grade === addTagGrade && t.unit === addTagUnit)
-              .map((t) => t.lesson)
-          ),
-        ].sort()
+      ? appendSelectedOption(
+          [
+            ...new Set(
+              lessonTags
+                .filter((t) => t.grade === addTagGrade && t.unit === addTagUnit)
+                .map((t) => t.lesson)
+            ),
+          ].sort(),
+          addTagLesson
+        )
       : [];
 
   if (page !== "add") {
@@ -301,7 +316,8 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                     <button
                       type="button"
                       onClick={() => {
-                        handleGradeChange(gradeInputValue);
+                        const customGrade = gradeInputValue.trim();
+                        handleGradeChange(customGrade);
                         setGradeCreateMode(false);
                         setGradeInputValue("");
                       }}
@@ -358,7 +374,8 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                     <button
                       type="button"
                       onClick={() => {
-                        handleUnitChange(unitInputValue);
+                        const customUnit = unitInputValue.trim();
+                        handleUnitChange(customUnit);
                         setUnitCreateMode(false);
                         setUnitInputValue("");
                       }}
@@ -415,7 +432,8 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                     <button
                       type="button"
                       onClick={() => {
-                        setAddTagLesson(lessonInputValue || null);
+                        const customLesson = lessonInputValue.trim();
+                        setAddTagLesson(customLesson || null);
                         setLessonCreateMode(false);
                         setLessonInputValue("");
                       }}
