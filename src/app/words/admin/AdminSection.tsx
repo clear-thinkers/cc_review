@@ -752,9 +752,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       (targetKey) => adminTargetStatusByKey[targetKey] === "ready_for_testing"
     );
   const batchFillTestInclude = !selectedTargetsAllIncluded;
-  const batchFillTestButtonClass = selectedTargetsAllIncluded
-    ? "admin-toolbar-button rounded-md border border-teal-600 bg-teal-50 px-3 py-1.5 font-medium leading-none text-teal-700 disabled:opacity-50"
-    : "admin-toolbar-button rounded-md border border-gray-400 bg-gray-100 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50";
+  const batchFillTestButtonClass =
+    "admin-toolbar-button rounded-md border border-teal-600 bg-teal-50 px-3 py-1.5 font-medium leading-none text-teal-700 disabled:opacity-50";
 
   // Reset to page 1 when filters change
   useEffect(() => {
