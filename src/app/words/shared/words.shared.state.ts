@@ -24,6 +24,11 @@ import {
   createTextbook,
   getWordLessonTagsForFamily,
   listHiddenAdminTargets,
+  listReviewTestSessions,
+  createReviewTestSession,
+  appendTargetsToReviewTestSession,
+  deleteReviewTestSession,
+  completeReviewTestSession,
   deleteAdminTargetRow,
   restoreHiddenAdminTargetsForHanzi,
 } from "@/lib/supabase-service";
@@ -108,6 +113,9 @@ import type {
 } from "../review/fill-test/fillTest.types";
 import type {
   DueWordsSortKey,
+  ReviewTestSession,
+  ReviewTestSessionRuntime,
+  ReviewTestSessionTargetDraft,
   SortedDueWord,
 } from "../review/review.types";
 import type {
@@ -127,10 +135,15 @@ import { useFlashcardReviewState } from "./state/useFlashcardReviewState";
 import { useWordsBaseState } from "./state/useWordsBaseState";
 import { useLocale } from "@/app/shared/locale";
 import { taggingStrings } from "./tagging.strings";
+import {
+  buildReviewTestSessionRuntime,
+  sortReviewTestSessionTargets,
+} from "../review/reviewSession.utils";
 export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; str: WordsLocaleStrings }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const locale = useLocale();
+  const session = useSession();
   const baseState = useWordsBaseState();
   const flashcardState = useFlashcardReviewState();
   const fillTestState = useFillTestReviewState();
@@ -141,6 +154,10 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setWords,
     dueWords,
     setDueWords,
+    allFlashcardContents,
+    setAllFlashcardContents,
+    reviewTestSessions,
+    setReviewTestSessions,
     loading,
     setLoading,
     loadError,
@@ -229,6 +246,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setQuizDropSentenceIndex,
     quizSessionStartTime,
     setQuizSessionStartTime,
+    completedReviewTestSessionName,
+    setCompletedReviewTestSessionName,
   } = fillTestState;
 
   const {
@@ -266,6 +285,10 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setAdminEditingExampleRowKey,
     adminStatsFilter,
     setAdminStatsFilter,
+    adminSelectedTargetKeys,
+    setAdminSelectedTargetKeys,
+    adminCreatingReviewTestSession,
+    setAdminCreatingReviewTestSession,
   } = adminState;
 
   const isDueReviewPage = page === "review";
@@ -273,6 +296,9 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
   const isFillTestReviewPage = page === "fillTest";
   const activeMenuPage: NavPage = isFlashcardReviewPage || isFillTestReviewPage ? "review" : page;
   const requestedReviewWordId = searchParams.get("wordId");
+  const requestedReviewTestSessionId = searchParams.get("reviewTestSessionId");
+  const reviewTestSessionStatus = searchParams.get("reviewTestSessionStatus");
+  const reviewTestSessionName = searchParams.get("reviewTestSessionName");
 
 const gradeLabels = getGradeLabels(str);
   const fillTestDueWords = useMemo(() => dueWords.filter(hasFillTest), [dueWords]);
@@ -292,9 +318,44 @@ const gradeLabels = getGradeLabels(str);
     return fillTestDueWords.slice(0, Math.max(0, limit));
   }, [fillTestDueWords, manualSelectionSet, quizSelectionMode]);
 
+  const reviewTestSessionRuntimeById = useMemo(() => {
+    return new Map<string, ReviewTestSessionRuntime>(
+      reviewTestSessions.map((sessionItem) => [
+        sessionItem.id,
+        buildReviewTestSessionRuntime(sessionItem, words, allFlashcardContents),
+      ])
+    );
+  }, [allFlashcardContents, reviewTestSessions, words]);
+
+  const activeReviewTestSession = useMemo(
+    () =>
+      requestedReviewTestSessionId
+        ? reviewTestSessions.find((sessionItem) => sessionItem.id === requestedReviewTestSessionId) ?? null
+        : null,
+    [requestedReviewTestSessionId, reviewTestSessions]
+  );
+
+  const activeReviewTestSessionRuntime = useMemo(
+    () =>
+      requestedReviewTestSessionId
+        ? reviewTestSessionRuntimeById.get(requestedReviewTestSessionId) ?? null
+        : null,
+    [requestedReviewTestSessionId, reviewTestSessionRuntimeById]
+  );
+
   const currentFlashcardWord = flashcardInProgress ? flashcardQueue[flashcardIndex] : undefined;
   const currentQuizWord = quizInProgress ? quizQueue[quizIndex] : undefined;
   const unansweredCount = quizSelections.filter((selection) => selection === null).length;
+  const activeReviewTestSessionQuizCount = activeReviewTestSessionRuntime?.quizWords.length ?? 0;
+  const activeReviewTestSessionSkippedQuizCount =
+    activeReviewTestSessionRuntime?.skippedQuizCharacters.length ?? 0;
+  const activeReviewTestSessionPronunciations = useMemo(() => {
+    if (!currentFlashcardWord || !activeReviewTestSessionRuntime) {
+      return [];
+    }
+
+    return activeReviewTestSessionRuntime.packagedPronunciationsByCharacter[currentFlashcardWord.hanzi] ?? [];
+  }, [activeReviewTestSessionRuntime, currentFlashcardWord]);
   const {
     data: flashcardInfo,
     loading: flashcardInfoLoading,
@@ -306,14 +367,22 @@ const gradeLabels = getGradeLabels(str);
       return [];
     }
 
-    return flashcardInfo.pronunciations
-      .map((entry) => entry.pinyin.trim())
-      .filter(Boolean)
+    const pronunciations =
+      requestedReviewTestSessionId && activeReviewTestSessionPronunciations.length > 0
+        ? activeReviewTestSessionPronunciations
+        : flashcardInfo.pronunciations.map((entry) => entry.pinyin.trim()).filter(Boolean);
+
+    return pronunciations
       .map((pronunciation) => ({
         character: currentFlashcardWord.hanzi,
         pronunciation,
       }));
-  }, [currentFlashcardWord, flashcardInfo]);
+  }, [
+    activeReviewTestSessionPronunciations,
+    currentFlashcardWord,
+    flashcardInfo,
+    requestedReviewTestSessionId,
+  ]);
 
   const quizSummary = useMemo(() => {
     return quizHistory.reduce(
@@ -440,6 +509,18 @@ const gradeLabels = getGradeLabels(str);
 
     return prepared;
   }, [dueWords, dueWordsSortDirection, dueWordsSortKey]);
+
+  const reviewTestSessionRows = useMemo(() => {
+    return reviewTestSessions.map((sessionItem) => {
+      const runtime = reviewTestSessionRuntimeById.get(sessionItem.id) ?? null;
+      return {
+        session: sessionItem,
+        runtime,
+        characterCount: runtime?.orderedWords.length ?? 0,
+        quizReadyCount: runtime?.quizWords.length ?? 0,
+      };
+    });
+  }, [reviewTestSessionRuntimeById, reviewTestSessions]);
 
   const adminContentStats = useMemo(() => {
     const targetStatusByKey: Record<string, AdminTargetContentStatus> = {};
@@ -846,6 +927,7 @@ const gradeLabels = getGradeLabels(str);
     });
 
     const allSavedContentEntries = await getAllFlashcardContents();
+    setAllFlashcardContents(allSavedContentEntries);
     const contentByCharacter = new Map<string, FlashcardLlmResponse[]>();
     for (const entry of allSavedContentEntries) {
       const list = contentByCharacter.get(entry.character) ?? [];
@@ -885,8 +967,9 @@ const gradeLabels = getGradeLabels(str);
   const refreshAll = useCallback(async () => {
     await refreshWords();
     await refreshDueWords();
+    await listReviewTestSessions().then(setReviewTestSessions);
     await getWordLessonTagsForFamily().then(setWordTagsMap).catch(() => setWordTagsMap(new Map()));
-  }, [refreshDueWords, refreshWords, setWordTagsMap]);
+  }, [refreshDueWords, refreshWords, setReviewTestSessions, setWordTagsMap]);
 
   useEffect(() => {
     (async () => {
@@ -2008,6 +2091,89 @@ const gradeLabels = getGradeLabels(str);
     );
   }
 
+  function toggleAdminTargetSelection(targetKey: string) {
+    setAdminSelectedTargetKeys((previous) =>
+      previous.includes(targetKey)
+        ? previous.filter((key) => key !== targetKey)
+        : [...previous, targetKey]
+    );
+  }
+
+  function clearAdminTargetSelection() {
+    setAdminSelectedTargetKeys([]);
+  }
+
+  async function createSelectedReviewTestSession(sessionName: string) {
+    const trimmedName = sessionName.trim();
+    if (!trimmedName) {
+      setAdminNotice(str.admin.messages.reviewTestSessionNameRequired);
+      return false;
+    }
+
+    if (adminSelectedTargetKeys.length === 0) {
+      setAdminNotice(str.admin.messages.reviewTestSessionNoSelection);
+      return false;
+    }
+
+    const selectedTargets = adminSelectedTargetKeys
+      .map((targetKey) => adminTargets.find((target) => target.key === targetKey) ?? null)
+      .filter((target): target is AdminTarget => Boolean(target));
+
+    if (selectedTargets.length === 0) {
+      setAdminNotice(str.admin.messages.reviewTestSessionNoSelection);
+      return false;
+    }
+
+    const orderedTargets = sortReviewTestSessionTargets(
+      selectedTargets as ReviewTestSessionTargetDraft[],
+      words
+    );
+
+    setAdminCreatingReviewTestSession(true);
+    try {
+      const existingSession =
+        reviewTestSessions.find((sessionItem) => sessionItem.name === trimmedName) ?? null;
+
+      if (existingSession) {
+        const addedCount = await appendTargetsToReviewTestSession(existingSession.id, orderedTargets);
+        setAdminSelectedTargetKeys([]);
+        setAdminNotice(
+          addedCount > 0
+            ? str.admin.messages.reviewTestSessionAppendSuccess
+                .replace("{name}", trimmedName)
+                .replace("{count}", String(addedCount))
+            : str.admin.messages.reviewTestSessionNoNewTargets.replace("{name}", trimmedName)
+        );
+        await refreshAll();
+        return true;
+      }
+
+      await createReviewTestSession(trimmedName, orderedTargets);
+      setAdminSelectedTargetKeys([]);
+      setAdminNotice(
+        str.admin.messages.reviewTestSessionCreateSuccess
+          .replace("{name}", trimmedName)
+          .replace("{count}", String(orderedTargets.length))
+      );
+      await refreshAll();
+      return true;
+    } catch (error) {
+      const message = getErrorMessage(
+        error,
+        str.admin.messages.reviewTestSessionCreateError
+      );
+      setAdminNotice(message);
+      return false;
+    } finally {
+      setAdminCreatingReviewTestSession(false);
+    }
+  }
+
+  async function handleDeleteReviewTestSession(sessionId: string): Promise<void> {
+    await deleteReviewTestSession(sessionId);
+    await refreshAll();
+  }
+
   // Stable key: only changes when the set of hanzi characters changes.
   // Prevents the admin effect from re-running on every refreshAll() call that
   // produces a new `words` array reference without changing which characters exist.
@@ -2154,6 +2320,13 @@ const gradeLabels = getGradeLabels(str);
       active = false;
     };
   }, [page, adminHanziKey]);
+
+  useEffect(() => {
+    const validKeys = new Set(adminTargets.map((target) => target.key));
+    setAdminSelectedTargetKeys((previous) =>
+      previous.filter((key) => validKeys.has(key))
+    );
+  }, [adminTargets, setAdminSelectedTargetKeys]);
 
   useEffect(() => {
     if (
@@ -2457,6 +2630,30 @@ const gradeLabels = getGradeLabels(str);
     router.push(`/words/review/fill-test?wordId=${encodeURIComponent(wordId)}`);
   }
 
+  function openReviewTestSession(sessionId: string) {
+    router.push(`/words/review/flashcard?reviewTestSessionId=${encodeURIComponent(sessionId)}`);
+  }
+
+  function continueReviewTestSessionToQuiz() {
+    if (!activeReviewTestSession) {
+      return;
+    }
+
+    router.push(
+      `/words/review/fill-test?reviewTestSessionId=${encodeURIComponent(activeReviewTestSession.id)}`
+    );
+  }
+
+  function returnToDueReviewAfterReviewTestSession(status: string, name?: string) {
+    const params = new URLSearchParams();
+    params.set("reviewTestSessionStatus", status);
+    if (name) {
+      params.set("reviewTestSessionName", name);
+    }
+
+    router.push(`/words/review?${params.toString()}`);
+  }
+
   async function submitFlashcardGrade(grade: Grade) {
     if (!currentFlashcardWord || flashcardSubmitting) {
       return;
@@ -2522,6 +2719,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizCompleted(false);
     setQuizInProgress(true);
     setQuizSessionStartTime(Date.now());
+    setCompletedReviewTestSessionName(null);
     setQuizNotice(null);
   }
 
@@ -2531,6 +2729,54 @@ const gradeLabels = getGradeLabels(str);
 
   useEffect(() => {
     if (!isFlashcardReviewPage || loading || flashcardInProgress || flashcardCompleted) {
+      return;
+    }
+
+    if (requestedReviewTestSessionId) {
+      const canStartPackagedSession =
+        session?.isPlatformAdmin === true || session?.role === "child";
+      if (!canStartPackagedSession) {
+        router.replace("/words/review?reviewTestSessionStatus=child_only");
+        return;
+      }
+
+      if (!activeReviewTestSession || !activeReviewTestSessionRuntime) {
+        router.replace("/words/review?reviewTestSessionStatus=missing");
+        return;
+      }
+
+      if (activeReviewTestSessionRuntime.errorCode) {
+        router.replace("/words/review?reviewTestSessionStatus=invalid");
+        return;
+      }
+
+      if (activeReviewTestSessionRuntime.orderedWords.length === 0) {
+        router.replace("/words/review?reviewTestSessionStatus=empty");
+        return;
+      }
+
+      setQuizInProgress(false);
+      setQuizQueue([]);
+      setQuizIndex(0);
+      setQuizSelections([null, null, null]);
+      setQuizResult(null);
+      setQuizActivePhraseIndex(null);
+      setQuizDraggingPhraseIndex(null);
+      setQuizDropSentenceIndex(null);
+      setFlashcardQueue(activeReviewTestSessionRuntime.orderedWords.map(cloneWord));
+      setFlashcardIndex(0);
+      setFlashcardRevealed(true);
+      setFlashcardLlmLoading(false);
+      setFlashcardLlmError(null);
+      setFlashcardHistory([]);
+      setFlashcardCompleted(false);
+      setFlashcardInProgress(true);
+      setCompletedReviewTestSessionName(null);
+      setFlashcardNotice(
+        str.flashcard.reviewTestSession.activeSession
+          .replace("{name}", activeReviewTestSession.name)
+          .replace("{count}", String(activeReviewTestSessionRuntime.orderedWords.length))
+      );
       return;
     }
 
@@ -2563,16 +2809,77 @@ const gradeLabels = getGradeLabels(str);
     setFlashcardInProgress(true);
     setFlashcardNotice(null);
   }, [
+    activeReviewTestSession,
+    activeReviewTestSessionRuntime,
     flashcardCompleted,
     flashcardInProgress,
     isFlashcardReviewPage,
     loading,
     requestedReviewWordId,
+    requestedReviewTestSessionId,
+    router,
+    session?.isPlatformAdmin,
+    session?.role,
     sortedDueWords,
+    str.flashcard.reviewTestSession.activeSession,
   ]);
 
   useEffect(() => {
     if (!isFillTestReviewPage || loading || quizInProgress || quizCompleted) {
+      return;
+    }
+
+    if (requestedReviewTestSessionId) {
+      const canStartPackagedSession =
+        session?.isPlatformAdmin === true || session?.role === "child";
+      if (!canStartPackagedSession) {
+        router.replace("/words/review?reviewTestSessionStatus=child_only");
+        return;
+      }
+
+      if (!activeReviewTestSession || !activeReviewTestSessionRuntime) {
+        router.replace("/words/review?reviewTestSessionStatus=missing");
+        return;
+      }
+
+      if (activeReviewTestSessionRuntime.errorCode) {
+        router.replace("/words/review?reviewTestSessionStatus=invalid");
+        return;
+      }
+
+      if (activeReviewTestSessionRuntime.quizWords.length === 0) {
+        router.replace("/words/review?reviewTestSessionStatus=no_quiz_ready");
+        return;
+      }
+
+      setFlashcardInProgress(false);
+      setFlashcardQueue([]);
+      setFlashcardIndex(0);
+      setFlashcardRevealed(false);
+      setFlashcardLlmLoading(false);
+      setFlashcardLlmError(null);
+      setQuizQueue(
+        activeReviewTestSessionRuntime.quizWords.map((word) => ({
+          ...word,
+          fillTest: cloneFillTest(word.fillTest),
+        }))
+      );
+      setQuizIndex(0);
+      setQuizSelections([null, null, null]);
+      setQuizResult(null);
+      setQuizActivePhraseIndex(null);
+      setQuizDraggingPhraseIndex(null);
+      setQuizDropSentenceIndex(null);
+      setQuizHistory([]);
+      setQuizCompleted(false);
+      setQuizInProgress(true);
+      setQuizSessionStartTime(Date.now());
+      setCompletedReviewTestSessionName(null);
+      setQuizNotice(
+        str.fillTest.reviewTestSession.activeSession
+          .replace("{name}", activeReviewTestSession.name)
+          .replace("{count}", String(activeReviewTestSessionRuntime.quizWords.length))
+      );
       return;
     }
 
@@ -2604,14 +2911,22 @@ const gradeLabels = getGradeLabels(str);
     setQuizCompleted(false);
     setQuizInProgress(true);
     setQuizSessionStartTime(Date.now());
+    setCompletedReviewTestSessionName(null);
     setQuizNotice(null);
   }, [
+    activeReviewTestSession,
+    activeReviewTestSessionRuntime,
     fillTestDueWords,
     isFillTestReviewPage,
     loading,
     quizCompleted,
     quizInProgress,
     requestedReviewWordId,
+    requestedReviewTestSessionId,
+    router,
+    session?.isPlatformAdmin,
+    session?.role,
+    str.fillTest.reviewTestSession.activeSession,
   ]);
 
   async function submitCurrentQuizWord() {
@@ -2672,6 +2987,11 @@ const gradeLabels = getGradeLabels(str);
 
     const isLastWord = quizIndex >= quizQueue.length - 1;
     if (isLastWord) {
+      const completedReviewTestSession =
+        requestedReviewTestSessionId && activeReviewTestSession
+          ? activeReviewTestSession
+          : null;
+
       // Create and save the quiz session before finishing
       try {
         if (quizSessionStartTime !== null) {
@@ -2739,9 +3059,31 @@ const gradeLabels = getGradeLabels(str);
         // Don't block quiz completion if session save fails
       }
 
+      if (completedReviewTestSession) {
+        try {
+          await completeReviewTestSession(completedReviewTestSession.id);
+          setCompletedReviewTestSessionName(completedReviewTestSession.name);
+        } catch (error) {
+          console.error("Failed to complete review test session:", error);
+          setQuizNotice(
+            str.fillTest.reviewTestSession.completeError.replace(
+              "{name}",
+              completedReviewTestSession.name
+            )
+          );
+        }
+      }
+
       stopQuizSession();
       setQuizCompleted(true);
-      setQuizNotice(str.fillTest.completionMessage);
+      setQuizNotice(
+        completedReviewTestSession
+          ? str.fillTest.reviewTestSession.completed.replace(
+              "{name}",
+              completedReviewTestSession.name
+            )
+          : str.fillTest.completionMessage
+      );
       await refreshAll();
       return;
     }
@@ -2750,7 +3092,32 @@ const gradeLabels = getGradeLabels(str);
     resetQuizWordState();
   }
 
-  const pronunciationEntries = flashcardInfo?.pronunciations ?? [];
+  const pronunciationEntries = useMemo(() => {
+    const dictionaryEntries = flashcardInfo?.pronunciations ?? [];
+    if (!requestedReviewTestSessionId || activeReviewTestSessionPronunciations.length === 0) {
+      return dictionaryEntries;
+    }
+
+    const allowed = new Set(activeReviewTestSessionPronunciations);
+    const filteredDictionaryEntries = dictionaryEntries.filter((entry) =>
+      allowed.has(entry.pinyin.trim())
+    );
+    const existingPinyin = new Set(
+      filteredDictionaryEntries.map((entry) => entry.pinyin.trim())
+    );
+    const missingEntries = activeReviewTestSessionPronunciations
+      .filter((pinyin) => !existingPinyin.has(pinyin))
+      .map((pinyin) => ({
+        pinyin,
+        explanations: [],
+      }));
+
+    return [...filteredDictionaryEntries, ...missingEntries];
+  }, [
+    activeReviewTestSessionPronunciations,
+    flashcardInfo?.pronunciations,
+    requestedReviewTestSessionId,
+  ]);
   const sectionVm = {
     page,
     str,
@@ -2762,15 +3129,21 @@ const gradeLabels = getGradeLabels(str);
     isDueReviewPage,
     dueWords,
     fillTestDueWords,
+    reviewTestSessionRows,
+    reviewTestSessions,
     loading,
     sortedDueWords,
     openFlashcardReview,
     openFillTestReview,
+    openReviewTestSession,
     toggleDueWordsSort,
     getDueSortIndicator,
     formatDateTime,
     formatProbability,
     hasFillTest,
+    handleDeleteReviewTestSession,
+    reviewTestSessionStatus,
+    reviewTestSessionName,
     isFlashcardReviewPage,
     flashcardNotice,
     flashcardInProgress,
@@ -2793,6 +3166,10 @@ const gradeLabels = getGradeLabels(str);
     flashcardCompleted,
     flashcardHistory,
     flashcardSummary,
+    activeReviewTestSession,
+    activeReviewTestSessionQuizCount,
+    activeReviewTestSessionSkippedQuizCount,
+    continueReviewTestSessionToQuiz,
     isFillTestReviewPage,
     skippedDueCount,
     quizNotice,
@@ -2831,6 +3208,8 @@ const gradeLabels = getGradeLabels(str);
     moveQuizForward,
     quizSummary,
     quizSessionCoins,
+    completedReviewTestSessionName,
+    returnToDueReviewAfterReviewTestSession,
     calculateNextState,
     manualSelectionSet,
     toggleManualSelection,
@@ -2839,6 +3218,8 @@ const gradeLabels = getGradeLabels(str);
     handleAdminStatsFilterClick,
     isAdminStatsFilterActive,
     adminStatsFilter,
+    adminSelectedTargetKeys,
+    adminCreatingReviewTestSession,
     adminUniqueCharacterCount,
     adminTargets,
     adminTargetsWithContentCount,
@@ -2884,6 +3265,9 @@ const gradeLabels = getGradeLabels(str);
     handleAdminRegenerateExample,
     handleAdminEditExample,
     handleAdminDeleteExample,
+    toggleAdminTargetSelection,
+    clearAdminTargetSelection,
+    createSelectedReviewTestSession,
     allWordsSummary,
     words,
     toggleAllWordsSort,
@@ -2907,7 +3291,6 @@ const gradeLabels = getGradeLabels(str);
     wordTagsMap,
   };
 
-  const session = useSession();
   const navItems = getNavItems(
     str,
     session?.role,

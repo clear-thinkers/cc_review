@@ -65,6 +65,28 @@ export const wordsStrings = {
       startFillTest: "Start fill-test review",
       loading: "Loading due characters...",
       noCharacters: "No due characters right now.",
+      reviewTestSessions: {
+        title: "Test Sessions",
+        empty: "No packaged test sessions yet.",
+        createdAt: "Created",
+        targets: "Packaged targets",
+        quizReady: "Quiz-ready characters",
+        action: "Action",
+        start: "Start session",
+        delete: "Delete session",
+        deleting: "Deleting...",
+        disabledNoQuizReady: "No quiz-ready characters in this session yet.",
+        childOnly: "Child only",
+        statusCompleted: "Completed session: {name}",
+        statusMissing: "This test session is no longer available.",
+        statusChildOnly: "Only child profiles can start a packaged test session.",
+        statusInvalid: "This test session is blocked because the packaged character data is invalid.",
+        statusEmpty: "This test session has no packaged characters to review.",
+        statusNoQuizReady: "This test session has no quiz-ready characters yet.",
+        confirmDelete: "Delete the whole test session \"{name}\"?",
+        deleteSuccess: "Deleted test session: {name}",
+        deleteError: "Could not delete test session: {name}",
+      },
       table: {
         character: "Character",
         nextReviewDate: "Next Review Date",
@@ -119,6 +141,10 @@ export const wordsStrings = {
         title: "Last Flashcard Summary",
         charactersReviewed: "Characters reviewed:",
       },
+      reviewTestSession: {
+        activeSession: "Test session: {name} ({count} characters)",
+        startQuizButton: "Start quiz",
+      },
     },
 
     // ============= FILL-TEST REVIEW PAGE =============
@@ -168,9 +194,18 @@ export const wordsStrings = {
         title: "Last Fill-Test Summary",
         charactersReviewed: "Characters reviewed:",
         correctBlanks: "correct blanks: ",
+        fullyCorrect: "Fully correct:",
+        partiallyCorrect: "Partially correct:",
+        fullyWrong: "Fully wrong:",
         coinsEarned: "Coins Earned:",
       },
       completionMessage: "Fill-test quiz complete.",
+      reviewTestSession: {
+        activeSession: "Test session quiz: {name} ({count} characters)",
+        completed: "Completed test session: {name}",
+        completeError: "Quiz finished, but the test session could not be marked complete: {name}",
+        returnToDueReviewButton: "Return to Due Review",
+      },
     },
 
     // ============= QUIZ RESULTS PAGE =============
@@ -246,6 +281,8 @@ export const wordsStrings = {
         cancellingPreload: "Cancelling...",
         refreshAllPinyin: "Regenerate missing pinyin",
         refreshingAllPinyin: "Regenerating...",
+        addToReviewTestSession: "Add to test session",
+        clearReviewTestSelection: "Clear selection",
       },
       buttonTooltips: {
         preload: "Generate content for all characters/pronunciations that are missing content. Estimated wait time: ~2 min (20 words), ~5 min (50 words), ~12 min (100 words).",
@@ -278,6 +315,8 @@ export const wordsStrings = {
           cancel: "Cancel",
           fillTestOn: "Test On",
           fillTestOff: "Test Off",
+          selectTarget: "Select",
+          deselectTarget: "Selected",
         },
         actionTooltips: {
           regenerate: "Regenerate all content",
@@ -296,6 +335,8 @@ export const wordsStrings = {
           regenerateExample: "Regenerate example",
           editExample: "Edit example inline",
           deleteExample: "Delete this example row",
+          selectTarget: "Select this target for a packaged test session",
+          deselectTarget: "Remove this target from the packaged test session selection",
         },
         confirmDeleteRow:
           "Delete {character} ({pronunciation}) from Content Admin? Saved content for this row will also be removed.",
@@ -304,6 +345,11 @@ export const wordsStrings = {
         summary: {
           filteredLabel: "Filtered",
           noFiltersApplied: "No filters applied",
+          selectedLabel: "Selected",
+          separator: " | ",
+        },
+        selection: {
+          selectAllVisible: "Select all visible",
         },
         placeholders: {
           newMeaning: "Enter new meaning",
@@ -350,6 +396,20 @@ export const wordsStrings = {
         exampleMustInclude: "Example must include the phrase.",
         noContentToRefresh: "No saved content to refresh pinyin.",
         pinyinRefreshFinished: "Pinyin refresh finished. Refreshed {refreshed}, failed {failed}.",
+        reviewTestSessionNameRequired: "Enter a session name.",
+        reviewTestSessionNoSelection: "Select at least one target first.",
+        reviewTestSessionDuplicateName: "That session name is already in use.",
+        reviewTestSessionCreateSuccess: "Created test session {name} with {count} target(s).",
+        reviewTestSessionAppendSuccess: "Added {count} target(s) to test session {name}.",
+        reviewTestSessionNoNewTargets: "All selected targets are already in test session {name}.",
+        reviewTestSessionCreateError: "Could not create the test session. Please try again.",
+      },
+      reviewTestSession: {
+        selectedCount: "Selected targets: {count}",
+        nameLabel: "Session name",
+        namePlaceholder: "Enter or reuse a session name",
+        createButton: "Save session",
+        cancelButton: "Cancel",
       },
       emptyTableMessages: {
         missingContent: "No missing targets.",
@@ -538,6 +598,28 @@ export const wordsStrings = {
       startFillTest: "开始填空测试",
       loading: "正在加载待复习汉字...",
       noCharacters: "当前没有待复习汉字。",
+      reviewTestSessions: {
+        title: "测验",
+        empty: "还没有家长指定的测验。",
+        createdAt: "创建时间",
+        targets: "家长指定的测验目标",
+        quizReady: "可测汉字数",
+        action: "操作",
+        start: "开始测验",
+        delete: "删除测验",
+        deleting: "删除中...",
+        disabledNoQuizReady: "这个测验里还没有可测汉字。",
+        childOnly: "仅限孩子",
+        statusCompleted: "已完成测验：{name}",
+        statusMissing: "这个测验已不可用。",
+        statusChildOnly: "只有孩子档案可以开始家长指定的测验。",
+        statusInvalid: "这个测验无法进行，因为家长指定的汉字数据无效。",
+        statusEmpty: "这个测验里没有可复习的汉字。",
+        statusNoQuizReady: "这个测验里还没有可测汉字。",
+        confirmDelete: "要删除整个测验“{name}”吗？",
+        deleteSuccess: "已删除测验：{name}",
+        deleteError: "删除测验失败：{name}",
+      },
       table: {
         character: "汉字",
         nextReviewDate: "下次复习日期",
@@ -591,6 +673,10 @@ export const wordsStrings = {
         title: "上次闪卡总结",
         charactersReviewed: "已复习汉字:",
       },
+      reviewTestSession: {
+        activeSession: "测验：{name}（{count} 个汉字）",
+        startQuizButton: "开始测试",
+      },
     },
 
     // ============= FILL-TEST REVIEW PAGE =============
@@ -640,9 +726,18 @@ export const wordsStrings = {
         title: "上次填空总结",
         charactersReviewed: "已测试汉字:",
         correctBlanks: "填空正确: ",
+        fullyCorrect: "全部正确:",
+        partiallyCorrect: "部分正确:",
+        fullyWrong: "全部错误:",
         coinsEarned: "获得金币:",
       },
       completionMessage: "填空测试已完成",
+      reviewTestSession: {
+        activeSession: "测验：{name}（{count} 个汉字）",
+        completed: "已完成测验：{name}",
+        completeError: "测验已完成，但无法把测验标记为已完成：{name}",
+        returnToDueReviewButton: "返回待复习",
+      },
     },
 
     // ============= 测验结果页面 =============
@@ -717,6 +812,8 @@ export const wordsStrings = {
         cancellingPreload: "取消中...",
         refreshAllPinyin: "批量生成拼音",
         refreshingAllPinyin: "生成中...",
+        addToReviewTestSession: "加入测验",
+        clearReviewTestSelection: "清除选择",
       },
       buttonTooltips: {
         preload: "为所有丢失内容的汉字/发音组合生成内容。预计等待时间：约2分钟（20个汉字）、约5分钟（50个汉字）、约12分钟（100个汉字）。",
@@ -749,6 +846,8 @@ export const wordsStrings = {
           cancel: "取消",
           fillTestOn: "录入On",
           fillTestOff: "录入Off",
+          selectTarget: "选择",
+          deselectTarget: "已选",
         },
         actionTooltips: {
           regenerate: "重新生成全部内容",
@@ -767,6 +866,8 @@ export const wordsStrings = {
           regenerateExample: "重新生成例句",
           editExample: "行内编辑例句",
           deleteExample: "删除该例句行",
+          selectTarget: "选择这个目标加入家长指定的测验",
+          deselectTarget: "把这个目标从家长指定的测验选择中移除",
         },
         confirmDeleteRow:
           "要从内容管理中删除 {character}（{pronunciation}）这一行吗？该行已保存的内容也会一并删除。",
@@ -775,6 +876,11 @@ export const wordsStrings = {
         summary: {
           filteredLabel: "筛选后",
           noFiltersApplied: "未应用筛选",
+          selectedLabel: "已选择",
+          separator: " | ",
+        },
+        selection: {
+          selectAllVisible: "选择当前页全部",
         },
         placeholders: {
           newMeaning: "输入新释义",
@@ -822,6 +928,20 @@ export const wordsStrings = {
         exampleMustInclude: "例句需要包含短语。",
         noContentToRefresh: "无保存内容可生成拼音。",
         pinyinRefreshFinished: "拼音生成完成。已生成 {refreshed} 个，失败 {failed} 个。",
+        reviewTestSessionNameRequired: "请输入测验名称。",
+        reviewTestSessionNoSelection: "请先至少选择一个目标。",
+        reviewTestSessionDuplicateName: "这个测验名称已经在使用中。",
+        reviewTestSessionCreateSuccess: "已创建测验 {name}，共 {count} 个目标。",
+        reviewTestSessionAppendSuccess: "已向测验 {name} 添加 {count} 个目标。",
+        reviewTestSessionNoNewTargets: "所选目标都已经在测验 {name} 中。",
+        reviewTestSessionCreateError: "创建测验失败。请重试。",
+      },
+      reviewTestSession: {
+        selectedCount: "已选择目标：{count}",
+        nameLabel: "测验名称",
+        namePlaceholder: "输入或复用测验名称",
+        createButton: "保存测验",
+        cancelButton: "取消",
       },
       emptyTableMessages: {
         missingContent: "没有缺少内容的条目。",

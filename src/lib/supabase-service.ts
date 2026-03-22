@@ -23,6 +23,10 @@ import type {
   ResolvedLessonTag,
 } from "@/app/words/shared/tagging.types";
 import type { HiddenAdminTarget } from "@/app/words/admin/admin.types";
+import type {
+  ReviewTestSession,
+  ReviewTestSessionTargetDraft,
+} from "@/app/words/review/review.types";
 
 // ─── Exported types (moved from db.ts) ─────────────────────────────────────
 
@@ -153,6 +157,76 @@ function toQuizSession(row: SupabaseQuizSessionRow): QuizSession {
     totalGrades: row.total_grades,
     durationSeconds: row.duration_seconds,
     coinsEarned: row.coins_earned,
+  };
+}
+
+interface SupabaseReviewTestSessionRow {
+  id: string;
+  name: string;
+  created_at: string;
+  created_by_user_id: string;
+  completed_at: string | null;
+  completed_by_user_id: string | null;
+}
+
+interface SupabaseReviewTestSessionTargetRow {
+  session_id: string;
+  character: string;
+  pronunciation: string;
+  display_order: number;
+}
+
+function normalizeReviewTestSessionDraftTargets(
+  targets: ReviewTestSessionTargetDraft[]
+): ReviewTestSessionTargetDraft[] {
+  const seenKeys = new Set<string>();
+  const normalized: ReviewTestSessionTargetDraft[] = [];
+
+  for (const target of targets) {
+    const character = target.character.trim();
+    const pronunciation = target.pronunciation.trim();
+    const key = `${character}|${pronunciation}`;
+    if (!character || !pronunciation || seenKeys.has(key)) {
+      continue;
+    }
+
+    seenKeys.add(key);
+    normalized.push({
+      character,
+      pronunciation,
+      key,
+    });
+  }
+
+  return normalized;
+}
+
+function toReviewTestSessionTarget(
+  row: SupabaseReviewTestSessionTargetRow
+): ReviewTestSession["targets"][number] {
+  const character = row.character.trim();
+  const pronunciation = row.pronunciation.trim();
+  return {
+    sessionId: row.session_id,
+    character,
+    pronunciation,
+    key: `${character}|${pronunciation}`,
+    displayOrder: row.display_order,
+  };
+}
+
+function toReviewTestSession(
+  row: SupabaseReviewTestSessionRow,
+  targets: ReviewTestSession["targets"]
+): ReviewTestSession {
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: new Date(row.created_at).getTime(),
+    createdByUserId: row.created_by_user_id,
+    completedAt: row.completed_at ? new Date(row.completed_at).getTime() : null,
+    completedByUserId: row.completed_by_user_id,
+    targets,
   };
 }
 
@@ -437,6 +511,173 @@ export async function restoreHiddenAdminTargetsForHanzi(hanziList: string[]): Pr
     .eq("family_id", familyId)
     .in("character", normalized);
   if (error) throw new Error(`restoreHiddenAdminTargetsForHanzi: ${error.message}`);
+}
+
+export async function listReviewTestSessions(): Promise<ReviewTestSession[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data: sessionRows, error: sessionError } = await supabase
+    .from("review_test_sessions")
+    .select("id, name, created_at, created_by_user_id, completed_at, completed_by_user_id")
+    .eq("family_id", familyId)
+    .is("completed_at", null)
+    .order("created_at", { ascending: false });
+  if (sessionError) throw new Error(`listReviewTestSessions: ${sessionError.message}`);
+
+  const sessions = (sessionRows as SupabaseReviewTestSessionRow[]) ?? [];
+  if (sessions.length === 0) {
+    return [];
+  }
+
+  const sessionIds = sessions.map((row) => row.id);
+  const { data: targetRows, error: targetError } = await supabase
+    .from("review_test_session_targets")
+    .select("session_id, character, pronunciation, display_order")
+    .eq("family_id", familyId)
+    .in("session_id", sessionIds)
+    .order("display_order", { ascending: true });
+  if (targetError) throw new Error(`listReviewTestSessions targets: ${targetError.message}`);
+
+  const targetsBySessionId = new Map<string, ReviewTestSession["targets"]>();
+  for (const targetRow of (targetRows as SupabaseReviewTestSessionTargetRow[]) ?? []) {
+    const list = targetsBySessionId.get(targetRow.session_id) ?? [];
+    list.push(toReviewTestSessionTarget(targetRow));
+    targetsBySessionId.set(targetRow.session_id, list);
+  }
+
+  return sessions.map((session) =>
+    toReviewTestSession(session, targetsBySessionId.get(session.id) ?? [])
+  );
+}
+
+export async function createReviewTestSession(
+  name: string,
+  targets: ReviewTestSessionTargetDraft[]
+): Promise<ReviewTestSession> {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    throw new Error("Session name is required.");
+  }
+
+  const normalizedTargets = normalizeReviewTestSessionDraftTargets(targets);
+
+  if (normalizedTargets.length === 0) {
+    throw new Error("Select at least one target for the session.");
+  }
+
+  const { familyId, userId } = await getSessionMetadata();
+  const sessionId = `review-test-session-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+
+  const { error: sessionError } = await supabase.from("review_test_sessions").insert({
+    id: sessionId,
+    family_id: familyId,
+    name: trimmedName,
+    created_by_user_id: userId,
+  });
+  if (sessionError) throw new Error(`createReviewTestSession session: ${sessionError.message}`);
+
+  const targetRows = normalizedTargets.map((target, index) => ({
+    session_id: sessionId,
+    family_id: familyId,
+    character: target.character,
+    pronunciation: target.pronunciation,
+    display_order: index,
+  }));
+  const { error: targetError } = await supabase
+    .from("review_test_session_targets")
+    .insert(targetRows);
+  if (targetError) throw new Error(`createReviewTestSession targets: ${targetError.message}`);
+
+  return {
+    id: sessionId,
+    name: trimmedName,
+    createdAt: Date.now(),
+    createdByUserId: userId,
+    completedAt: null,
+    completedByUserId: null,
+    targets: normalizedTargets.map((target, index) => ({
+      sessionId,
+      character: target.character,
+      pronunciation: target.pronunciation,
+      key: target.key,
+      displayOrder: index,
+    })),
+  };
+}
+
+export async function appendTargetsToReviewTestSession(
+  sessionId: string,
+  targets: ReviewTestSessionTargetDraft[]
+): Promise<number> {
+  const normalizedTargets = normalizeReviewTestSessionDraftTargets(targets);
+  if (normalizedTargets.length === 0) {
+    throw new Error("Select at least one target for the session.");
+  }
+
+  const { familyId } = await getSessionMetadata();
+  const { data: existingTargetRows, error: existingTargetsError } = await supabase
+    .from("review_test_session_targets")
+    .select("session_id, character, pronunciation, display_order")
+    .eq("family_id", familyId)
+    .eq("session_id", sessionId)
+    .order("display_order", { ascending: true });
+  if (existingTargetsError) {
+    throw new Error(`appendTargetsToReviewTestSession existing targets: ${existingTargetsError.message}`);
+  }
+
+  const existingTargets = (existingTargetRows as SupabaseReviewTestSessionTargetRow[] | null)?.map(
+    toReviewTestSessionTarget
+  ) ?? [];
+  const existingKeys = new Set(existingTargets.map((target) => target.key));
+  const nextDisplayOrder =
+    existingTargets.reduce((maxOrder, target) => Math.max(maxOrder, target.displayOrder), -1) + 1;
+  const targetRows = normalizedTargets
+    .filter((target) => !existingKeys.has(target.key))
+    .map((target, index) => ({
+      session_id: sessionId,
+      family_id: familyId,
+      character: target.character,
+      pronunciation: target.pronunciation,
+      display_order: nextDisplayOrder + index,
+    }));
+
+  if (targetRows.length === 0) {
+    return 0;
+  }
+
+  const { error: targetError } = await supabase
+    .from("review_test_session_targets")
+    .insert(targetRows);
+  if (targetError) {
+    throw new Error(`appendTargetsToReviewTestSession insert: ${targetError.message}`);
+  }
+
+  return targetRows.length;
+}
+
+export async function deleteReviewTestSession(sessionId: string): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("review_test_sessions")
+    .delete()
+    .eq("family_id", familyId)
+    .eq("id", sessionId)
+    .is("completed_at", null)
+    .select("id");
+  if (error) {
+    throw new Error(`deleteReviewTestSession: ${error.message}`);
+  }
+  if (!data || data.length === 0) {
+    throw new Error("Review test session not found.");
+  }
+}
+
+export async function completeReviewTestSession(sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc("complete_review_test_session", {
+    p_session_id: sessionId,
+  });
+  if (error) throw new Error(`completeReviewTestSession: ${error.message}`);
 }
 
 // ─── Quiz Sessions ──────────────────────────────────────────────────────────

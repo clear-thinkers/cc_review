@@ -26,6 +26,8 @@ export function useAdminState() {
   const [adminPendingMeanings, setAdminPendingMeanings] = useState<AdminPendingMeaning[]>([]);
   const [adminEditingExampleRowKey, setAdminEditingExampleRowKey] = useState<string | null>(null);
   const [adminStatsFilter, setAdminStatsFilter] = useState<AdminStatsFilter>("targets");
+  const [adminSelectedTargetKeys, setAdminSelectedTargetKeys] = useState<string[]>([]);
+  const [adminCreatingReviewTestSession, setAdminCreatingReviewTestSession] = useState(false);
 
   return {
     adminTargets,
@@ -63,5 +65,9 @@ export function useAdminState() {
     setAdminEditingExampleRowKey,
     adminStatsFilter,
     setAdminStatsFilter,
+    adminSelectedTargetKeys,
+    setAdminSelectedTargetKeys,
+    adminCreatingReviewTestSession,
+    setAdminCreatingReviewTestSession,
   };
 }

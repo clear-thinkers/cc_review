@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-03-21_ (Content Admin row deletion and hidden-target persistence documented)
+_Last updated: 2026-03-21_ (Review test sessions documented)
 
 ---
 
@@ -122,6 +122,12 @@ These rules govern content curation at `/words/admin`:
 18. Deleted Content Admin rows are persisted in `hidden_admin_targets` and excluded from future admin target derivation for that family.
 19. Re-adding a Hanzi on `/words/add` restores any hidden Content Admin targets for that Hanzi across all pronunciations in the current family.
 20. Content Admin pagination must not split a character across pages. If a page boundary would cut through a character's rows, the entire character block stays together on the earlier page, even when that page exceeds the nominal row count.
+21. Parent and platform-admin users can multi-select Content Admin targets and package them into a named review test session.
+22. Review test session selection unit is the existing Content Admin target key: `character|pronunciation`.
+23. Review test session names are unique per family among active sessions and remain case-sensitive.
+24. Reusing an existing active session name with exact case appends only new `character|pronunciation` targets to that session instead of creating a duplicate session row.
+25. Review test session creation order is computed at save time by familiarity ascending, then character ascending, then pronunciation ascending.
+26. Creating or appending a review test session persists only target membership metadata; it does not duplicate flashcard content into a second content table.
 
 ### Due Review Queue Rules
 
@@ -138,6 +144,14 @@ These rules govern the due queue view at `/words/review`:
 7. Due-table sorting is client-side; default due ordering uses `nextReviewAt` then `createdAt` as tie-breaker.
 8. Fill-test start/action controls are enabled only when a due row has a usable derived `fillTest`.
 9. Any change to fill-test eligibility or semantics must be reflected here and in the Content Admin Curation Rules (§1) concurrently. Failure to update both documents is a documentation gap.
+10. Due Review also lists active packaged review test sessions for both parent and child users.
+11. Packaged review test sessions are visible on Due Review even when their packaged characters are not currently due.
+12. Parents may inspect packaged targets from Due Review and may delete an active packaged review test session, but cannot initiate one.
+13. Children (and platform admin) may initiate a packaged review test session from Due Review only when at least one packaged character has usable quiz content.
+14. Packaged review test sessions run in two phases: flashcard review first, then immediate handoff into fill-test for the same packaged character set.
+15. Runtime groups multiple packaged targets for the same Hanzi back into one character-level review/test unit; grading remains character-level on the underlying `words.id`.
+16. If duplicate `words` rows for the same Hanzi are encountered at packaged-session runtime despite the schema uniqueness rule, the session must block with an error rather than guess.
+17. Completing a packaged review test session marks it complete and removes it from the active Due Review session list; its name becomes reusable for a future session in the same family.
 
 ### Flashcard Review Rules (`/words/review/flashcard`)
 
@@ -369,6 +383,31 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `pronunciation` | text | Pinyin variant hidden for this family |
 | `created_at` | timestamptz | Server timestamp |
 | **Unique constraint** | | `(family_id, character, pronunciation)` |
+
+**`review_test_sessions` table** — active/completed packaged review sessions, scoped to family
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | text | Primary key; unique session ID |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `name` | text | Session display name; case-sensitive uniqueness among active sessions |
+| `created_by_user_id` | uuid | Foreign key → `users.id`; parent/platform admin creator |
+| `created_at` | timestamptz | Server timestamp |
+| `completed_at` | timestamptz (nullable) | Null while active; set when child completes the session |
+| `completed_by_user_id` | uuid (nullable) | Foreign key → `users.id`; child who completed the session |
+| **Active-name uniqueness** | | Partial unique index on `(family_id, name)` where `completed_at is null` |
+
+**`review_test_session_targets` table** — packaged Content Admin targets for a review session
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `session_id` | text | Foreign key → `review_test_sessions.id`; cascades on delete |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `character` | text | Packaged Hanzi character |
+| `pronunciation` | text | Packaged pronunciation for that Hanzi |
+| `display_order` | integer | Save-time target order after familiarity/character/pronunciation sorting |
+| **Unique constraint** | | `(session_id, character, pronunciation)` |
 
 **`quiz_sessions` table** — completed fill-test session records, immutable audit
 

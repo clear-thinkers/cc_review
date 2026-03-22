@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, memo, useCallback, useRef, useState, useEffect, useTransition } from "react";
+import { useMemo, memo, useCallback, useRef, useState, useEffect, useTransition, type FormEvent } from "react";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import type { WordsLocaleStrings } from "../shared/words.shared.types";
 import type {
@@ -98,6 +98,7 @@ export function paginateAdminRowsByCharacter(
 type AdminTableRowComponentProps = {
   row: AdminTableRenderRow;
   target: AdminTarget | undefined;
+  isSelected: boolean;
   rawValue: string;
   isRegenerating: boolean;
   isSaving: boolean;
@@ -128,11 +129,13 @@ type AdminTableRowComponentProps = {
   onRegenerateExample: (row: AdminTableRow) => void;
   onEditExample: (row: AdminTableRow) => void;
   onDeleteExample: (row: AdminTableRow) => void;
+  onToggleSelection: (targetKey: string) => void;
 };
 
 const AdminTableRowComponent = memo(function AdminTableRowComponent({
   row,
   target,
+  isSelected,
   rawValue,
   isRegenerating,
   isSaving,
@@ -159,6 +162,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   onRegenerateExample,
   onEditExample,
   onDeleteExample,
+  onToggleSelection,
 }: AdminTableRowComponentProps) {
   const busy = adminPreloading || isRegenerating || isSaving || isDeleting;
   const canSave = Boolean(rawValue.trim());
@@ -169,6 +173,22 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
 
   return (
     <tr key={row.rowKey} className="border-b align-top">
+      <td className="px-3 py-2 text-center">
+        {row.showCharacterCell && target ? (
+          <input
+            type="checkbox"
+            checked={isSelected}
+            disabled={busy}
+            onChange={() => onToggleSelection(target.key)}
+            title={
+              isSelected
+                ? str.admin.table.actionTooltips.deselectTarget
+                : str.admin.table.actionTooltips.selectTarget
+            }
+            aria-label={`${str.admin.table.actionButtons.selectTarget}: ${row.character} (${row.pronunciation})`}
+          />
+        ) : null}
+      </td>
       <td className="px-3 py-2 text-base">
         {row.showCharacterCell ? (
           <div className="flex min-h-[5rem] flex-col justify-between gap-2">
@@ -486,6 +506,9 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminTargetsReadyForTestingCount,
     adminTargetsExcludedForTestingCount,
     adminStatsFilter,
+    adminSelectedTargetKeys,
+    adminCreatingReviewTestSession,
+    reviewTestSessions,
     handleAdminPreloadAll,
     cancelAdminPreload,
     adminPreloadCancelling,
@@ -523,6 +546,9 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     handleAdminRegenerateExample,
     handleAdminEditExample,
     handleAdminDeleteExample,
+    toggleAdminTargetSelection,
+    clearAdminTargetSelection,
+    createSelectedReviewTestSession,
   } = vm;
 
   const vmRef = useRef(vm);
@@ -534,6 +560,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [filterFamiliarityValue, setFilterFamiliarityValue] = useState<number | "">("");
   const [filterSelectedTagIds, setFilterSelectedTagIds] = useState<string[]>([]);
   const [filterSectionOpen, setFilterSectionOpen] = useState(false);
+  const [reviewTestSessionFormOpen, setReviewTestSessionFormOpen] = useState(false);
+  const [reviewTestSessionName, setReviewTestSessionName] = useState("");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -625,11 +653,27 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     const pageRows = adminRowPages[validPage - 1] ?? [];
     return computeRenderRows(pageRows);
   }, [adminRowPages, validPage]);
+  const paginatedAdminTargetKeys = useMemo(
+    () => Array.from(new Set(paginatedAdminRenderRows.map((row) => row.targetKey))),
+    [paginatedAdminRenderRows]
+  );
+  const allVisibleSelected =
+    paginatedAdminTargetKeys.length > 0 &&
+    paginatedAdminTargetKeys.every((targetKey) => adminSelectedTargetKeys.includes(targetKey));
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [filterDueNow, filterFamiliarityValue, filterSelectedTagIds]);
+
+  useEffect(() => {
+    if (adminSelectedTargetKeys.length > 0) {
+      return;
+    }
+
+    setReviewTestSessionFormOpen(false);
+    setReviewTestSessionName("");
+  }, [adminSelectedTargetKeys.length]);
 
   function clearAllFilters(): void {
     setFilterDueNow(false);
@@ -687,6 +731,22 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const stableOnRegenerateExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminRegenerateExample(row), []);
   const stableOnEditExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminEditExample(row), []);
   const stableOnDeleteExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminDeleteExample(row), []);
+  const stableOnToggleSelection = useCallback(
+    (targetKey: string) => vmRef.current.toggleAdminTargetSelection(targetKey),
+    []
+  );
+  const handleToggleAllVisibleSelection = useCallback(
+    (checked: boolean) => {
+      const selectedKeys = new Set(vmRef.current.adminSelectedTargetKeys);
+      paginatedAdminTargetKeys.forEach((targetKey) => {
+        const isSelected = selectedKeys.has(targetKey);
+        if (isSelected !== checked) {
+          vmRef.current.toggleAdminTargetSelection(targetKey);
+        }
+      });
+    },
+    [paginatedAdminTargetKeys]
+  );
 
   // Page-specific handlers - only process targets visible on current page
   const handleAdminPreloadPage = useCallback(async () => {
@@ -700,6 +760,19 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     // Pagination ensures only current page targets are shown
     return vmRef.current.handleAdminRefreshAllPinyin();
   }, []);
+
+  async function handleCreateReviewTestSessionSubmit(
+    event: FormEvent<HTMLFormElement>
+  ): Promise<void> {
+    event.preventDefault();
+    const created = await vmRef.current.createSelectedReviewTestSession(reviewTestSessionName);
+    if (!created) {
+      return;
+    }
+
+    setReviewTestSessionName("");
+    setReviewTestSessionFormOpen(false);
+  }
 
   if (page !== "admin") {
     return null;
@@ -830,6 +903,76 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
       {adminProgressText ? <p className="text-sm text-gray-600">{adminProgressText}</p> : null}
       {adminNotice ? <p className="text-sm text-blue-700">{adminNotice}</p> : null}
+      {adminSelectedTargetKeys.length > 0 ? (
+        <div className="space-y-2 rounded-md border p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-gray-700">
+              {str.admin.reviewTestSession.selectedCount.replace(
+                "{count}",
+                String(adminSelectedTargetKeys.length)
+              )}
+            </p>
+            <button
+              type="button"
+              className="rounded-md border-2 border-sky-300 bg-sky-50 px-4 py-2 font-medium text-sky-800 disabled:opacity-50"
+              disabled={adminCreatingReviewTestSession}
+              onClick={() => {
+                setReviewTestSessionName(reviewTestSessions[0]?.name ?? "");
+                setReviewTestSessionFormOpen(true);
+              }}
+            >
+              {str.admin.buttons.addToReviewTestSession}
+            </button>
+            <button
+              type="button"
+              className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
+              disabled={adminCreatingReviewTestSession}
+              onClick={() => {
+                vmRef.current.clearAdminTargetSelection();
+                setReviewTestSessionFormOpen(false);
+                setReviewTestSessionName("");
+              }}
+            >
+              {str.admin.buttons.clearReviewTestSelection}
+            </button>
+          </div>
+
+          {reviewTestSessionFormOpen ? (
+            <form className="space-y-2" onSubmit={handleCreateReviewTestSessionSubmit}>
+              <label className="block text-sm text-gray-700" htmlFor="review-test-session-name">
+                {str.admin.reviewTestSession.nameLabel}
+              </label>
+              <input
+                id="review-test-session-name"
+                className="w-full rounded-md border px-2 py-1 text-sm"
+                value={reviewTestSessionName}
+                onChange={(event) => setReviewTestSessionName(event.target.value)}
+                placeholder={str.admin.reviewTestSession.namePlaceholder}
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  className="rounded-md border-2 border-sky-300 bg-sky-50 px-4 py-2 font-medium text-sky-800 disabled:opacity-50"
+                  disabled={adminCreatingReviewTestSession}
+                >
+                  {str.admin.reviewTestSession.createButton}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
+                  disabled={adminCreatingReviewTestSession}
+                  onClick={() => {
+                    setReviewTestSessionFormOpen(false);
+                    setReviewTestSessionName("");
+                  }}
+                >
+                  {str.admin.reviewTestSession.cancelButton}
+                </button>
+              </div>
+            </form>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Default Filters Bar */}
       <div className="rounded-lg border p-4 space-y-3">
@@ -924,6 +1067,9 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           ) : (
             str.admin.table.summary.noFiltersApplied
           )}
+          {str.admin.table.summary.separator}
+          {str.admin.table.summary.selectedLabel}{" "}
+          <span className="font-semibold text-blue-600">{adminSelectedTargetKeys.length}</span>
         </p>
       ) : null}
 
@@ -931,6 +1077,18 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         <table className={`min-w-full table-fixed border-collapse text-sm transition-opacity${isPageTransitionPending ? " opacity-50" : ""}`}>
           <thead>
             <tr className="border-b bg-gray-50">
+              <th className="w-16 px-3 py-2 text-left">
+                <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    disabled={paginatedAdminTargetKeys.length === 0 || adminPreloading}
+                    onChange={(event) => handleToggleAllVisibleSelection(event.target.checked)}
+                    title={str.admin.table.selection.selectAllVisible}
+                  />
+                  {str.admin.table.selection.selectAllVisible}
+                </label>
+              </th>
               <th className="w-[15%] px-3 py-2 text-left">
                 {str.admin.table.headers.character} ({str.admin.table.headers.pronunciation})
               </th>
@@ -942,7 +1100,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           <tbody>
             {paginatedAdminRenderRows.length === 0 ? (
               <tr>
-                <td className="px-3 py-3 text-gray-600" colSpan={4}>
+                <td className="px-3 py-3 text-gray-600" colSpan={5}>
                   {adminEmptyTableMessage}
                 </td>
               </tr>
@@ -960,6 +1118,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     key={row.rowKey}
                     row={row}
                     target={target}
+                    isSelected={adminSelectedTargetKeys.includes(row.targetKey)}
                     rawValue={rawValue}
                     isRegenerating={isRegenerating}
                     isSaving={isSaving}
@@ -986,6 +1145,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     onRegenerateExample={stableOnRegenerateExample}
                     onEditExample={stableOnEditExample}
                     onDeleteExample={stableOnDeleteExample}
+                    onToggleSelection={stableOnToggleSelection}
                   />
                 );
               })

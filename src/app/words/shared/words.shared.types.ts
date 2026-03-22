@@ -17,6 +17,11 @@ export type {
 export type {
   DueWordsSortKey,
   SortedDueWord,
+  ReviewTestSessionTargetDraft,
+  ReviewTestSessionTarget,
+  ReviewTestSession,
+  ReviewTestSessionRuntime,
+  ReviewTestSessionRuntimeErrorCode,
 } from "../review/review.types";
 
 export type {

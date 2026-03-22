@@ -26,6 +26,10 @@ export default function FlashcardReviewSection({ vm }: { vm: WordsWorkspaceVM })
     flashcardCompleted,
     flashcardHistory,
     setFlashcardIndex,
+    activeReviewTestSession,
+    activeReviewTestSessionQuizCount,
+    activeReviewTestSessionSkippedQuizCount,
+    continueReviewTestSessionToQuiz,
   } = vm;
 
   if (!isFlashcardReviewPage) {
@@ -43,6 +47,13 @@ export default function FlashcardReviewSection({ vm }: { vm: WordsWorkspaceVM })
         </p>
       ) : (
         <div className="space-y-3 rounded-md border p-3">
+          {activeReviewTestSession ? (
+            <p className="text-sm text-blue-700">
+              {str.flashcard.reviewTestSession.activeSession
+                .replace("{name}", activeReviewTestSession.name)
+                .replace("{count}", String(flashcardQueue.length))}
+            </p>
+          ) : null}
           {!currentFlashcardWord ? (
             <p className="text-sm text-gray-600">{str.flashcard.noCharacterLoaded}</p>
           ) : (
@@ -185,6 +196,16 @@ export default function FlashcardReviewSection({ vm }: { vm: WordsWorkspaceVM })
           >
             {str.flashcard.navigation.end}
           </button>
+          {activeReviewTestSession ? (
+            <button
+              type="button"
+              className="rounded-md border-2 border-amber-500 bg-amber-100 px-3 py-2 text-sm font-medium text-amber-900 disabled:opacity-50"
+              disabled={flashcardIndex < flashcardQueue.length - 1 || activeReviewTestSessionQuizCount === 0}
+              onClick={continueReviewTestSessionToQuiz}
+            >
+              {str.flashcard.reviewTestSession.startQuizButton}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </section>

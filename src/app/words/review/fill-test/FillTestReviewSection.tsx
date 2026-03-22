@@ -49,6 +49,9 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     moveQuizForward,
     quizSummary,
     quizSessionCoins,
+    activeReviewTestSession,
+    completedReviewTestSessionName,
+    returnToDueReviewAfterReviewTestSession,
     gradeLabels,
     calculateNextState,
     manualSelectionSet,
@@ -114,6 +117,13 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
       {skippedDueCount > 0 ? (
         <p className="text-sm text-amber-700">
           {skippedDueCount} {str.fillTest.noFillTests}
+        </p>
+      ) : null}
+      {activeReviewTestSession ? (
+        <p className="text-sm text-blue-700">
+          {str.fillTest.reviewTestSession.activeSession
+            .replace("{name}", activeReviewTestSession.name)
+            .replace("{count}", String(quizQueue.length))}
         </p>
       ) : null}
       {quizNotice ? <p className="text-sm text-blue-700">{quizNotice}</p> : null}
@@ -359,17 +369,17 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                   <>
                     {fullyCorrect.length > 0 && (
                       <p className="text-sm text-green-700">
-                        <span className="font-semibold">全部正确：</span>{fullyCorrect.length}  （{fullyCorrect.map((item) => item.hanzi).join("")}）
+                        <span className="font-semibold">{str.fillTest.summary.fullyCorrect}</span>{fullyCorrect.length}  （{fullyCorrect.map((item) => item.hanzi).join("")}）
                       </p>
                     )}
                     {partiallyCorrect.length > 0 && (
                       <p className="text-sm text-amber-700">
-                        <span className="font-semibold">部分正确：</span>{partiallyCorrect.length}  （{partiallyCorrect.map((item) => item.hanzi).join("")}）
+                        <span className="font-semibold">{str.fillTest.summary.partiallyCorrect}</span>{partiallyCorrect.length}  （{partiallyCorrect.map((item) => item.hanzi).join("")}）
                       </p>
                     )}
                     {fullyWrong.length > 0 && (
                       <p className="text-sm text-red-700">
-                        <span className="font-semibold">全部错误：</span>{fullyWrong.length}  （{fullyWrong.map((item) => item.hanzi).join("")}）
+                        <span className="font-semibold">{str.fillTest.summary.fullyWrong}</span>{fullyWrong.length}  （{fullyWrong.map((item) => item.hanzi).join("")}）
                       </p>
                     )}
                   </>
@@ -384,9 +394,18 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
           <button
             type="button"
             className="rounded-full border-4 border-amber-500 bg-amber-50 px-8 py-2 text-lg font-semibold text-amber-900 transition-colors hover:bg-amber-100"
-            onClick={() => router.push("/words/review")}
+            onClick={() =>
+              completedReviewTestSessionName
+                ? returnToDueReviewAfterReviewTestSession(
+                    "completed",
+                    completedReviewTestSessionName
+                  )
+                : router.push("/words/review")
+            }
           >
-            {str.results.goToReviewPage}
+            {completedReviewTestSessionName
+              ? str.fillTest.reviewTestSession.returnToDueReviewButton
+              : str.results.goToReviewPage}
           </button>
         </div>
       ) : null}

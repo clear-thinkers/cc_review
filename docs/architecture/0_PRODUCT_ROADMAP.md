@@ -1,6 +1,6 @@
 ﻿# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-03-09_ (Admin-Configurable LLM Prompts complete)
+_Last updated: 2026-03-21_ (Review Test Sessions shipped)
 
 ---
 
@@ -55,6 +55,7 @@ Features now include a “Last touched” timestamp and a broader set of status 
 |---|---|---|---|---|---|
 | 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in Supabase. Separated by generation type (full / phrase / example / pinyin). | `docs/architecture/2026-03-09-admin-configurable-llm-prompts.md` | ✅ Done | 2026-03-09 |
 | 7 | **Character Level Tagging** | 4-level cascade tag system (Textbook → Grade → Unit → Lesson). New tables: `textbooks`, `lesson_tags`, `word_lesson_tags`. Tag assignment on `/words/add`; Lessons column + filter bar on `/words/all`; filter bar on `/words/admin`. Review scope filter deferred. | `docs/architecture/2026-03-09-character-level-tagging.md` | ✅ Done | 2026-03-09 |
+| 13 | **Review Test Sessions** | Parents package multiple Content Admin targets into a named session. Due Review lists active sessions for both roles; only children can start them. Runtime bundles multiple pronunciations back to character-level review first, then fill-test, and hides the session after completion. | `docs/feature-specs/2026-03-21-review-test-sessions.md` | ✅ Done | 2026-03-21 |
 | 10 | **Bakery Shop** | Virtual bakery shop: purchase furniture, display items, decorations with earned coins. `inventory` and `shopState` tables. Spend coins to customize player environment. No real money, no scheduler impact. | [`docs/feature-specs/2026-03-04-coin-rewards-system.md`](../../feature-specs/2026-03-04-coin-rewards-system.md) | 📋 Planned | — |
 
 ## Fixed to be done
