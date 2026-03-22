@@ -880,7 +880,7 @@ export const wordsStrings = {
           separator: " | ",
         },
         selection: {
-          selectAllVisible: "选择当前页全部",
+          selectAllVisible: "全选此页",
         },
         placeholders: {
           newMeaning: "输入新释义",
