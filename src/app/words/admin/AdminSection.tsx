@@ -547,6 +547,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     handleAdminEditExample,
     handleAdminDeleteExample,
     toggleAdminTargetSelection,
+    selectAdminTargetKeys,
     clearAdminTargetSelection,
     createSelectedReviewTestSession,
   } = vm;
@@ -657,9 +658,16 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     () => Array.from(new Set(paginatedAdminRenderRows.map((row) => row.targetKey))),
     [paginatedAdminRenderRows]
   );
+  const filteredAdminTargetKeys = useMemo(
+    () => Array.from(new Set(filteredAdminRenderRows.map((row) => row.targetKey))),
+    [filteredAdminRenderRows]
+  );
   const allVisibleSelected =
     paginatedAdminTargetKeys.length > 0 &&
     paginatedAdminTargetKeys.every((targetKey) => adminSelectedTargetKeys.includes(targetKey));
+  const allFilteredSelected =
+    filteredAdminTargetKeys.length > 0 &&
+    filteredAdminTargetKeys.every((targetKey) => adminSelectedTargetKeys.includes(targetKey));
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -735,18 +743,17 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     (targetKey: string) => vmRef.current.toggleAdminTargetSelection(targetKey),
     []
   );
-  const handleToggleAllVisibleSelection = useCallback(
-    (checked: boolean) => {
-      const selectedKeys = new Set(vmRef.current.adminSelectedTargetKeys);
-      paginatedAdminTargetKeys.forEach((targetKey) => {
-        const isSelected = selectedKeys.has(targetKey);
-        if (isSelected !== checked) {
-          vmRef.current.toggleAdminTargetSelection(targetKey);
-        }
-      });
-    },
-    [paginatedAdminTargetKeys]
-  );
+  const handleSelectPage = useCallback(() => {
+    vmRef.current.selectAdminTargetKeys(paginatedAdminTargetKeys);
+  }, [paginatedAdminTargetKeys]);
+  const handleSelectFiltered = useCallback(() => {
+    vmRef.current.selectAdminTargetKeys(filteredAdminTargetKeys);
+  }, [filteredAdminTargetKeys]);
+  const handleClearSelection = useCallback(() => {
+    vmRef.current.clearAdminTargetSelection();
+    setReviewTestSessionFormOpen(false);
+    setReviewTestSessionName("");
+  }, []);
 
   // Page-specific handlers - only process targets visible on current page
   const handleAdminPreloadPage = useCallback(async () => {
@@ -903,76 +910,6 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
       {adminProgressText ? <p className="text-sm text-gray-600">{adminProgressText}</p> : null}
       {adminNotice ? <p className="text-sm text-blue-700">{adminNotice}</p> : null}
-      {adminSelectedTargetKeys.length > 0 ? (
-        <div className="space-y-2 rounded-md border p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm text-gray-700">
-              {str.admin.reviewTestSession.selectedCount.replace(
-                "{count}",
-                String(adminSelectedTargetKeys.length)
-              )}
-            </p>
-            <button
-              type="button"
-              className="rounded-md border-2 border-sky-300 bg-sky-50 px-4 py-2 font-medium text-sky-800 disabled:opacity-50"
-              disabled={adminCreatingReviewTestSession}
-              onClick={() => {
-                setReviewTestSessionName(reviewTestSessions[0]?.name ?? "");
-                setReviewTestSessionFormOpen(true);
-              }}
-            >
-              {str.admin.buttons.addToReviewTestSession}
-            </button>
-            <button
-              type="button"
-              className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
-              disabled={adminCreatingReviewTestSession}
-              onClick={() => {
-                vmRef.current.clearAdminTargetSelection();
-                setReviewTestSessionFormOpen(false);
-                setReviewTestSessionName("");
-              }}
-            >
-              {str.admin.buttons.clearReviewTestSelection}
-            </button>
-          </div>
-
-          {reviewTestSessionFormOpen ? (
-            <form className="space-y-2" onSubmit={handleCreateReviewTestSessionSubmit}>
-              <label className="block text-sm text-gray-700" htmlFor="review-test-session-name">
-                {str.admin.reviewTestSession.nameLabel}
-              </label>
-              <input
-                id="review-test-session-name"
-                className="w-full rounded-md border px-2 py-1 text-sm"
-                value={reviewTestSessionName}
-                onChange={(event) => setReviewTestSessionName(event.target.value)}
-                placeholder={str.admin.reviewTestSession.namePlaceholder}
-              />
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="submit"
-                  className="rounded-md border-2 border-sky-300 bg-sky-50 px-4 py-2 font-medium text-sky-800 disabled:opacity-50"
-                  disabled={adminCreatingReviewTestSession}
-                >
-                  {str.admin.reviewTestSession.createButton}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
-                  disabled={adminCreatingReviewTestSession}
-                  onClick={() => {
-                    setReviewTestSessionFormOpen(false);
-                    setReviewTestSessionName("");
-                  }}
-                >
-                  {str.admin.reviewTestSession.cancelButton}
-                </button>
-              </div>
-            </form>
-          ) : null}
-        </div>
-      ) : null}
 
       {/* Default Filters Bar */}
       <div className="rounded-lg border p-4 space-y-3">
@@ -1050,45 +987,106 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         )}
       </div>
 
-      {/* Pagination Info */}
-      {filteredAdminRenderRows.length > 0 && (
-        <div className="text-xs text-gray-600 text-right">
-          {str.admin.pagination.pageInfo.replace("{current}", String(validPage)).replace("{total}", String(Math.max(1, totalPages)))}
-        </div>
-      )}
-
       {!adminLoading && adminTargets.length > 0 ? (
-        <p className="text-sm text-gray-700">
-          {adminHasActiveCountFilter ? (
-            <>
-              {str.admin.table.summary.filteredLabel}{" "}
-              <span className="font-semibold text-blue-600">{filteredAdminTargetCount}</span>
-            </>
-          ) : (
-            str.admin.table.summary.noFiltersApplied
-          )}
-          {str.admin.table.summary.separator}
-          {str.admin.table.summary.selectedLabel}{" "}
-          <span className="font-semibold text-blue-600">{adminSelectedTargetKeys.length}</span>
-        </p>
+        <div className="py-1">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
+            <p className="shrink-0">
+            {adminHasActiveCountFilter ? (
+              <>
+                {str.admin.table.summary.filteredLabel}{" "}
+                <span className="font-semibold text-blue-600">{filteredAdminTargetCount}</span>
+              </>
+            ) : (
+              str.admin.table.summary.noFiltersApplied
+            )}
+            {str.admin.table.summary.separator}
+            {str.admin.table.summary.selectedLabel}{" "}
+            <span className="font-semibold text-blue-600">{adminSelectedTargetKeys.length}</span>
+            </p>
+            {filteredAdminTargetKeys.length > 0 ? (
+              <div className="flex min-h-[2.5rem] flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                className="admin-toolbar-button rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
+                disabled={paginatedAdminTargetKeys.length === 0 || adminPreloading || allVisibleSelected}
+                onClick={handleSelectPage}
+              >
+                {str.admin.table.selection.selectPage}
+              </button>
+              <button
+                type="button"
+                className="admin-toolbar-button rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 font-medium leading-none text-blue-800 disabled:opacity-50"
+                disabled={filteredAdminTargetKeys.length === 0 || adminPreloading || allFilteredSelected}
+                onClick={handleSelectFiltered}
+              >
+                {str.admin.table.selection.selectFiltered.replace(
+                  "{count}",
+                  String(filteredAdminTargetCount)
+                )}
+              </button>
+              <button
+                type="button"
+                className="admin-toolbar-button rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50"
+                disabled={adminSelectedTargetKeys.length === 0 || adminPreloading}
+                onClick={handleClearSelection}
+              >
+                {str.admin.table.selection.clear}
+              </button>
+              <button
+                type="button"
+                className="admin-toolbar-button admin-toolbar-button--session rounded-md border border-indigo-500 bg-indigo-100 px-3 py-1.5 font-medium leading-none text-indigo-950 shadow-sm disabled:opacity-50"
+                disabled={adminSelectedTargetKeys.length === 0 || adminCreatingReviewTestSession}
+                onClick={() => {
+                  setReviewTestSessionName(reviewTestSessions[0]?.name ?? "");
+                  setReviewTestSessionFormOpen(true);
+                }}
+              >
+                {str.admin.buttons.addToReviewTestSession}
+              </button>
+              {reviewTestSessionFormOpen ? (
+                <form
+                  className="flex flex-wrap items-center gap-2"
+                  onSubmit={handleCreateReviewTestSessionSubmit}
+                >
+                  <input
+                    id="review-test-session-name"
+                    aria-label={str.admin.reviewTestSession.nameLabel}
+                    className="h-9 min-w-[12rem] rounded-md border border-indigo-300 px-3 py-1.5 text-xs"
+                    value={reviewTestSessionName}
+                    onChange={(event) => setReviewTestSessionName(event.target.value)}
+                    placeholder={str.admin.reviewTestSession.namePlaceholder}
+                  />
+                  <button
+                    type="submit"
+                    className="admin-toolbar-button admin-toolbar-button--session rounded-md border border-indigo-700 bg-indigo-700 px-3 py-1.5 font-medium leading-none text-white shadow-sm disabled:opacity-50"
+                    disabled={adminCreatingReviewTestSession}
+                  >
+                    {str.admin.reviewTestSession.createButton}
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-toolbar-button rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50"
+                    disabled={adminCreatingReviewTestSession}
+                    onClick={() => {
+                      setReviewTestSessionFormOpen(false);
+                      setReviewTestSessionName("");
+                    }}
+                  >
+                    {str.admin.reviewTestSession.cancelButton}
+                  </button>
+                </form>
+              ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       <div className="overflow-x-auto rounded-md border">
         <table className={`min-w-full table-fixed border-collapse text-sm transition-opacity${isPageTransitionPending ? " opacity-50" : ""}`}>
           <thead>
             <tr className="border-b bg-gray-50">
-              <th className="w-16 px-3 py-2 text-left">
-                <label className="inline-flex items-center gap-2 text-xs text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    disabled={paginatedAdminTargetKeys.length === 0 || adminPreloading}
-                    onChange={(event) => handleToggleAllVisibleSelection(event.target.checked)}
-                    title={str.admin.table.selection.selectAllVisible}
-                  />
-                  {str.admin.table.selection.selectAllVisible}
-                </label>
-              </th>
+              <th className="w-16 px-3 py-2 text-left"></th>
               <th className="w-[15%] px-3 py-2 text-left">
                 {str.admin.table.headers.character} ({str.admin.table.headers.pronunciation})
               </th>
@@ -1156,39 +1154,44 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
       {/* Pagination Controls */}
       {filteredAdminRenderRows.length > 0 && (
-        <div className="flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => startPageTransition(() => setCurrentPage(1))}
-            disabled={validPage === 1}
-            className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
-          >
-            {str.admin.pagination.firstButton}
-          </button>
-          <button
-            type="button"
-            onClick={() => startPageTransition(() => setCurrentPage((p) => Math.max(1, p - 1)))}
-            disabled={validPage === 1}
-            className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
-          >
-            {str.admin.pagination.previousButton}
-          </button>
-          <button
-            type="button"
-            onClick={() => startPageTransition(() => setCurrentPage((p) => Math.min(totalPages, p + 1)))}
-            disabled={validPage === totalPages}
-            className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
-          >
-            {str.admin.pagination.nextButton}
-          </button>
-          <button
-            type="button"
-            onClick={() => startPageTransition(() => setCurrentPage(totalPages))}
-            disabled={validPage === totalPages}
-            className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
-          >
-            {str.admin.pagination.lastButton}
-          </button>
+        <div className="space-y-2">
+          <div className="text-xs text-gray-600 text-center">
+            {str.admin.pagination.pageInfo.replace("{current}", String(validPage)).replace("{total}", String(Math.max(1, totalPages)))}
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => startPageTransition(() => setCurrentPage(1))}
+              disabled={validPage === 1}
+              className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+            >
+              {str.admin.pagination.firstButton}
+            </button>
+            <button
+              type="button"
+              onClick={() => startPageTransition(() => setCurrentPage((p) => Math.max(1, p - 1)))}
+              disabled={validPage === 1}
+              className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+            >
+              {str.admin.pagination.previousButton}
+            </button>
+            <button
+              type="button"
+              onClick={() => startPageTransition(() => setCurrentPage((p) => Math.min(totalPages, p + 1)))}
+              disabled={validPage === totalPages}
+              className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+            >
+              {str.admin.pagination.nextButton}
+            </button>
+            <button
+              type="button"
+              onClick={() => startPageTransition(() => setCurrentPage(totalPages))}
+              disabled={validPage === totalPages}
+              className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+            >
+              {str.admin.pagination.lastButton}
+            </button>
+          </div>
         </div>
       )}
 

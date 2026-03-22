@@ -139,14 +139,14 @@ h3 {
   background: linear-gradient(135deg, var(--primary-strong), var(--primary));
 }
 
-.kids-page button.border {
+.kids-page button.border:not(.admin-toolbar-button) {
   border-width: 2px;
   border-color: #d5b975;
   color: #6a5530;
   background: #fff8e7;
 }
 
-.kids-page button.border:hover:not(:disabled) {
+.kids-page button.border:not(.admin-toolbar-button):hover:not(:disabled) {
   background: #fff1cd;
 }
 

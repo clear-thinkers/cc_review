@@ -349,7 +349,9 @@ export const wordsStrings = {
           separator: " | ",
         },
         selection: {
-          selectAllVisible: "Select all visible",
+          selectPage: "Select page",
+          selectFiltered: "Select filtered ({count})",
+          clear: "Clear",
         },
         placeholders: {
           newMeaning: "Enter new meaning",
@@ -816,7 +818,7 @@ export const wordsStrings = {
         clearReviewTestSelection: "清除选择",
       },
       buttonTooltips: {
-        preload: "为所有丢失内容的汉字/发音组合生成内容。预计等待时间：约2分钟（20个汉字）、约5分钟（50个汉字）、约12分钟（100个汉字）。",
+        preload: "为所有缺失内容的汉字/发音组合生成内容。预计等待时间：约2分钟（20个汉字）、约5分钟（50个汉字）、约12分钟（100个汉字）。",
         refreshAllPinyin: "批量生成所有已保存短语和例句的缺失拼音",
       },
       preloadWarning: "⏱️ 预计生成时间：20个汉字需约2分钟、50个汉字需约5分钟、100个汉字需约12分钟。",
@@ -880,7 +882,9 @@ export const wordsStrings = {
           separator: " | ",
         },
         selection: {
-          selectAllVisible: "全选此页",
+          selectPage: "选择此页",
+          selectFiltered: "选择筛选结果（{count}）",
+          clear: "清空",
         },
         placeholders: {
           newMeaning: "输入新释义",

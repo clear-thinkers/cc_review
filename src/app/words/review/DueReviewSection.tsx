@@ -109,10 +109,6 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
 
   return (
     <section className="space-y-3 rounded-lg border p-4">
-      <h2 className="font-medium">{str.due.pageTitle}</h2>
-      <p className="text-sm text-gray-700">
-        {str.due.dueNowLabel} {dueWords.length}
-      </p>
       {reviewTestSessionStatusMessage ? (
         <p className="text-sm text-blue-700">{reviewTestSessionStatusMessage}</p>
       ) : null}
@@ -189,6 +185,11 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
           </div>
         )}
       </div>
+
+      <p className="text-sm text-gray-700">
+        <span className="font-medium">{str.due.pageTitle}:</span>{" "}
+        <span className="font-semibold">{dueWords.length}</span>
+      </p>
 
       {dueWords.length > 0 ? (
         <div className="flex flex-wrap gap-2">

@@ -2099,6 +2099,16 @@ const gradeLabels = getGradeLabels(str);
     );
   }
 
+  function selectAdminTargetKeys(targetKeys: string[]) {
+    setAdminSelectedTargetKeys((previous) => {
+      const mergedKeys = new Set(previous);
+      targetKeys.forEach((targetKey) => {
+        mergedKeys.add(targetKey);
+      });
+      return Array.from(mergedKeys);
+    });
+  }
+
   function clearAdminTargetSelection() {
     setAdminSelectedTargetKeys([]);
   }
@@ -3266,6 +3276,7 @@ const gradeLabels = getGradeLabels(str);
     handleAdminEditExample,
     handleAdminDeleteExample,
     toggleAdminTargetSelection,
+    selectAdminTargetKeys,
     clearAdminTargetSelection,
     createSelectedReviewTestSession,
     allWordsSummary,
