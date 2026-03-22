@@ -867,7 +867,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             </div>
 
             {/* Tags Filter */}
-            <div className="w-1/3 space-y-1">
+            <div className="w-1/2 space-y-1">
               <label className="block text-xs text-gray-600">{str.admin.filters.tags.label}</label>
               <details className="group">
                 <summary className="cursor-pointer rounded-md border px-2 py-1 text-sm bg-gray-50 hover:bg-gray-100">

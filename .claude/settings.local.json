@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find d:Codingcc_review -name *admin*.strings* -o -name *strings*admin*)"
+    ]
+  }
+}
