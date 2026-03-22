@@ -1015,7 +1015,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               </button>
               <button
                 type="button"
-                className="admin-toolbar-button rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 font-medium leading-none text-blue-800 disabled:opacity-50"
+                className="admin-toolbar-button rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
                 disabled={filteredAdminTargetKeys.length === 0 || adminPreloading || allFilteredSelected}
                 onClick={handleSelectFiltered}
               >
@@ -1034,14 +1034,15 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               </button>
               <button
                 type="button"
-                className="admin-toolbar-button admin-toolbar-button--session rounded-md border border-indigo-500 bg-indigo-100 px-3 py-1.5 font-medium leading-none text-indigo-950 shadow-sm disabled:opacity-50"
+                className="admin-toolbar-button admin-toolbar-button--session inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
                 disabled={adminSelectedTargetKeys.length === 0 || adminCreatingReviewTestSession}
                 onClick={() => {
                   setReviewTestSessionName(reviewTestSessions[0]?.name ?? "");
                   setReviewTestSessionFormOpen(true);
                 }}
               >
-                {str.admin.buttons.addToReviewTestSession}
+                <span>{str.admin.buttons.addToReviewTestSession}</span>
+                <span aria-hidden="true" className="text-sm leading-none">🎯</span>
               </button>
               {reviewTestSessionFormOpen ? (
                 <form
@@ -1058,10 +1059,11 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                   />
                   <button
                     type="submit"
-                    className="admin-toolbar-button admin-toolbar-button--session rounded-md border border-indigo-700 bg-indigo-700 px-3 py-1.5 font-medium leading-none text-white shadow-sm disabled:opacity-50"
+                    className="admin-toolbar-button admin-toolbar-button--session inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
                     disabled={adminCreatingReviewTestSession}
                   >
-                    {str.admin.reviewTestSession.createButton}
+                    <span>{str.admin.reviewTestSession.createButton}</span>
+                    <span aria-hidden="true" className="text-sm leading-none">🎯</span>
                   </button>
                   <button
                     type="button"
