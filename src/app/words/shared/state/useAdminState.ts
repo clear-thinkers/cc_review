@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type {
+  AdminEditingMeaning,
   AdminPendingMeaning,
   AdminPendingPhrase,
   AdminStatsFilter,
@@ -24,6 +25,7 @@ export function useAdminState() {
   const [adminRefreshingAllPinyin, setAdminRefreshingAllPinyin] = useState(false);
   const [adminPendingPhrases, setAdminPendingPhrases] = useState<AdminPendingPhrase[]>([]);
   const [adminPendingMeanings, setAdminPendingMeanings] = useState<AdminPendingMeaning[]>([]);
+  const [adminEditingMeaning, setAdminEditingMeaning] = useState<AdminEditingMeaning | null>(null);
   const [adminEditingExampleRowKey, setAdminEditingExampleRowKey] = useState<string | null>(null);
   const [adminStatsFilter, setAdminStatsFilter] = useState<AdminStatsFilter>("targets");
   const [adminSelectedTargetKeys, setAdminSelectedTargetKeys] = useState<string[]>([]);
@@ -61,6 +63,8 @@ export function useAdminState() {
     setAdminPendingPhrases,
     adminPendingMeanings,
     setAdminPendingMeanings,
+    adminEditingMeaning,
+    setAdminEditingMeaning,
     adminEditingExampleRowKey,
     setAdminEditingExampleRowKey,
     adminStatsFilter,

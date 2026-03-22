@@ -2,6 +2,7 @@
 import {
   normalizeFlashcardLlmResponse,
   type FlashcardLlmRequest,
+  type FlashcardMeaning,
   type FlashcardLlmResponse,
   type FlashcardMeaningPhrase,
 } from "@/lib/flashcardLlm";
@@ -128,6 +129,65 @@ export function cloneFlashcardLlmResponse(content: FlashcardLlmResponse): Flashc
       phrases: meaning.phrases.map((phrase) => ({ ...phrase })),
     })),
   };
+}
+
+export function applyAdminMeaningEdit(params: {
+  content: FlashcardLlmResponse;
+  currentMeaningZh: string;
+  currentMeaningEn: string;
+  nextMeaningZh: string;
+  nextMeaningEn: string;
+}): FlashcardLlmResponse {
+  const nextMeaningZh = params.nextMeaningZh.trim();
+  const nextMeaningEn = params.nextMeaningEn.trim();
+  if (!nextMeaningZh) {
+    throw new Error("Meaning is required.");
+  }
+
+  const nextDraft = cloneFlashcardLlmResponse(params.content);
+  const currentMeaningIndex = nextDraft.meanings.findIndex(
+    (meaning) =>
+      meaning.definition.trim() === params.currentMeaningZh.trim() &&
+      (meaning.definition_en ?? "").trim() === params.currentMeaningEn.trim()
+  );
+  if (currentMeaningIndex < 0) {
+    throw new Error("Meaning row not found in current draft.");
+  }
+
+  const currentMeaning = nextDraft.meanings[currentMeaningIndex];
+  currentMeaning.definition = nextMeaningZh;
+  if (nextMeaningEn) {
+    currentMeaning.definition_en = nextMeaningEn;
+  } else {
+    delete currentMeaning.definition_en;
+  }
+
+  const mergeMeaningIndex = nextDraft.meanings.findIndex(
+    (meaning, index) => index !== currentMeaningIndex && meaning.definition.trim() === nextMeaningZh
+  );
+  if (mergeMeaningIndex >= 0) {
+    const mergeMeaningSource = nextDraft.meanings[mergeMeaningIndex];
+    const mergedMeaning: FlashcardMeaning = {
+      definition: nextMeaningZh,
+      ...(nextMeaningEn ? { definition_en: nextMeaningEn } : {}),
+      phrases: [
+        ...mergeMeaningSource.phrases,
+        ...currentMeaning.phrases,
+      ],
+    };
+
+    const mergedPosition = Math.min(currentMeaningIndex, mergeMeaningIndex);
+    const mergedMeanings = nextDraft.meanings.filter(
+      (_, index) => index !== currentMeaningIndex && index !== mergeMeaningIndex
+    );
+    mergedMeanings.splice(mergedPosition, 0, mergedMeaning);
+    nextDraft.meanings = mergedMeanings;
+  }
+
+  return normalizeAdminDraftResponse(nextDraft, {
+    character: params.content.character,
+    pronunciation: params.content.pronunciation,
+  });
 }
 
 export function hasFillTest(word: Word): word is TestableWord {

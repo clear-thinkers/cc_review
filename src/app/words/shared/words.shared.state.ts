@@ -54,6 +54,7 @@ import {
   SLOT_INDICES,
   buildAdminMeaningKey,
   buildFillTestFromSavedContent,
+  applyAdminMeaningEdit,
   cloneFillTest,
   cloneFlashcardLlmResponse,
   cloneWord,
@@ -84,6 +85,7 @@ import {
   shouldShowManualEditPopup,
 } from "./words.shared.utils";
 import type {
+  AdminEditingMeaning,
   AdminPendingMeaning,
   AdminPendingPhrase,
   AdminPhraseLocation,
@@ -281,6 +283,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setAdminPendingPhrases,
     adminPendingMeanings,
     setAdminPendingMeanings,
+    adminEditingMeaning,
+    setAdminEditingMeaning,
     adminEditingExampleRowKey,
     setAdminEditingExampleRowKey,
     adminStatsFilter,
@@ -763,6 +767,9 @@ const gradeLabels = getGradeLabels(str);
     setAdminPendingMeanings((previous) =>
       previous.filter((item) => validTargetKeys.has(item.targetKey))
     );
+    setAdminEditingMeaning((previous) =>
+      previous && validTargetKeys.has(previous.targetKey) ? previous : null
+    );
   }, [adminTargets]);
 
   useEffect(() => {
@@ -774,6 +781,16 @@ const gradeLabels = getGradeLabels(str);
       setAdminEditingExampleRowKey(null);
     }
   }, [adminEditingExampleRowKey, adminTableRows]);
+
+  useEffect(() => {
+    if (!adminEditingMeaning) {
+      return;
+    }
+
+    if (!adminTableRows.some((row) => row.rowKey === adminEditingMeaning.rowKey)) {
+      setAdminEditingMeaning(null);
+    }
+  }, [adminEditingMeaning, adminTableRows]);
 
   function isAdminStatsFilterActive(filter: AdminStatsFilter): boolean {
     return adminStatsFilter === filter;
@@ -790,8 +807,8 @@ const gradeLabels = getGradeLabels(str);
 
   function getAdminStatsCardClass(filter: AdminStatsFilter): string {
     return isAdminStatsFilterActive(filter)
-      ? "admin-stats-card flex min-h-[70px] w-full flex-col items-center justify-center border border-black bg-gray-100 px-2 py-1.5 text-center"
-      : "admin-stats-card flex min-h-[70px] w-full flex-col items-center justify-center border px-2 py-1.5 text-center";
+      ? "admin-stats-card flex min-h-[58px] w-full flex-col items-center justify-center border border-black bg-gray-100 px-2 py-1 text-center"
+      : "admin-stats-card flex min-h-[58px] w-full flex-col items-center justify-center border px-2 py-1 text-center";
   }
 
   const adminEmptyTableMessage = useMemo(() => {
@@ -1131,6 +1148,9 @@ const gradeLabels = getGradeLabels(str);
     setAdminPendingMeanings((previous) =>
       previous.filter((item) => item.targetKey !== targetKey)
     );
+    setAdminEditingMeaning((previous) =>
+      previous?.targetKey === targetKey ? null : previous
+    );
     setAdminEditingExampleRowKey((previous) => {
       if (!previous) {
         return null;
@@ -1208,6 +1228,17 @@ const gradeLabels = getGradeLabels(str);
     }
 
     return null;
+  }
+
+  function findAdminMeaningIndex(
+    content: FlashcardLlmResponse,
+    row: Pick<AdminTableRow, "meaningZh" | "meaningEn">
+  ): number {
+    return content.meanings.findIndex(
+      (meaning) =>
+        meaning.definition.trim() === row.meaningZh &&
+        (meaning.definition_en ?? "").trim() === row.meaningEn
+    );
   }
 
   function upsertAdminDraft(target: AdminTarget, content: FlashcardLlmResponse, saved: boolean) {
@@ -1288,6 +1319,44 @@ const gradeLabels = getGradeLabels(str);
 
   function removeAdminPendingMeaning(pendingId: string) {
     setAdminPendingMeanings((previous) => previous.filter((item) => item.id !== pendingId));
+  }
+
+  function handleAdminEditMeaning(row: AdminTableRow) {
+    const target = adminTargetByKey.get(row.targetKey);
+    if (!target) {
+      setAdminNotice("Missing admin target for meaning row.");
+      return;
+    }
+
+    setAdminNotice(null);
+    setAdminEditingMeaning((previous): AdminEditingMeaning | null => {
+      if (previous?.rowKey === row.rowKey) {
+        return null;
+      }
+
+      return {
+        rowKey: row.rowKey,
+        targetKey: row.targetKey,
+        originalMeaningZh: row.meaningZh,
+        originalMeaningEn: row.meaningEn,
+        nextMeaningZh: row.meaningZh,
+      };
+    });
+  }
+
+  function updateAdminEditingMeaningInput(value: string) {
+    setAdminEditingMeaning((previous) =>
+      previous
+        ? {
+            ...previous,
+            nextMeaningZh: value,
+          }
+        : previous
+    );
+  }
+
+  function cancelAdminMeaningEdit() {
+    setAdminEditingMeaning(null);
   }
 
   async function handleAdminSavePendingPhrase(row: AdminTableRow) {
@@ -1497,6 +1566,79 @@ const gradeLabels = getGradeLabels(str);
     } catch (error) {
       const message = getErrorMessage(error, "Failed to add meaning.");
       setAdminNotice(message);
+    } finally {
+      setAdminSavingKey(null);
+    }
+  }
+
+  async function handleAdminSaveMeaningEdit(row: AdminTableRow) {
+    if (row.rowType !== "existing") {
+      return;
+    }
+
+    const target = adminTargetByKey.get(row.targetKey);
+    if (!target) {
+      setAdminNotice("Missing admin target for meaning row.");
+      return;
+    }
+
+    if (!adminEditingMeaning || adminEditingMeaning.rowKey !== row.rowKey) {
+      setAdminNotice("Meaning edit draft not found.");
+      return;
+    }
+
+    const nextMeaningZh = adminEditingMeaning.nextMeaningZh.trim();
+    if (!nextMeaningZh) {
+      setAdminNotice(str.admin.messages.meaningRequired);
+      return;
+    }
+
+    if (nextMeaningZh === row.meaningZh.trim()) {
+      setAdminEditingMeaning(null);
+      return;
+    }
+
+    setAdminSavingKey(target.key);
+    setAdminNotice(null);
+
+    try {
+      const nextDraft = cloneFlashcardLlmResponse(readAdminDraft(target));
+      const currentMeaningIndex = findAdminMeaningIndex(nextDraft, row);
+      if (currentMeaningIndex < 0) {
+        throw new Error("Meaning row not found in current draft.");
+      }
+
+      const mergeMeaningIndex = nextDraft.meanings.findIndex(
+        (meaning, index) => index !== currentMeaningIndex && meaning.definition.trim() === nextMeaningZh
+      );
+      const generatedMeaningDetail = await requestGeneratedMeaningDetailContent({
+        mode: "meaning_details",
+        character: target.character,
+        pronunciation: target.pronunciation,
+        meaning: nextMeaningZh,
+      });
+
+      const normalized = applyAdminMeaningEdit({
+        content: nextDraft,
+        currentMeaningZh: row.meaningZh,
+        currentMeaningEn: row.meaningEn,
+        nextMeaningZh,
+        nextMeaningEn: generatedMeaningDetail.definition_en,
+      });
+
+      await putFlashcardContent(target.character, target.pronunciation, normalized);
+      upsertAdminDraft(target, normalized, true);
+      setAdminEditingMeaning(null);
+      setAdminNotice(
+        (mergeMeaningIndex >= 0
+          ? str.admin.messages.meaningEditMerged
+          : str.admin.messages.meaningEditSaved)
+          .replace("{character}", target.character)
+          .replace("{pronunciation}", target.pronunciation)
+          .replace("{meaning}", nextMeaningZh)
+      );
+    } catch (error) {
+      setAdminNotice(getErrorMessage(error, str.admin.messages.meaningEditError));
     } finally {
       setAdminSavingKey(null);
     }
@@ -2111,6 +2253,85 @@ const gradeLabels = getGradeLabels(str);
 
   function clearAdminTargetSelection() {
     setAdminSelectedTargetKeys([]);
+  }
+
+  async function handleAdminBatchToggleFillTestInclude(includeInFillTest: boolean) {
+    if (adminSelectedTargetKeys.length === 0) {
+      setAdminNotice(str.admin.messages.reviewTestSessionNoSelection);
+      return;
+    }
+
+    const selectedTargets = adminSelectedTargetKeys
+      .filter(
+        (targetKey) => (adminContentStats.targetStatusByKey[targetKey] ?? "missing_content") !== "missing_content"
+      )
+      .map((targetKey) => adminTargets.find((target) => target.key === targetKey) ?? null)
+      .filter((target): target is AdminTarget => Boolean(target));
+
+    if (selectedTargets.length === 0) {
+      setAdminNotice(str.admin.messages.reviewTestSessionNoSelection);
+      return;
+    }
+
+    setAdminSavingKey("__batch_fill_test__");
+    setAdminNotice(null);
+
+    try {
+      let updatedCount = 0;
+
+      for (const target of selectedTargets) {
+        const nextDraft = cloneFlashcardLlmResponse(readAdminDraft(target));
+        let hasAnyPhrase = false;
+        let changed = false;
+
+        for (const meaning of nextDraft.meanings) {
+          for (const phraseItem of meaning.phrases) {
+            hasAnyPhrase = true;
+            if (isPhraseIncludedInFillTest(phraseItem) !== includeInFillTest) {
+              phraseItem.include_in_fill_test = includeInFillTest;
+              changed = true;
+            }
+          }
+        }
+
+        if (!hasAnyPhrase) {
+          continue;
+        }
+
+        if (!changed) {
+          updatedCount += 1;
+          continue;
+        }
+
+        const normalized = normalizeAdminDraftResponse(nextDraft, {
+          character: target.character,
+          pronunciation: target.pronunciation,
+        });
+        await putFlashcardContent(target.character, target.pronunciation, normalized);
+        upsertAdminDraft(target, normalized, true);
+        updatedCount += 1;
+      }
+
+      if (updatedCount === 0) {
+        setAdminNotice(str.admin.messages.batchFillTestToggleNoEligibleTargets);
+        return;
+      }
+
+      setAdminNotice(
+        str.admin.messages.batchFillTestToggleSuccess
+          .replace("{updated}", String(updatedCount))
+          .replace(
+            "{state}",
+            includeInFillTest
+              ? str.admin.table.actionButtons.fillTestOn
+              : str.admin.table.actionButtons.fillTestOff
+          )
+      );
+    } catch (error) {
+      setAdminNotice(getErrorMessage(error, str.admin.messages.batchFillTestToggleError));
+    } finally {
+      setAdminSavingKey(null);
+    }
   }
 
   async function createSelectedReviewTestSession(sessionName: string) {
@@ -3230,6 +3451,7 @@ const gradeLabels = getGradeLabels(str);
     adminStatsFilter,
     adminSelectedTargetKeys,
     adminCreatingReviewTestSession,
+    adminTargetStatusByKey: adminContentStats.targetStatusByKey,
     adminUniqueCharacterCount,
     adminTargets,
     adminTargetsWithContentCount,
@@ -3261,6 +3483,11 @@ const gradeLabels = getGradeLabels(str);
     updateAdminPendingMeaningInput,
     handleAdminSavePendingMeaning,
     removeAdminPendingMeaning,
+    adminEditingMeaning,
+    handleAdminEditMeaning,
+    updateAdminEditingMeaningInput,
+    handleAdminSaveMeaningEdit,
+    cancelAdminMeaningEdit,
     handleAdminAddPhraseRow,
     updateAdminPendingPhraseInput,
     handleAdminSavePendingPhrase,
@@ -3278,6 +3505,7 @@ const gradeLabels = getGradeLabels(str);
     toggleAdminTargetSelection,
     selectAdminTargetKeys,
     clearAdminTargetSelection,
+    handleAdminBatchToggleFillTestInclude,
     createSelectedReviewTestSession,
     allWordsSummary,
     words,

@@ -105,6 +105,8 @@ type AdminTableRowComponentProps = {
   isDeleting: boolean;
   adminPreloading: boolean;
   isEditingThis: boolean;
+  isEditingMeaning: boolean;
+  editingMeaningValue: string;
   str: WordsLocaleStrings;
   onRegenerate: (target: AdminTarget) => void;
   onSave: (target: AdminTarget) => void;
@@ -118,6 +120,10 @@ type AdminTableRowComponentProps = {
   ) => void;
   onSavePendingMeaning: (row: AdminTableRow) => void;
   onRemovePendingMeaning: (pendingId: string) => void;
+  onEditMeaning: (row: AdminTableRow) => void;
+  onUpdateEditingMeaningInput: (value: string) => void;
+  onSaveMeaningEdit: (row: AdminTableRow) => void;
+  onCancelMeaningEdit: () => void;
   onAddPhraseRow: (targetKey: string, meaningZh: string, meaningEn: string) => void;
   onUpdatePendingPhraseInput: (pendingId: string, value: string) => void;
   onSavePendingPhrase: (row: AdminTableRow) => void;
@@ -142,6 +148,8 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   isDeleting,
   adminPreloading,
   isEditingThis,
+  isEditingMeaning,
+  editingMeaningValue,
   str,
   onRegenerate,
   onSave,
@@ -151,6 +159,10 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   onUpdatePendingMeaningInput,
   onSavePendingMeaning,
   onRemovePendingMeaning,
+  onEditMeaning,
+  onUpdateEditingMeaningInput,
+  onSaveMeaningEdit,
+  onCancelMeaningEdit,
   onAddPhraseRow,
   onUpdatePendingPhraseInput,
   onSavePendingPhrase,
@@ -170,6 +182,11 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   const isPendingMeaningRow = row.rowType === "pending_meaning";
   const isEmptyTargetRow = row.rowType === "empty_target";
   const isExistingRow = row.rowType === "existing";
+  const adminTableButtonBaseClass =
+    "inline-flex min-h-5 items-center justify-center rounded border-2 px-1.5 py-px text-[11px] font-medium leading-none disabled:opacity-50";
+  const adminTableWideButtonClass = `${adminTableButtonBaseClass} px-2`;
+  const adminTableSkyPillButtonClass =
+    `${adminTableWideButtonClass} border-sky-300 bg-sky-50 text-sky-800`;
 
   return (
     <tr key={row.rowKey} className="border-b align-top">
@@ -199,7 +216,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               <div className="flex flex-wrap gap-1">
                 <button
                   type="button"
-                  className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
+                  className={`${adminTableButtonBaseClass} border-amber-400 bg-amber-100 text-amber-900`}
                   disabled={busy}
                   onClick={() => onRegenerate(target)}
                   title={str.admin.table.actionTooltips.regenerate}
@@ -208,7 +225,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
-                  className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                  className={`${adminTableButtonBaseClass} border-emerald-600 bg-emerald-600 text-white`}
                   disabled={busy || !canSave}
                   onClick={() => onSave(target)}
                   title={str.admin.table.actionTooltips.save}
@@ -217,7 +234,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
-                  className="rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50"
+                  className={`${adminTableButtonBaseClass} border-gray-400 bg-gray-100 text-gray-700`}
                   disabled={busy}
                   onClick={() => onClearContent(target)}
                   title={str.admin.table.actionTooltips.clearContent}
@@ -226,7 +243,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
-                  className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                  className={`${adminTableButtonBaseClass} border-rose-500 bg-rose-50 text-rose-700`}
                   disabled={busy}
                   onClick={() => onDeleteRow(target)}
                   title={str.admin.table.actionTooltips.deleteRow}
@@ -235,7 +252,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center justify-center rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-1 text-[11px] font-medium leading-tight text-sky-800 disabled:opacity-50"
+                  className={adminTableSkyPillButtonClass}
                   disabled={busy}
                   onClick={() => onAddMeaningRow(target.key)}
                   title={str.admin.table.actionTooltips.addMeaning}
@@ -264,7 +281,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 <div className="flex flex-wrap gap-1">
                   <button
                     type="button"
-                    className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-0.5 text-xs font-medium leading-none text-white disabled:opacity-50"
+                    className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
                     disabled={busy || !row.meaningZh.trim() || !row.phrase.trim() || !row.example.trim()}
                     onClick={() => onSavePendingMeaning(row)}
                     title={str.admin.table.actionTooltips.saveNew}
@@ -273,7 +290,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                   </button>
                   <button
                     type="button"
-                    className="rounded border-2 border-rose-500 bg-rose-50 px-2 py-0.5 text-xs font-medium leading-none text-rose-700 disabled:opacity-50"
+                    className={`${adminTableWideButtonClass} border-rose-500 bg-rose-50 text-rose-700`}
                     disabled={busy}
                     onClick={() => { if (row.pendingId) onRemovePendingMeaning(row.pendingId); }}
                     title={str.admin.table.actionTooltips.cancelAdd}
@@ -288,18 +305,65 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               </p>
             ) : (
               <>
-                <p className="text-base leading-tight">{row.meaningZh}</p>
-                {row.meaningEn ? <p className="mt-1 text-xs text-gray-500">{row.meaningEn}</p> : null}
-                {!target ? null : (
-                  <button
-                    type="button"
-                    className="mt-2 rounded border-2 border-sky-300 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-800 disabled:opacity-50"
-                    disabled={busy}
-                    onClick={() => onAddPhraseRow(row.targetKey, row.meaningZh, row.meaningEn)}
-                    title={str.admin.table.actionTooltips.addPhrase}
-                  >
-                    {str.admin.table.actionButtons.addPhrase}
-                  </button>
+                {isEditingMeaning ? (
+                  <div className="space-y-2">
+                    <input
+                      className="w-full rounded-md border px-2 py-1 text-sm"
+                      value={editingMeaningValue}
+                      onChange={(event) => onUpdateEditingMeaningInput(event.target.value)}
+                      placeholder={str.admin.table.placeholders.editMeaning}
+                    />
+                    <p className="text-[11px] text-gray-500">
+                      {str.admin.table.helper.englishGeneratedOnMeaningSave}
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
+                        disabled={busy || !editingMeaningValue.trim()}
+                        onClick={() => onSaveMeaningEdit(row)}
+                        title={str.admin.table.actionTooltips.save}
+                      >
+                        {str.admin.table.actionButtons.save}
+                      </button>
+                      <button
+                        type="button"
+                        className={`${adminTableWideButtonClass} border-gray-400 bg-gray-100 text-gray-700`}
+                        disabled={busy}
+                        onClick={onCancelMeaningEdit}
+                        title={str.admin.table.actionButtons.cancel}
+                      >
+                        {str.admin.table.actionButtons.cancel}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-base leading-tight">{row.meaningZh}</p>
+                    {row.meaningEn ? <p className="mt-1 text-xs text-gray-500">{row.meaningEn}</p> : null}
+                    {!target ? null : (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        <button
+                          type="button"
+                          className={adminTableSkyPillButtonClass}
+                          disabled={busy}
+                          onClick={() => onAddPhraseRow(row.targetKey, row.meaningZh, row.meaningEn)}
+                          title={str.admin.table.actionTooltips.addPhrase}
+                        >
+                          {str.admin.table.actionButtons.addPhrase}
+                        </button>
+                        <button
+                          type="button"
+                          className={adminTableSkyPillButtonClass}
+                          disabled={busy}
+                          onClick={() => onEditMeaning(row)}
+                          title={str.admin.table.actionTooltips.editMeaning}
+                        >
+                          {str.admin.table.actionButtons.edit}
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -339,7 +403,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
             <div className="flex flex-wrap gap-1">
               <button
                 type="button"
-                className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-0.5 text-xs font-medium leading-none text-white disabled:opacity-50"
+                className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
                 disabled={busy || !row.phrase.trim()}
                 onClick={() => onSavePendingPhrase(row)}
                 title={str.admin.table.actionTooltips.saveNew}
@@ -348,7 +412,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               </button>
               <button
                 type="button"
-                className="rounded border-2 border-rose-500 bg-rose-50 px-2 py-0.5 text-xs font-medium leading-none text-rose-700 disabled:opacity-50"
+                className={`${adminTableWideButtonClass} border-rose-500 bg-rose-50 text-rose-700`}
                 disabled={busy}
                 onClick={() => { if (row.pendingId) onRemovePendingPhrase(row.pendingId); }}
                 title={str.admin.table.actionTooltips.cancelAdd}
@@ -363,8 +427,8 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                   type="button"
                   className={
                     row.includeInFillTest
-                      ? "rounded border-2 border-teal-600 bg-teal-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-teal-700 disabled:opacity-50"
-                      : "rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50"
+                      ? `${adminTableButtonBaseClass} border-teal-600 bg-teal-50 text-teal-700`
+                      : `${adminTableButtonBaseClass} border-gray-400 bg-gray-100 text-gray-700`
                   }
                   disabled={busy}
                   onClick={() => { void onToggleFillTestInclude(row, !row.includeInFillTest); }}
@@ -381,7 +445,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               ) : null}
               <button
                 type="button"
-                className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
+                className={`${adminTableButtonBaseClass} border-amber-400 bg-amber-100 text-amber-900`}
                 disabled={busy}
                 onClick={() => onRegeneratePhrase(row)}
                 title={str.admin.table.actionTooltips.regeneratePhrase}
@@ -390,7 +454,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               </button>
               <button
                 type="button"
-                className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                className={`${adminTableButtonBaseClass} border-emerald-600 bg-emerald-600 text-white`}
                 disabled={busy || !canSave}
                 onClick={() => onSave(target)}
                 title={str.admin.table.actionTooltips.save}
@@ -399,7 +463,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               </button>
               <button
                 type="button"
-                className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                className={`${adminTableButtonBaseClass} border-rose-500 bg-rose-50 text-rose-700`}
                 disabled={busy}
                 onClick={() => onDeletePhrase(row)}
                 title={str.admin.table.actionTooltips.deletePhrase}
@@ -450,7 +514,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
             <div className="flex flex-wrap gap-1">
               <button
                 type="button"
-                className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
+                className={`${adminTableButtonBaseClass} border-amber-400 bg-amber-100 text-amber-900`}
                 disabled={busy}
                 onClick={() => onRegenerateExample(row)}
                 title={str.admin.table.actionTooltips.regenerateExample}
@@ -459,7 +523,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               </button>
               <button
                 type="button"
-                className="rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-sky-800 disabled:opacity-50"
+                className={adminTableSkyPillButtonClass}
                 disabled={busy}
                 onClick={() => onEditExample(row)}
                 title={str.admin.table.actionTooltips.editExample}
@@ -468,7 +532,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               </button>
               <button
                 type="button"
-                className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                className={`${adminTableButtonBaseClass} border-emerald-600 bg-emerald-600 text-white`}
                 disabled={busy || !canSave}
                 onClick={() => onSave(target)}
                 title={str.admin.table.actionTooltips.save}
@@ -477,7 +541,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               </button>
               <button
                 type="button"
-                className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                className={`${adminTableButtonBaseClass} border-rose-500 bg-rose-50 text-rose-700`}
                 disabled={busy}
                 onClick={() => onDeleteExample(row)}
                 title={str.admin.table.actionTooltips.deleteExample}
@@ -508,6 +572,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminStatsFilter,
     adminSelectedTargetKeys,
     adminCreatingReviewTestSession,
+    adminTargetStatusByKey,
     reviewTestSessions,
     handleAdminPreloadAll,
     cancelAdminPreload,
@@ -534,6 +599,11 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     updateAdminPendingMeaningInput,
     handleAdminSavePendingMeaning,
     removeAdminPendingMeaning,
+    adminEditingMeaning,
+    handleAdminEditMeaning,
+    updateAdminEditingMeaningInput,
+    handleAdminSaveMeaningEdit,
+    cancelAdminMeaningEdit,
     handleAdminAddPhraseRow,
     updateAdminPendingPhraseInput,
     handleAdminSavePendingPhrase,
@@ -549,6 +619,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     toggleAdminTargetSelection,
     selectAdminTargetKeys,
     clearAdminTargetSelection,
+    handleAdminBatchToggleFillTestInclude,
     createSelectedReviewTestSession,
   } = vm;
 
@@ -668,6 +739,22 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const allFilteredSelected =
     filteredAdminTargetKeys.length > 0 &&
     filteredAdminTargetKeys.every((targetKey) => adminSelectedTargetKeys.includes(targetKey));
+  const selectedTargetsWithSavedContentCount = useMemo(
+    () =>
+      adminSelectedTargetKeys.filter(
+        (targetKey) => (adminTargetStatusByKey[targetKey] ?? "missing_content") !== "missing_content"
+      ).length,
+    [adminSelectedTargetKeys, adminTargetStatusByKey]
+  );
+  const selectedTargetsAllIncluded =
+    selectedTargetsWithSavedContentCount > 0 &&
+    adminSelectedTargetKeys.every(
+      (targetKey) => adminTargetStatusByKey[targetKey] === "ready_for_testing"
+    );
+  const batchFillTestInclude = !selectedTargetsAllIncluded;
+  const batchFillTestButtonClass = selectedTargetsAllIncluded
+    ? "admin-toolbar-button rounded-md border border-teal-600 bg-teal-50 px-3 py-1.5 font-medium leading-none text-teal-700 disabled:opacity-50"
+    : "admin-toolbar-button rounded-md border border-gray-400 bg-gray-100 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50";
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -715,6 +802,13 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   );
   const stableOnSavePendingMeaning = useCallback((row: AdminTableRow) => vmRef.current.handleAdminSavePendingMeaning(row), []);
   const stableOnRemovePendingMeaning = useCallback((pendingId: string) => vmRef.current.removeAdminPendingMeaning(pendingId), []);
+  const stableOnEditMeaning = useCallback((row: AdminTableRow) => vmRef.current.handleAdminEditMeaning(row), []);
+  const stableOnUpdateEditingMeaningInput = useCallback(
+    (value: string) => vmRef.current.updateAdminEditingMeaningInput(value),
+    []
+  );
+  const stableOnSaveMeaningEdit = useCallback((row: AdminTableRow) => vmRef.current.handleAdminSaveMeaningEdit(row), []);
+  const stableOnCancelMeaningEdit = useCallback(() => vmRef.current.cancelAdminMeaningEdit(), []);
   const stableOnAddPhraseRow = useCallback(
     (targetKey: string, meaningZh: string, meaningEn: string) =>
       vmRef.current.handleAdminAddPhraseRow(targetKey, meaningZh, meaningEn),
@@ -754,6 +848,9 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     setReviewTestSessionFormOpen(false);
     setReviewTestSessionName("");
   }, []);
+  const handleBatchFillTestToggle = useCallback(() => {
+    void vmRef.current.handleAdminBatchToggleFillTestInclude(batchFillTestInclude);
+  }, [batchFillTestInclude]);
 
   // Page-specific handlers - only process targets visible on current page
   const handleAdminPreloadPage = useCallback(async () => {
@@ -790,7 +887,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       <h2 className="font-medium">{str.admin.pageTitle}</h2>
       <p className="text-sm text-gray-700">{str.admin.pageDescription}</p>
 
-      <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <button
           type="button"
           className={getAdminStatsCardClass("characters")}
@@ -798,11 +895,11 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           aria-pressed={isAdminStatsFilterActive("characters")}
           title={str.admin.filterTooltips.characters}
         >
-          <p className="text-sm uppercase text-gray-600">
+          <p className="text-xs leading-tight text-gray-600">
             {str.admin.stats.characters}
             {isAdminStatsFilterActive("characters") ? str.admin.filterStateOn : ""}
           </p>
-          <p className="text-2xl font-semibold">{adminUniqueCharacterCount}</p>
+          <p className="text-xl font-semibold leading-none">{adminUniqueCharacterCount}</p>
         </button>
         <button
           type="button"
@@ -811,11 +908,11 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           aria-pressed={isAdminStatsFilterActive("targets")}
           title={str.admin.filterTooltips.allTargets}
         >
-          <p className="text-sm uppercase text-gray-600">
+          <p className="text-xs leading-tight text-gray-600">
             {str.admin.stats.allTargets}
             {isAdminStatsFilterActive("targets") ? str.admin.filterStateOn : ""}
           </p>
-          <p className="text-2xl font-semibold">{adminTargets.length}</p>
+          <p className="text-xl font-semibold leading-none">{adminTargets.length}</p>
         </button>
         <button
           type="button"
@@ -824,11 +921,11 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           aria-pressed={isAdminStatsFilterActive("with_content")}
           title={str.admin.filterTooltips.withContent}
         >
-          <p className="text-sm uppercase text-gray-600">
+          <p className="text-xs leading-tight text-gray-600">
             {str.admin.stats.withContent}
             {isAdminStatsFilterActive("with_content") ? str.admin.filterStateOn : ""}
           </p>
-          <p className="text-2xl font-semibold">{adminTargetsWithContentCount}</p>
+          <p className="text-xl font-semibold leading-none">{adminTargetsWithContentCount}</p>
         </button>
         <button
           type="button"
@@ -837,14 +934,12 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           aria-pressed={isAdminStatsFilterActive("missing_content")}
           title={str.admin.filterTooltips.missingContent}
         >
-          <p className="text-sm uppercase text-gray-600">
+          <p className="text-xs leading-tight text-gray-600">
             {str.admin.stats.missingContent}
             {isAdminStatsFilterActive("missing_content") ? str.admin.filterStateOn : ""}
           </p>
-          <p className="text-2xl font-semibold">{adminMissingCount}</p>
+          <p className="text-xl font-semibold leading-none">{adminMissingCount}</p>
         </button>
-      </div>
-      <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
         <button
           type="button"
           className={getAdminStatsCardClass("ready_for_testing")}
@@ -852,11 +947,11 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           aria-pressed={isAdminStatsFilterActive("ready_for_testing")}
           title={str.admin.filterTooltips.readyForTesting}
         >
-          <p className="text-sm uppercase text-gray-600">
+          <p className="text-xs leading-tight text-gray-600">
             {str.admin.stats.readyForTesting}
             {isAdminStatsFilterActive("ready_for_testing") ? str.admin.filterStateOn : ""}
           </p>
-          <p className="text-2xl font-semibold">{adminTargetsReadyForTestingCount}</p>
+          <p className="text-xl font-semibold leading-none">{adminTargetsReadyForTestingCount}</p>
         </button>
         <button
           type="button"
@@ -865,18 +960,18 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           aria-pressed={isAdminStatsFilterActive("excluded_for_testing")}
           title={str.admin.filterTooltips.excludedForTesting}
         >
-          <p className="text-sm uppercase text-gray-600">
+          <p className="text-xs leading-tight text-gray-600">
             {str.admin.stats.excludedForTesting}
             {isAdminStatsFilterActive("excluded_for_testing") ? str.admin.filterStateOn : ""}
           </p>
-          <p className="text-2xl font-semibold">{adminTargetsExcludedForTestingCount}</p>
+          <p className="text-xl font-semibold leading-none">{adminTargetsExcludedForTestingCount}</p>
         </button>
       </div>
 
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded-md border-2 border-amber-400 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
+          className="inline-flex items-center rounded-md border-2 border-amber-400 bg-amber-100 px-3.5 py-1.5 font-medium leading-snug text-amber-900 disabled:opacity-50"
           onClick={handleAdminPreloadPage}
           disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || paginatedAdminRenderRows.length === 0}
           title={str.admin.buttonTooltips.preload}
@@ -895,7 +990,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         ) : null}
         <button
           type="button"
-          className="rounded-md border-2 border-purple-300 bg-purple-100 px-4 py-2 font-medium text-purple-700 disabled:opacity-50"
+          className="inline-flex items-center rounded-md border-2 border-purple-300 bg-purple-100 px-3.5 py-1.5 font-medium leading-snug text-purple-700 disabled:opacity-50"
           onClick={handleAdminRefreshPinyinPage}
           disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || paginatedAdminRenderRows.length === 0}
           title={str.admin.buttonTooltips.refreshAllPinyin}
@@ -1078,6 +1173,28 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                   </button>
                 </form>
               ) : null}
+              <button
+                type="button"
+                className={batchFillTestButtonClass}
+                disabled={
+                  adminSelectedTargetKeys.length === 0 ||
+                  selectedTargetsWithSavedContentCount === 0 ||
+                  adminSavingKey !== null ||
+                  adminPreloading ||
+                  adminCreatingReviewTestSession
+                }
+                onClick={handleBatchFillTestToggle}
+                title={
+                  selectedTargetsAllIncluded
+                    ? str.admin.table.actionTooltips.batchFillTestOn
+                    : str.admin.table.actionTooltips.batchFillTestOff
+                }
+              >
+                {str.admin.buttons.batchFillTestToggle}{" "}
+                {selectedTargetsAllIncluded
+                  ? str.admin.table.actionButtons.fillTestOn
+                  : str.admin.table.actionButtons.fillTestOff}
+              </button>
               </div>
             ) : null}
           </div>
@@ -1112,6 +1229,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 const isSaving = target ? adminSavingKey === target.key : false;
                 const isDeleting = target ? adminDeletingKey === target.key : false;
                 const isEditingThis = row.rowKey === adminEditingExampleRowKey;
+                const isEditingMeaning = row.rowKey === adminEditingMeaning?.rowKey;
 
                 return (
                   <AdminTableRowComponent
@@ -1125,6 +1243,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     isDeleting={isDeleting}
                     adminPreloading={adminPreloading}
                     isEditingThis={isEditingThis}
+                    isEditingMeaning={isEditingMeaning}
+                    editingMeaningValue={
+                      isEditingMeaning ? adminEditingMeaning?.nextMeaningZh ?? row.meaningZh : row.meaningZh
+                    }
                     str={str}
                     onRegenerate={stableOnRegenerate}
                     onSave={stableOnSave}
@@ -1134,6 +1256,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     onUpdatePendingMeaningInput={stableOnUpdatePendingMeaningInput}
                     onSavePendingMeaning={stableOnSavePendingMeaning}
                     onRemovePendingMeaning={stableOnRemovePendingMeaning}
+                    onEditMeaning={stableOnEditMeaning}
+                    onUpdateEditingMeaningInput={stableOnUpdateEditingMeaningInput}
+                    onSaveMeaningEdit={stableOnSaveMeaningEdit}
+                    onCancelMeaningEdit={stableOnCancelMeaningEdit}
                     onAddPhraseRow={stableOnAddPhraseRow}
                     onUpdatePendingPhraseInput={stableOnUpdatePendingPhraseInput}
                     onSavePendingPhrase={stableOnSavePendingPhrase}

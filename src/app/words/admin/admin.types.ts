@@ -52,6 +52,14 @@ export type AdminPendingMeaning = {
   exampleInput: string;
 };
 
+export type AdminEditingMeaning = {
+  rowKey: string;
+  targetKey: string;
+  originalMeaningZh: string;
+  originalMeaningEn: string;
+  nextMeaningZh: string;
+};
+
 export type AdminTableRenderRow = AdminTableRow & {
   showCharacterCell: boolean;
   showMeaningCell: boolean;
