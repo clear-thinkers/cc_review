@@ -1190,10 +1190,9 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     : str.admin.table.actionTooltips.batchFillTestOff
                 }
               >
-                {str.admin.buttons.batchFillTestToggle}{" "}
                 {selectedTargetsAllIncluded
-                  ? str.admin.table.actionButtons.fillTestOn
-                  : str.admin.table.actionButtons.fillTestOff}
+                  ? str.admin.buttons.batchFillTestOff
+                  : str.admin.buttons.batchFillTestOn}
               </button>
               </div>
             ) : null}

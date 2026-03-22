@@ -282,7 +282,8 @@ export const wordsStrings = {
         refreshAllPinyin: "Regenerate missing pinyin",
         refreshingAllPinyin: "Regenerating...",
         addToReviewTestSession: "Add to test session",
-        batchFillTestToggle: "Target",
+        batchFillTestOn: "In test bank",
+        batchFillTestOff: "Remove from test bank",
         clearReviewTestSelection: "Clear selection",
       },
       buttonTooltips: {
@@ -827,7 +828,8 @@ export const wordsStrings = {
         refreshAllPinyin: "批量生成拼音",
         refreshingAllPinyin: "生成中...",
         addToReviewTestSession: "加入测验",
-        batchFillTestToggle: "录入",
+        batchFillTestOn: "录入题库",
+        batchFillTestOff: "从题库中删除",
         clearReviewTestSelection: "清除选择",
       },
       buttonTooltips: {
