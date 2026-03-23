@@ -80,13 +80,14 @@ export function getNavItems(
   isPlatformAdmin: boolean
 ): NavItem[] {
   const allItems: NavItem[] = [
+    { href: "/words", label: `${str.nav.appFlow}`, page: "home" },
     { href: "/words/add", label: `${str.nav.addCharacters}`, page: "add" },
     { href: "/words/all", label: `${str.nav.allCharacters}`, page: "all" },
     { href: "/words/admin", label: `${str.nav.contentAdmin}`, page: "admin" },
+    { href: "/words/review", label: `${str.nav.dueReview}`, page: "review" },
+    { href: "/words/results", label: `${str.nav.quizResults}`, page: "results" },
     { href: "/words/prompts", label: `${str.nav.aiPrompts}`, page: "prompts" },
     { href: "/words/debug", label: `${str.nav.debug}`, page: "debug" },
-    { href: "/words/results", label: `${str.nav.quizResults}`, page: "results" },
-    { href: "/words/review", label: `${str.nav.dueReview}`, page: "review" },
   ];
 
   return allItems.filter(item => 

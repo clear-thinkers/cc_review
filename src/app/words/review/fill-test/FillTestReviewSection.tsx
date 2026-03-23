@@ -1,10 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 import { CoinAnimation } from "./coins.animation";
 import { playCelebrationSound } from "../../shared/coins.sound";
+
+type QuizCelebrationWindow = Window & {
+  __quizEasyGradeEvent?: number;
+  __lastProcessedEasyGradeEvent?: number;
+};
 
 export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
   const router = useRouter();
@@ -80,11 +86,10 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
 
     // Check for easy grade event every 100ms
     const pollInterval = setInterval(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const lastEvent = (window as any).__quizEasyGradeEvent;
-      if (lastEvent && lastEvent > ((window as any).__lastProcessedEasyGradeEvent ?? 0)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).__lastProcessedEasyGradeEvent = lastEvent;
+      const quizWindow = window as QuizCelebrationWindow;
+      const lastEvent = quizWindow.__quizEasyGradeEvent;
+      if (lastEvent && lastEvent > (quizWindow.__lastProcessedEasyGradeEvent ?? 0)) {
+        quizWindow.__lastProcessedEasyGradeEvent = lastEvent;
         handleEasyGrade();
       }
     }, 100);
@@ -112,7 +117,26 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
       {quizNotice ? <p className="text-sm text-blue-700">{quizNotice}</p> : null}
 
       {!quizInProgress ? (
-        null
+        <div className="space-y-3 rounded-md border border-dashed p-4">
+          <div className="space-y-1">
+            <h3 className="font-medium">{str.fillTest.emptyState.noSessionTitle}</h3>
+            <p className="text-sm text-gray-700">{str.fillTest.emptyState.noSessionBody}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/words/review"
+              className="rounded-md border-2 border-amber-500 bg-amber-100 px-4 py-2 text-sm font-medium text-amber-900"
+            >
+              {str.fillTest.emptyState.dueReviewButton}
+            </Link>
+            <Link
+              href="/words"
+              className="rounded-md border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700"
+            >
+              {str.fillTest.emptyState.homeButton}
+            </Link>
+          </div>
+        </div>
       ) : (
         <div className="space-y-3 rounded-md border p-3">
           {!currentQuizWord ? (
