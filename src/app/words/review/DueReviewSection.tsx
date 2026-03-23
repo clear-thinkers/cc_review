@@ -38,6 +38,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
     str,
     dueWords,
     fillTestDueWords,
+    skippedDueCount,
     reviewTestSessionRows,
     loading,
     sortedDueWords,
@@ -190,6 +191,11 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
         <span className="font-medium">{str.due.pageTitle}:</span>{" "}
         <span className="font-semibold">{dueWords.length}</span>
       </p>
+      {skippedDueCount > 0 ? (
+        <p className="text-sm text-amber-700">
+          {skippedDueCount} {str.fillTest.noFillTests}
+        </p>
+      ) : null}
 
       {dueWords.length > 0 ? (
         <div className="flex flex-wrap gap-2">

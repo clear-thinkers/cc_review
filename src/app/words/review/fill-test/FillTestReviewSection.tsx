@@ -11,8 +11,6 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
   const {
     isFillTestReviewPage,
     str,
-    fillTestDueWords,
-    skippedDueCount,
     quizNotice,
     quizInProgress,
     QUIZ_SELECTION_MODES,
@@ -49,7 +47,6 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     moveQuizForward,
     quizSummary,
     quizSessionCoins,
-    activeReviewTestSession,
     completedReviewTestSessionName,
     returnToDueReviewAfterReviewTestSession,
     gradeLabels,
@@ -62,6 +59,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
 
   // Celebration animation state
   const [animationKey, setAnimationKey] = useState<number>(0);
+  const [coinOrigin, setCoinOrigin] = useState<{ x: number; y: number } | null>(null);
   const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   // Listen for easy grade events to trigger celebration
@@ -75,7 +73,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
         const rect = submitButtonRef.current.getBoundingClientRect();
         const x = rect.left + rect.width / 2;
         const y = rect.top + rect.height / 2;
-        // Trigger animation by updating key
+        setCoinOrigin({ x, y });
         setAnimationKey((prev) => prev + 1);
       }
     };
@@ -101,31 +99,16 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
   return (
     <section className="space-y-3 rounded-lg border p-4">
       {/* Coin celebration animations */}
-      {submitButtonRef.current && (
+      {coinOrigin && animationKey > 0 && (
         <CoinAnimation
           key={`coin-${animationKey}`}
-          x={submitButtonRef.current.getBoundingClientRect().left + submitButtonRef.current.getBoundingClientRect().width / 2}
-          y={submitButtonRef.current.getBoundingClientRect().top + submitButtonRef.current.getBoundingClientRect().height / 2}
+          x={coinOrigin.x}
+          y={coinOrigin.y}
           duration={300}
         />
       )}
 
       <h2 className="font-medium">{str.fillTest.pageTitle}</h2>
-      <p className="text-sm text-gray-700">
-        {str.fillTest.dueNowLabel} {fillTestDueWords.length}
-      </p>
-      {skippedDueCount > 0 ? (
-        <p className="text-sm text-amber-700">
-          {skippedDueCount} {str.fillTest.noFillTests}
-        </p>
-      ) : null}
-      {activeReviewTestSession ? (
-        <p className="text-sm text-blue-700">
-          {str.fillTest.reviewTestSession.activeSession
-            .replace("{name}", activeReviewTestSession.name)
-            .replace("{count}", String(quizQueue.length))}
-        </p>
-      ) : null}
       {quizNotice ? <p className="text-sm text-blue-700">{quizNotice}</p> : null}
 
       {!quizInProgress ? (
@@ -167,6 +150,9 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
 
                       const selectedForTap = quizActivePhraseIndex === typedPhraseIndex;
                       const draggingNow = quizDraggingPhraseIndex === typedPhraseIndex;
+                      const phraseButtonClass = selectedForTap || draggingNow
+                        ? "w-full rounded-md border-2 border-sky-500 bg-sky-50 px-3 py-2 text-center text-sm text-sky-900 disabled:opacity-60"
+                        : "w-full rounded-md border-2 border-transparent bg-white px-3 py-2 text-center text-sm hover:border-gray-400 disabled:opacity-60";
 
                       return (
                         <li key={`${currentQuizWord.id}-phrase-${phraseIndex}`}>
@@ -181,13 +167,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                             }
                             onDragStart={(event) => handleQuizPhraseDragStart(event, typedPhraseIndex)}
                             onDragEnd={handleQuizPhraseDragEnd}
-                            className={
-                              selectedForTap
-                                ? "w-full rounded-md border-2 border-sky-500 bg-sky-50 px-3 py-2 text-center text-sm text-sky-900 disabled:opacity-60"
-                                : draggingNow
-                                  ? "w-full rounded-md border-2 border-sky-500 bg-sky-50 px-3 py-2 text-center text-sm text-sky-900 disabled:opacity-60"
-                                  : "w-full rounded-md border bg-white px-3 py-2 text-center text-sm hover:border-gray-400 disabled:opacity-60"
-                            }
+                            className={`quiz-phrase-pill ${phraseButtonClass}`}
                           >
                             <p className="text-base font-bold text-gray-900">{phrase}</p>
                           </button>

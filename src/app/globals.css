@@ -127,6 +127,10 @@ h3 {
   transform: translateY(-1px);
 }
 
+.kids-page button.quiz-phrase-pill:hover:not(:disabled) {
+  transform: none;
+}
+
 .kids-page button.bg-black {
   border: 2px solid #7bc28f;
   background: linear-gradient(135deg, var(--primary), #74c08b);
@@ -180,27 +184,11 @@ h3 {
   color: #5d4a23;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
   background:
-    linear-gradient(
-      115deg,
-      rgba(255, 255, 255, 0.5) 0%,
-      rgba(255, 255, 255, 0.1) 18%,
-      rgba(255, 255, 255, 0.42) 35%,
-      rgba(255, 255, 255, 0.1) 52%,
-      rgba(255, 255, 255, 0.5) 68%,
-      rgba(255, 255, 255, 0.1) 86%,
-      rgba(255, 255, 255, 0.5) 100%
-    ),
-    linear-gradient(145deg, #fff7da 0%, #f2dc9a 35%, #eecf81 52%, #f7e6b6 74%, #fff6d3 100%),
-    repeating-linear-gradient(
-      125deg,
-      rgba(255, 244, 214, 0.18) 0 6px,
-      rgba(208, 160, 67, 0.08) 6px 12px
-    );
-  background-size:
-    220px 100%,
-    100% 100%,
-    24px 24px;
-  background-repeat: repeat-x, no-repeat, repeat;
+    linear-gradient(180deg, rgba(255, 251, 239, 0.24) 0%, rgba(255, 248, 228, 0.24) 100%),
+    url("/background/summary-background.png");
+  background-size: 100% 100%, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.85),
     inset 0 -14px 24px rgba(176, 132, 43, 0.13),

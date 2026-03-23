@@ -28,7 +28,6 @@ export default function FlashcardReviewSection({ vm }: { vm: WordsWorkspaceVM })
     setFlashcardIndex,
     activeReviewTestSession,
     activeReviewTestSessionQuizCount,
-    activeReviewTestSessionSkippedQuizCount,
     continueReviewTestSessionToQuiz,
   } = vm;
 
@@ -47,13 +46,6 @@ export default function FlashcardReviewSection({ vm }: { vm: WordsWorkspaceVM })
         </p>
       ) : (
         <div className="space-y-3 rounded-md border p-3">
-          {activeReviewTestSession ? (
-            <p className="text-sm text-blue-700">
-              {str.flashcard.reviewTestSession.activeSession
-                .replace("{name}", activeReviewTestSession.name)
-                .replace("{count}", String(flashcardQueue.length))}
-            </p>
-          ) : null}
           {!currentFlashcardWord ? (
             <p className="text-sm text-gray-600">{str.flashcard.noCharacterLoaded}</p>
           ) : (
