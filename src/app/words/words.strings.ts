@@ -16,6 +16,7 @@ export const wordsStrings = {
       appSubtitle: "Chinese Character Practice for Kids",
       menu: "Menu",
       navigateBetweenPages: "Navigate between pages.",
+      appFlow: "App Flow",
       addCharacters: "Add Characters",
       allCharacters: "All Characters",
       contentAdmin: "Content Admin",
@@ -57,9 +58,54 @@ export const wordsStrings = {
       allSuccess: "Added {count} character(s).",
     },
 
+    home: {
+      pageTitle: "App Flow",
+      pageDescription: "Follow the family learning path from setup through review and quiz practice.",
+      helper: "Each step links to the page that handles that part of the flow.",
+      pageTitleLabel: "Page Title",
+      roleLabels: {
+        parent: "Parent",
+        child: "Child",
+        shared: "Parent + Child",
+      },
+      unavailableCta: "Not available in this profile",
+      unavailableHint: "Switch profiles to open this step.",
+      steps: {
+        addCharacters: {
+          title: "Parent Adds Characters",
+          description: "Add the Hanzi your family wants to study first.",
+          cta: "Go to Add Characters",
+        },
+        allCharacters: {
+          title: "Family Reviews All Characters",
+          description:
+            "Both parent and child can inspect what has been added. Parents can also manage tags, reset familiarity, and delete added characters here when needed.",
+          cta: "Open All Characters",
+        },
+        addContent: {
+          title: "Parent Adds Content",
+          description:
+            "Generate or edit meanings, phrases, and examples for the new characters, and bundle selected characters into a test session.",
+          cta: "Go to Content Admin",
+        },
+        dueReview: {
+          title: "Family Checks Due Review",
+          description:
+            "Both parent and child can see what is due now, review flashcards, and see which characters are bundled into test sessions. Only the child can start a test session or begin fill-test quizzes.",
+          cta: "Open Due Review",
+        },
+        results: {
+          title: "Family Checks Quiz Results",
+          description:
+            "Both parent and child can review recent quiz results and cumulative coins here.",
+          cta: "Open Quiz Results",
+        },
+      },
+    },
+
     // ============= REVIEW PAGE (DUE) =============
     due: {
-      pageTitle: "Due Characters",
+      pageTitle: "Due Review",
       dueNowLabel: "Due now:",
       startFlashcard: "Start flashcard review",
       startFillTest: "Start fill-test review",
@@ -141,6 +187,12 @@ export const wordsStrings = {
         title: "Last Flashcard Summary",
         charactersReviewed: "Characters reviewed:",
       },
+      emptyState: {
+        noSessionTitle: "No flashcard session is active.",
+        noSessionBody: "Start from Due Review to choose which characters to review first.",
+        dueReviewButton: "Go to Due Review",
+        homeButton: "Back to App Flow",
+      },
       reviewTestSession: {
         activeSession: "Test session: {name} ({count} characters)",
         startQuizButton: "Start quiz",
@@ -198,6 +250,12 @@ export const wordsStrings = {
         partiallyCorrect: "Partially correct:",
         fullyWrong: "Fully wrong:",
         coinsEarned: "Coins Earned:",
+      },
+      emptyState: {
+        noSessionTitle: "No quiz session is active.",
+        noSessionBody: "Start from Due Review to choose quiz-ready characters first.",
+        dueReviewButton: "Go to Due Review",
+        homeButton: "Back to App Flow",
       },
       warning: {
         title: "Coins will be lost",
@@ -614,6 +672,7 @@ export const wordsStrings = {
       appSubtitle: "专为北美小学生设计",
       menu: "菜单",
       navigateBetweenPages: "在页面之间导航。",
+      appFlow: "使用流程",
       addCharacters: "添加汉字",
       allCharacters: "全部汉字",
       contentAdmin: "内容管理",
@@ -654,9 +713,51 @@ export const wordsStrings = {
       allSuccess: "已添加 {count} 个汉字。",
     },
 
+    home: {
+      pageTitle: "使用流程",
+      pageDescription: "根据下图的路径来配置app，从添加汉字开始，一步一步到复习和测试。",
+      helper: "每一步都可以直接打开对应页面。",
+      pageTitleLabel: "页面标题",
+      roleLabels: {
+        parent: "家长",
+        child: "孩子",
+        shared: "家长和孩子",
+      },
+      unavailableCta: "当前档案不可进入",
+      unavailableHint: "切换档案后可打开这一步。",
+      steps: {
+        addCharacters: {
+          title: "家长添加汉字",
+          description: "先把家里准备学习的汉字加入系统。",
+          cta: "前往添加汉字",
+        },
+        allCharacters: {
+          title: "一起查看全部汉字",
+          description:
+            "家长和孩子都可以查看已经添加的汉字。家长也可以在这里按需要管理标签、重置熟悉度，并删除已添加的汉字。",
+          cta: "打开全部汉字",
+        },
+        addContent: {
+          title: "家长添加内容",
+          description: "为新汉字生成或编辑释义、短语和例句，并把选中的汉字打包成测验来定向复习。",
+          cta: "前往内容管理",
+        },
+        dueReview: {
+          title: "一起查看待复习",
+          description: "家长和孩子都可以查看当前待复习内容、复习闪卡，并查看哪些汉字被打包成测验。只有孩子可以进行测验或填空测试。",
+          cta: "打开待复习",
+        },
+        results: {
+          title: "一起查看测验结果",
+          description: "家长和孩子都可以在这里查看最近的测验结果和累积的金币。",
+          cta: "打开测验结果",
+        },
+      },
+    },
+
     // ============= REVIEW PAGE (DUE) =============
     due: {
-      pageTitle: "待复习汉字",
+      pageTitle: "待复习",
       dueNowLabel: "当前待复习:",
       startFlashcard: "开始闪卡复习",
       startFillTest: "开始填空测试",
@@ -737,6 +838,12 @@ export const wordsStrings = {
         title: "上次闪卡总结",
         charactersReviewed: "已复习汉字:",
       },
+      emptyState: {
+        noSessionTitle: "当前没有正在进行的闪卡复习。",
+        noSessionBody: "请先从待复习页面选择要复习的汉字。",
+        dueReviewButton: "前往待复习",
+        homeButton: "返回使用流程",
+      },
       reviewTestSession: {
         activeSession: "测验：{name}（{count} 个汉字）",
         startQuizButton: "开始测试",
@@ -794,6 +901,12 @@ export const wordsStrings = {
         partiallyCorrect: "部分正确:",
         fullyWrong: "全部错误:",
         coinsEarned: "获得金币:",
+      },
+      emptyState: {
+        noSessionTitle: "当前没有正在进行的测试。",
+        noSessionBody: "请先从待复习页面选择可测试的汉字。",
+        dueReviewButton: "前往待复习",
+        homeButton: "返回使用流程",
       },
       warning: {
         title: "离开会丢失金币",

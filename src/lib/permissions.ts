@@ -1,6 +1,7 @@
 import type { UserRole } from './auth.types';
 
 export type ProtectedRoute = 
+  | '/words'
   | '/words/add'
   | '/words/all'
   | '/words/admin'
@@ -16,8 +17,8 @@ export type ProtectedRoute =
  * Platform admin bypasses all restrictions.
  * 
  * Permission matrix:
- * - Child: review (flashcard + fill-test), all, results
- * - Parent: add, admin, all, results, review, flashcard (NO fill-test)
+ * - Child: app flow, review (flashcard + fill-test), all, results
+ * - Parent: app flow, add, admin, all, results, review, flashcard (NO fill-test)
  */
 export function canAccessRoute(
   route: string,
@@ -36,6 +37,7 @@ export function canAccessRoute(
     case '/words/review/fill-test':
       return role === 'child';
     
+    case '/words':
     case '/words/all':
     case '/words/results':
     case '/words/review':

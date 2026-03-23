@@ -4,6 +4,7 @@ import AddSection from "./add/AddSection";
 import AdminSection from "./admin/AdminSection";
 import AllWordsSection from "./all/AllWordsSection";
 import DebugSection from "./debug/DebugSection";
+import HomeFlowSection from "./home/HomeFlowSection";
 import PromptsSection from "./prompts/PromptsSection";
 import ResultsSection from "./results/ResultsSection";
 import DueReviewSection from "./review/DueReviewSection";
@@ -24,6 +25,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
 
   return (
     <WordsShell vm={vm}>
+      <HomeFlowSection vm={vm} />
       <AddSection vm={vm} />
       <DueReviewSection vm={vm} />
       <FlashcardReviewSection vm={vm} />
