@@ -7,6 +7,7 @@ import { taggingStrings } from "../shared/tagging.strings";
 import { assignWordLessonTags, clearWordLessonTags, createLessonTagIfNew, createTextbook, listLessonTags, listTextbooks, putWord } from "@/lib/supabase-service";
 import type { LessonTag, Textbook } from "../shared/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
+import { matchesFamiliarityFilter } from "./all.utils";
 
 function appendSelectedOption(options: string[], selectedValue: string | null): string[] {
   const trimmedValue = selectedValue?.trim();
@@ -106,11 +107,6 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     );
   }, [wordTagsMap]);
 
-  const visibleWordIds = useMemo(
-    () => sortedAllWords.map(({ word }) => word.id),
-    [sortedAllWords]
-  );
-
   // Apply filters to sorted words
   const filteredWords = useMemo(() => {
     const now = Date.now();
@@ -122,13 +118,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       }
 
       // Filter: Familiarity
-      if (filterFamiliarityValue !== "") {
-        const threshold = Number(filterFamiliarityValue);
-        if (filterFamiliarityOperator === "<=") {
-          if (familiarity > threshold) return false;
-        } else if (filterFamiliarityOperator === ">=") {
-          if (familiarity < threshold) return false;
-        }
+      if (!matchesFamiliarityFilter(familiarity, filterFamiliarityOperator, filterFamiliarityValue)) {
+        return false;
       }
 
       // Filter: Tags (OR logic - word must have any selected tag)

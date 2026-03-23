@@ -4,11 +4,15 @@ import { useMemo, memo, useCallback, useRef, useState, useEffect, useTransition,
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import type { WordsLocaleStrings } from "../shared/words.shared.types";
 import type {
+  AdminBatchActionMenuKind,
+  AdminBatchGenerationScope,
   AdminTableRenderRow,
   AdminTableRow,
   AdminTarget,
 } from "./admin.types";
 import { renderPhraseWithPinyin, renderSentenceWithPinyin } from "../shared/words.shared.utils";
+
+type AdminBatchWarningKind = "content_all" | "pinyin_all";
 
 function computeRenderRows(rows: AdminTableRow[]): AdminTableRenderRow[] {
   if (rows.length === 0) return [];
@@ -104,9 +108,12 @@ type AdminTableRowComponentProps = {
   isSaving: boolean;
   isDeleting: boolean;
   adminPreloading: boolean;
-  isEditingThis: boolean;
+  isEditingExample: boolean;
   isEditingMeaning: boolean;
+  isEditingPhrase: boolean;
   editingMeaningValue: string;
+  editingPhraseValue: string;
+  editingExampleValue: string;
   str: WordsLocaleStrings;
   onRegenerate: (target: AdminTarget) => void;
   onSave: (target: AdminTarget) => void;
@@ -124,6 +131,10 @@ type AdminTableRowComponentProps = {
   onUpdateEditingMeaningInput: (value: string) => void;
   onSaveMeaningEdit: (row: AdminTableRow) => void;
   onCancelMeaningEdit: () => void;
+  onEditPhrase: (row: AdminTableRow) => void;
+  onUpdateEditingPhraseInput: (value: string) => void;
+  onSavePhraseEdit: (row: AdminTableRow) => void;
+  onCancelPhraseEdit: () => void;
   onAddPhraseRow: (targetKey: string, meaningZh: string, meaningEn: string) => void;
   onUpdatePendingPhraseInput: (pendingId: string, value: string) => void;
   onSavePendingPhrase: (row: AdminTableRow) => void;
@@ -131,9 +142,11 @@ type AdminTableRowComponentProps = {
   onToggleFillTestInclude: (row: AdminTableRow, include: boolean) => void;
   onRegeneratePhrase: (row: AdminTableRow) => void;
   onDeletePhrase: (row: AdminTableRow) => void;
-  onInlineEditExample: (row: AdminTableRow, value: string) => void;
   onRegenerateExample: (row: AdminTableRow) => void;
   onEditExample: (row: AdminTableRow) => void;
+  onUpdateEditingExampleInput: (value: string) => void;
+  onSaveExampleEdit: (row: AdminTableRow) => void;
+  onCancelExampleEdit: () => void;
   onDeleteExample: (row: AdminTableRow) => void;
   onToggleSelection: (targetKey: string) => void;
 };
@@ -147,9 +160,12 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   isSaving,
   isDeleting,
   adminPreloading,
-  isEditingThis,
+  isEditingExample,
   isEditingMeaning,
+  isEditingPhrase,
   editingMeaningValue,
+  editingPhraseValue,
+  editingExampleValue,
   str,
   onRegenerate,
   onSave,
@@ -163,6 +179,10 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   onUpdateEditingMeaningInput,
   onSaveMeaningEdit,
   onCancelMeaningEdit,
+  onEditPhrase,
+  onUpdateEditingPhraseInput,
+  onSavePhraseEdit,
+  onCancelPhraseEdit,
   onAddPhraseRow,
   onUpdatePendingPhraseInput,
   onSavePendingPhrase,
@@ -170,9 +190,11 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   onToggleFillTestInclude,
   onRegeneratePhrase,
   onDeletePhrase,
-  onInlineEditExample,
   onRegenerateExample,
   onEditExample,
+  onUpdateEditingExampleInput,
+  onSaveExampleEdit,
+  onCancelExampleEdit,
   onDeleteExample,
   onToggleSelection,
 }: AdminTableRowComponentProps) {
@@ -182,6 +204,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   const isPendingMeaningRow = row.rowType === "pending_meaning";
   const isEmptyTargetRow = row.rowType === "empty_target";
   const isExistingRow = row.rowType === "existing";
+  const isPhraseEditingRow = isExistingRow && isEditingPhrase;
   const adminTableButtonBaseClass =
     "inline-flex min-h-5 items-center justify-center rounded border-2 px-1.5 py-px text-[11px] font-medium leading-none disabled:opacity-50";
   const adminTableWideButtonClass = `${adminTableButtonBaseClass} px-2`;
@@ -370,7 +393,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
           </>
         ) : null}
       </td>
-      <td className="px-3 py-2">
+      <td className="pl-3 pr-0 py-2">
         <div className="flex flex-col gap-1">
           {isPendingPhraseRow ? (
             <input
@@ -394,6 +417,13 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
             />
           ) : isEmptyTargetRow ? (
             <p className="text-xs text-gray-500">{str.admin.table.emptyMessages.addMeaningFirst}</p>
+          ) : isPhraseEditingRow ? (
+            <input
+              className="w-full rounded-md border px-2 py-1 text-sm"
+              value={editingPhraseValue}
+              onChange={(event) => onUpdateEditingPhraseInput(event.target.value)}
+              placeholder={str.admin.table.placeholders.editPhrase}
+            />
           ) : (
             <div className="text-base leading-tight">
               {renderPhraseWithPinyin(row.phrase, row.phrasePinyin)}
@@ -420,8 +450,29 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 {str.admin.table.actionButtons.cancel}
               </button>
             </div>
-          ) : isPendingMeaningRow ? null : (
+          ) : isPhraseEditingRow ? (
             <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
+                disabled={busy || !editingPhraseValue.trim()}
+                onClick={() => onSavePhraseEdit(row)}
+                title={str.admin.table.actionTooltips.save}
+              >
+                {str.admin.table.actionButtons.save}
+              </button>
+              <button
+                type="button"
+                className={`${adminTableWideButtonClass} border-gray-400 bg-gray-100 text-gray-700`}
+                disabled={busy}
+                onClick={onCancelPhraseEdit}
+                title={str.admin.table.actionButtons.cancel}
+              >
+                {str.admin.table.actionButtons.cancel}
+              </button>
+            </div>
+          ) : isPendingMeaningRow ? null : (
+            <div className="flex flex-nowrap gap-1">
               {isExistingRow ? (
                 <button
                   type="button"
@@ -449,23 +500,23 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 disabled={busy}
                 onClick={() => onRegeneratePhrase(row)}
                 title={str.admin.table.actionTooltips.regeneratePhrase}
-              >
-                {str.admin.table.actionButtons.regenerate}
-              </button>
+                >
+                  {str.admin.table.actionButtons.regenerate}
+                </button>
               <button
-                type="button"
-                className={`${adminTableButtonBaseClass} border-emerald-600 bg-emerald-600 text-white`}
-                disabled={busy || !canSave}
-                onClick={() => onSave(target)}
-                title={str.admin.table.actionTooltips.save}
-              >
-                {str.admin.table.actionButtons.save}
-              </button>
-              <button
-                type="button"
-                className={`${adminTableButtonBaseClass} border-rose-500 bg-rose-50 text-rose-700`}
-                disabled={busy}
-                onClick={() => onDeletePhrase(row)}
+                  type="button"
+                  className={adminTableSkyPillButtonClass}
+                  disabled={busy}
+                  onClick={() => onEditPhrase(row)}
+                  title={str.admin.table.actionTooltips.editPhrase}
+                >
+                  {str.admin.table.actionButtons.edit}
+                </button>
+                <button
+                  type="button"
+                  className={`${adminTableButtonBaseClass} border-rose-500 bg-rose-50 text-rose-700`}
+                  disabled={busy}
+                  onClick={() => onDeletePhrase(row)}
                 title={str.admin.table.actionTooltips.deletePhrase}
               >
                 {str.admin.table.actionButtons.delete}
@@ -496,11 +547,11 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
             <p className="text-xs text-gray-500">
               {str.admin.table.emptyMessages.addMeaningAndPhraseFirst}
             </p>
-          ) : isEditingThis ? (
+          ) : isEditingExample ? (
             <input
               className="w-full rounded-md border px-2 py-1 text-sm"
-              value={row.example}
-              onChange={(event) => onInlineEditExample(row, event.target.value)}
+              value={editingExampleValue}
+              onChange={(event) => onUpdateEditingExampleInput(event.target.value)}
               placeholder={str.admin.table.placeholders.editExample}
               // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
@@ -518,27 +569,41 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 disabled={busy}
                 onClick={() => onRegenerateExample(row)}
                 title={str.admin.table.actionTooltips.regenerateExample}
-              >
-                {str.admin.table.actionButtons.regenerate}
-              </button>
-              <button
-                type="button"
-                className={adminTableSkyPillButtonClass}
-                disabled={busy}
-                onClick={() => onEditExample(row)}
-                title={str.admin.table.actionTooltips.editExample}
-              >
-                {str.admin.table.actionButtons.edit}
-              </button>
-              <button
-                type="button"
-                className={`${adminTableButtonBaseClass} border-emerald-600 bg-emerald-600 text-white`}
-                disabled={busy || !canSave}
-                onClick={() => onSave(target)}
-                title={str.admin.table.actionTooltips.save}
-              >
-                {str.admin.table.actionButtons.save}
-              </button>
+                >
+                  {str.admin.table.actionButtons.regenerate}
+                </button>
+              {isEditingExample ? (
+                <>
+                  <button
+                    type="button"
+                    className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
+                    disabled={busy || !editingExampleValue.trim()}
+                    onClick={() => onSaveExampleEdit(row)}
+                    title={str.admin.table.actionTooltips.save}
+                  >
+                    {str.admin.table.actionButtons.save}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${adminTableWideButtonClass} border-gray-400 bg-gray-100 text-gray-700`}
+                    disabled={busy}
+                    onClick={onCancelExampleEdit}
+                    title={str.admin.table.actionButtons.cancel}
+                  >
+                    {str.admin.table.actionButtons.cancel}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className={adminTableSkyPillButtonClass}
+                  disabled={busy}
+                  onClick={() => onEditExample(row)}
+                  title={str.admin.table.actionTooltips.editExample}
+                >
+                  {str.admin.table.actionButtons.edit}
+                </button>
+              )}
               <button
                 type="button"
                 className={`${adminTableButtonBaseClass} border-rose-500 bg-rose-50 text-rose-700`}
@@ -574,10 +639,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     adminCreatingReviewTestSession,
     adminTargetStatusByKey,
     reviewTestSessions,
-    handleAdminPreloadAll,
     cancelAdminPreload,
     adminPreloadCancelling,
-    handleAdminRefreshAllPinyin,
     adminLoading,
     adminPreloading,
     adminRefreshingAllPinyin,
@@ -600,10 +663,15 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     handleAdminSavePendingMeaning,
     removeAdminPendingMeaning,
     adminEditingMeaning,
+    adminEditingPhrase,
     handleAdminEditMeaning,
+    handleAdminEditPhrase,
     updateAdminEditingMeaningInput,
+    updateAdminEditingPhraseInput,
     handleAdminSaveMeaningEdit,
+    handleAdminSavePhraseEdit,
     cancelAdminMeaningEdit,
+    cancelAdminPhraseEdit,
     handleAdminAddPhraseRow,
     updateAdminPendingPhraseInput,
     handleAdminSavePendingPhrase,
@@ -611,10 +679,12 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     handleAdminToggleFillTestInclude,
     handleAdminRegeneratePhrase,
     handleAdminDeletePhrase,
-    adminEditingExampleRowKey,
-    handleAdminInlineEditExample,
+    adminEditingExample,
+    updateAdminEditingExampleInput,
     handleAdminRegenerateExample,
     handleAdminEditExample,
+    handleAdminSaveExampleEdit,
+    cancelAdminExampleEdit,
     handleAdminDeleteExample,
     toggleAdminTargetSelection,
     selectAdminTargetKeys,
@@ -634,6 +704,9 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [filterSectionOpen, setFilterSectionOpen] = useState(false);
   const [reviewTestSessionFormOpen, setReviewTestSessionFormOpen] = useState(false);
   const [reviewTestSessionName, setReviewTestSessionName] = useState("");
+  const [openBatchMenu, setOpenBatchMenu] = useState<AdminBatchActionMenuKind | null>(null);
+  const [batchWarningKind, setBatchWarningKind] = useState<AdminBatchWarningKind | null>(null);
+  const batchToolbarRef = useRef<HTMLDivElement | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -746,6 +819,13 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       ).length,
     [adminSelectedTargetKeys, adminTargetStatusByKey]
   );
+  const filteredTargetsWithSavedContentCount = useMemo(
+    () =>
+      filteredAdminTargetKeys.filter(
+        (targetKey) => (adminTargetStatusByKey[targetKey] ?? "missing_content") !== "missing_content"
+      ).length,
+    [filteredAdminTargetKeys, adminTargetStatusByKey]
+  );
   const selectedTargetsAllIncluded =
     selectedTargetsWithSavedContentCount > 0 &&
     adminSelectedTargetKeys.every(
@@ -754,6 +834,12 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const batchFillTestInclude = !selectedTargetsAllIncluded;
   const batchFillTestButtonClass =
     "admin-toolbar-button rounded-md border border-teal-600 bg-teal-50 px-3 py-1.5 font-medium leading-none text-teal-700 disabled:opacity-50";
+  const adminToolbarButtonBaseClass =
+    "admin-toolbar-button inline-flex items-center gap-1 rounded-md border px-3 py-1.5 font-medium leading-none disabled:opacity-50";
+  const adminToolbarMenuButtonClass =
+    "flex w-full items-start rounded-md px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50";
+  const adminToolbarBusy =
+    adminLoading || adminPreloading || adminRefreshingAllPinyin || adminCreatingReviewTestSession;
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -768,6 +854,21 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     setReviewTestSessionFormOpen(false);
     setReviewTestSessionName("");
   }, [adminSelectedTargetKeys.length]);
+
+  useEffect(() => {
+    if (!openBatchMenu) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent): void {
+      if (!batchToolbarRef.current?.contains(event.target as Node)) {
+        setOpenBatchMenu(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [openBatchMenu]);
 
   function clearAllFilters(): void {
     setFilterDueNow(false);
@@ -808,6 +909,13 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   );
   const stableOnSaveMeaningEdit = useCallback((row: AdminTableRow) => vmRef.current.handleAdminSaveMeaningEdit(row), []);
   const stableOnCancelMeaningEdit = useCallback(() => vmRef.current.cancelAdminMeaningEdit(), []);
+  const stableOnEditPhrase = useCallback((row: AdminTableRow) => vmRef.current.handleAdminEditPhrase(row), []);
+  const stableOnUpdateEditingPhraseInput = useCallback(
+    (value: string) => vmRef.current.updateAdminEditingPhraseInput(value),
+    []
+  );
+  const stableOnSavePhraseEdit = useCallback((row: AdminTableRow) => vmRef.current.handleAdminSavePhraseEdit(row), []);
+  const stableOnCancelPhraseEdit = useCallback(() => vmRef.current.cancelAdminPhraseEdit(), []);
   const stableOnAddPhraseRow = useCallback(
     (targetKey: string, meaningZh: string, meaningEn: string) =>
       vmRef.current.handleAdminAddPhraseRow(targetKey, meaningZh, meaningEn),
@@ -825,12 +933,14 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   );
   const stableOnRegeneratePhrase = useCallback((row: AdminTableRow) => vmRef.current.handleAdminRegeneratePhrase(row), []);
   const stableOnDeletePhrase = useCallback((row: AdminTableRow) => vmRef.current.handleAdminDeletePhrase(row), []);
-  const stableOnInlineEditExample = useCallback(
-    (row: AdminTableRow, value: string) => vmRef.current.handleAdminInlineEditExample(row, value),
-    []
-  );
   const stableOnRegenerateExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminRegenerateExample(row), []);
   const stableOnEditExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminEditExample(row), []);
+  const stableOnUpdateEditingExampleInput = useCallback(
+    (value: string) => vmRef.current.updateAdminEditingExampleInput(value),
+    []
+  );
+  const stableOnSaveExampleEdit = useCallback((row: AdminTableRow) => vmRef.current.handleAdminSaveExampleEdit(row), []);
+  const stableOnCancelExampleEdit = useCallback(() => vmRef.current.cancelAdminExampleEdit(), []);
   const stableOnDeleteExample = useCallback((row: AdminTableRow) => vmRef.current.handleAdminDeleteExample(row), []);
   const stableOnToggleSelection = useCallback(
     (targetKey: string) => vmRef.current.toggleAdminTargetSelection(targetKey),
@@ -846,23 +956,64 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     vmRef.current.clearAdminTargetSelection();
     setReviewTestSessionFormOpen(false);
     setReviewTestSessionName("");
+    setOpenBatchMenu(null);
+    setBatchWarningKind(null);
   }, []);
   const handleBatchFillTestToggle = useCallback(() => {
     void vmRef.current.handleAdminBatchToggleFillTestInclude(batchFillTestInclude);
   }, [batchFillTestInclude]);
 
-  // Page-specific handlers - only process targets visible on current page
-  const handleAdminPreloadPage = useCallback(async () => {
-    // This calls the VM's preload, which will process all visible targets
-    // Pagination ensures only current page targets are shown
-    return vmRef.current.handleAdminPreloadAll();
-  }, []);
+  const executeContentBatchAction = useCallback(
+    async (scope: AdminBatchGenerationScope) => {
+      setOpenBatchMenu(null);
+      return vmRef.current.handleAdminPreloadAll({
+        scope,
+        targetKeys: scope === "filtered" ? filteredAdminTargetKeys : undefined,
+      });
+    },
+    [filteredAdminTargetKeys]
+  );
 
-  const handleAdminRefreshPinyinPage = useCallback(async () => {
-    // This calls the VM's refresh, which will process all visible targets
-    // Pagination ensures only current page targets are shown
-    return vmRef.current.handleAdminRefreshAllPinyin();
-  }, []);
+  const executePinyinBatchAction = useCallback(
+    async (scope: AdminBatchGenerationScope) => {
+      setOpenBatchMenu(null);
+      return vmRef.current.handleAdminRefreshAllPinyin({
+        scope,
+        targetKeys: scope === "filtered" ? filteredAdminTargetKeys : undefined,
+      });
+    },
+    [filteredAdminTargetKeys]
+  );
+
+  const handleBatchActionClick = useCallback(
+    (kind: AdminBatchActionMenuKind, scope: AdminBatchGenerationScope) => {
+      if (scope === "all") {
+        setOpenBatchMenu(null);
+        setBatchWarningKind(kind === "content" ? "content_all" : "pinyin_all");
+        return;
+      }
+
+      if (kind === "content") {
+        void executeContentBatchAction(scope);
+        return;
+      }
+
+      void executePinyinBatchAction(scope);
+    },
+    [executeContentBatchAction, executePinyinBatchAction]
+  );
+
+  const handleConfirmBatchWarning = useCallback(() => {
+    const currentWarning = batchWarningKind;
+    setBatchWarningKind(null);
+    if (currentWarning === "content_all") {
+      void executeContentBatchAction("all");
+      return;
+    }
+    if (currentWarning === "pinyin_all") {
+      void executePinyinBatchAction("all");
+    }
+  }, [batchWarningKind, executeContentBatchAction, executePinyinBatchAction]);
 
   async function handleCreateReviewTestSessionSubmit(
     event: FormEvent<HTMLFormElement>
@@ -967,43 +1118,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="inline-flex items-center rounded-md border-2 border-amber-400 bg-amber-100 px-3.5 py-1.5 font-medium leading-snug text-amber-900 disabled:opacity-50"
-          onClick={handleAdminPreloadPage}
-          disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || paginatedAdminRenderRows.length === 0}
-          title={str.admin.buttonTooltips.preload}
-        >
-          {adminPreloading ? str.admin.buttons.preloading : str.admin.buttons.preload}
-        </button>
-        {adminPreloading ? (
-          <button
-            type="button"
-            className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
-            onClick={cancelAdminPreload}
-            disabled={adminPreloadCancelling}
-          >
-            {adminPreloadCancelling ? str.admin.buttons.cancellingPreload : str.admin.buttons.cancelPreload}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="inline-flex items-center rounded-md border-2 border-purple-300 bg-purple-100 px-3.5 py-1.5 font-medium leading-snug text-purple-700 disabled:opacity-50"
-          onClick={handleAdminRefreshPinyinPage}
-          disabled={adminLoading || adminPreloading || adminRefreshingAllPinyin || paginatedAdminRenderRows.length === 0}
-          title={str.admin.buttonTooltips.refreshAllPinyin}
-        >
-          {adminRefreshingAllPinyin ? str.admin.buttons.refreshingAllPinyin : str.admin.buttons.refreshAllPinyin}
-        </button>
-      </div>
-
-      <p className="text-xs text-amber-700">
-        {str.admin.preloadWarning}
-      </p>
-
       {adminProgressText ? <p className="text-sm text-gray-600">{adminProgressText}</p> : null}
-      {adminNotice ? <p className="text-sm text-blue-700">{adminNotice}</p> : null}
 
       {/* Default Filters Bar */}
       <div className="rounded-lg border p-4 space-y-3">
@@ -1082,133 +1197,293 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       </div>
 
       {!adminLoading && adminTargets.length > 0 ? (
-        <div className="py-1">
-          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
+        <div className="relative z-20 py-1">
+          <div className="space-y-2 text-sm text-gray-700">
             <p className="shrink-0">
-            {adminHasActiveCountFilter ? (
-              <>
-                {str.admin.table.summary.filteredLabel}{" "}
-                <span className="font-semibold text-blue-600">{filteredAdminTargetCount}</span>
-              </>
-            ) : (
-              str.admin.table.summary.noFiltersApplied
-            )}
-            {str.admin.table.summary.separator}
-            {str.admin.table.summary.selectedLabel}{" "}
-            <span className="font-semibold text-blue-600">{adminSelectedTargetKeys.length}</span>
+              {adminHasActiveCountFilter ? (
+                <>
+                  {str.admin.table.summary.filteredLabel}{" "}
+                  <span className="font-semibold text-blue-600">{filteredAdminTargetCount}</span>
+                </>
+              ) : (
+                str.admin.table.summary.noFiltersApplied
+              )}
+              {str.admin.table.summary.separator}
+              {str.admin.table.summary.selectedLabel}{" "}
+              <span className="font-semibold text-blue-600">{adminSelectedTargetKeys.length}</span>
             </p>
-            {filteredAdminTargetKeys.length > 0 ? (
+            <div ref={batchToolbarRef} className="space-y-2">
               <div className="flex min-h-[2.5rem] flex-wrap items-center gap-2 text-xs">
-              <button
-                type="button"
-                className="admin-toolbar-button rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
-                disabled={paginatedAdminTargetKeys.length === 0 || adminPreloading || allVisibleSelected}
-                onClick={handleSelectPage}
-              >
-                {str.admin.table.selection.selectPage}
-              </button>
-              <button
-                type="button"
-                className="admin-toolbar-button rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
-                disabled={filteredAdminTargetKeys.length === 0 || adminPreloading || allFilteredSelected}
-                onClick={handleSelectFiltered}
-              >
-                {str.admin.table.selection.selectFiltered.replace(
-                  "{count}",
-                  String(filteredAdminTargetCount)
-                )}
-              </button>
-              <button
-                type="button"
-                className="admin-toolbar-button rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50"
-                disabled={adminSelectedTargetKeys.length === 0 || adminPreloading}
-                onClick={handleClearSelection}
-              >
-                {str.admin.table.selection.clear}
-              </button>
-              <button
-                type="button"
-                className="admin-toolbar-button admin-toolbar-button--session inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
-                disabled={adminSelectedTargetKeys.length === 0 || adminCreatingReviewTestSession}
-                onClick={() => {
-                  setReviewTestSessionName(reviewTestSessions[0]?.name ?? "");
-                  setReviewTestSessionFormOpen(true);
-                }}
-              >
-                <span>{str.admin.buttons.addToReviewTestSession}</span>
-                <span aria-hidden="true" className="text-sm leading-none">🎯</span>
-              </button>
-              {reviewTestSessionFormOpen ? (
-                <form
-                  className="flex flex-wrap items-center gap-2"
-                  onSubmit={handleCreateReviewTestSessionSubmit}
+                <button
+                  type="button"
+                  className="admin-toolbar-button rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
+                  disabled={paginatedAdminTargetKeys.length === 0 || adminPreloading || allVisibleSelected}
+                  onClick={handleSelectPage}
                 >
-                  <input
-                    id="review-test-session-name"
-                    aria-label={str.admin.reviewTestSession.nameLabel}
-                    className="h-9 min-w-[12rem] rounded-md border border-indigo-300 px-3 py-1.5 text-xs"
-                    value={reviewTestSessionName}
-                    onChange={(event) => setReviewTestSessionName(event.target.value)}
-                    placeholder={str.admin.reviewTestSession.namePlaceholder}
-                  />
-                  <button
-                    type="submit"
-                    className="admin-toolbar-button admin-toolbar-button--session inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
-                    disabled={adminCreatingReviewTestSession}
-                  >
-                    <span>{str.admin.reviewTestSession.createButton}</span>
-                    <span aria-hidden="true" className="text-sm leading-none">🎯</span>
-                  </button>
+                  {str.admin.table.selection.selectPage}
+                </button>
+                <button
+                  type="button"
+                  className="admin-toolbar-button rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
+                  disabled={filteredAdminTargetKeys.length === 0 || adminPreloading || allFilteredSelected}
+                  onClick={handleSelectFiltered}
+                >
+                  {str.admin.table.selection.selectFiltered.replace(
+                    "{count}",
+                    String(filteredAdminTargetCount)
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="admin-toolbar-button rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50"
+                  disabled={adminSelectedTargetKeys.length === 0 || adminPreloading}
+                  onClick={handleClearSelection}
+                >
+                  {str.admin.table.selection.clear}
+                </button>
+                <button
+                  type="button"
+                  className={`${adminToolbarButtonBaseClass} border-amber-400 bg-amber-100 text-amber-900`}
+                  disabled={adminToolbarBusy || adminTargets.length === 0}
+                  onClick={() =>
+                    setOpenBatchMenu((previous) => (previous === "content" ? null : "content"))
+                  }
+                  title={str.admin.buttonTooltips.preload}
+                >
+                  <span>{adminPreloading ? str.admin.buttons.preloading : str.admin.buttons.preload}</span>
+                  {!adminPreloading ? <span aria-hidden="true">v</span> : null}
+                </button>
+                {adminPreloading ? (
                   <button
                     type="button"
                     className="admin-toolbar-button rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50"
-                    disabled={adminCreatingReviewTestSession}
-                    onClick={() => {
-                      setReviewTestSessionFormOpen(false);
-                      setReviewTestSessionName("");
-                    }}
+                    onClick={cancelAdminPreload}
+                    disabled={adminPreloadCancelling}
                   >
-                    {str.admin.reviewTestSession.cancelButton}
+                    {adminPreloadCancelling ? str.admin.buttons.cancellingPreload : str.admin.buttons.cancelPreload}
                   </button>
-                </form>
-              ) : null}
-              <button
-                type="button"
-                className={batchFillTestButtonClass}
-                disabled={
-                  adminSelectedTargetKeys.length === 0 ||
-                  selectedTargetsWithSavedContentCount === 0 ||
-                  adminSavingKey !== null ||
-                  adminPreloading ||
-                  adminCreatingReviewTestSession
-                }
-                onClick={handleBatchFillTestToggle}
-                title={
-                  selectedTargetsAllIncluded
-                    ? str.admin.table.actionTooltips.batchFillTestOn
-                    : str.admin.table.actionTooltips.batchFillTestOff
-                }
-              >
-                {selectedTargetsAllIncluded
-                  ? str.admin.buttons.batchFillTestOff
-                  : str.admin.buttons.batchFillTestOn}
-              </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={`${adminToolbarButtonBaseClass} border-purple-300 bg-purple-100 text-purple-700`}
+                  disabled={adminToolbarBusy || adminTargetsWithContentCount === 0}
+                  onClick={() =>
+                    setOpenBatchMenu((previous) => (previous === "pinyin" ? null : "pinyin"))
+                  }
+                  title={str.admin.buttonTooltips.refreshAllPinyin}
+                >
+                  <span>
+                    {adminRefreshingAllPinyin
+                      ? str.admin.buttons.refreshingAllPinyin
+                      : str.admin.buttons.refreshAllPinyin}
+                  </span>
+                  {!adminRefreshingAllPinyin ? <span aria-hidden="true">v</span> : null}
+                </button>
+                <button
+                  type="button"
+                  className="admin-toolbar-button admin-toolbar-button--session inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
+                  disabled={adminSelectedTargetKeys.length === 0 || adminCreatingReviewTestSession}
+                  onClick={() => {
+                    setReviewTestSessionName(reviewTestSessions[0]?.name ?? "");
+                    setReviewTestSessionFormOpen(true);
+                  }}
+                >
+                  <span>{str.admin.buttons.addToReviewTestSession}</span>
+                  <span aria-hidden="true" className="text-sm leading-none">🎯</span>
+                </button>
+                {reviewTestSessionFormOpen ? (
+                  <form
+                    className="flex flex-wrap items-center gap-2"
+                    onSubmit={handleCreateReviewTestSessionSubmit}
+                  >
+                    <input
+                      id="review-test-session-name"
+                      aria-label={str.admin.reviewTestSession.nameLabel}
+                      className="h-9 min-w-[12rem] rounded-md border border-indigo-300 px-3 py-1.5 text-xs"
+                      value={reviewTestSessionName}
+                      onChange={(event) => setReviewTestSessionName(event.target.value)}
+                      placeholder={str.admin.reviewTestSession.namePlaceholder}
+                    />
+                    <button
+                      type="submit"
+                      className="admin-toolbar-button admin-toolbar-button--session inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
+                      disabled={adminCreatingReviewTestSession}
+                    >
+                      <span>{str.admin.reviewTestSession.createButton}</span>
+                      <span aria-hidden="true" className="text-sm leading-none">🎯</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="admin-toolbar-button rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50"
+                      disabled={adminCreatingReviewTestSession}
+                      onClick={() => {
+                        setReviewTestSessionFormOpen(false);
+                        setReviewTestSessionName("");
+                      }}
+                    >
+                      {str.admin.reviewTestSession.cancelButton}
+                    </button>
+                  </form>
+                ) : null}
+                <button
+                  type="button"
+                  className={batchFillTestButtonClass}
+                  disabled={
+                    adminSelectedTargetKeys.length === 0 ||
+                    selectedTargetsWithSavedContentCount === 0 ||
+                    adminSavingKey !== null ||
+                    adminPreloading ||
+                    adminCreatingReviewTestSession
+                  }
+                  onClick={handleBatchFillTestToggle}
+                  title={
+                    selectedTargetsAllIncluded
+                      ? str.admin.table.actionTooltips.batchFillTestOn
+                      : str.admin.table.actionTooltips.batchFillTestOff
+                  }
+                >
+                  {selectedTargetsAllIncluded
+                    ? str.admin.buttons.batchFillTestOff
+                    : str.admin.buttons.batchFillTestOn}
+                </button>
               </div>
-            ) : null}
+              {openBatchMenu === "content" ? (
+                <div className="w-full max-w-sm rounded-md border bg-white p-2 shadow-lg">
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      className={adminToolbarMenuButtonClass}
+                      disabled={adminMissingCount === 0}
+                      onClick={() => handleBatchActionClick("content", "missing_only")}
+                    >
+                      {str.admin.batchMenus.content.missingOnly}
+                    </button>
+                    <button
+                      type="button"
+                      className={adminToolbarMenuButtonClass}
+                      disabled={adminTargets.length === 0}
+                      onClick={() => handleBatchActionClick("content", "all")}
+                    >
+                      {str.admin.batchMenus.content.all}
+                    </button>
+                    <button
+                      type="button"
+                      className={adminToolbarMenuButtonClass}
+                      disabled={filteredAdminTargetKeys.length === 0}
+                      onClick={() => handleBatchActionClick("content", "filtered")}
+                    >
+                      {str.admin.batchMenus.content.filtered}
+                    </button>
+                    <button
+                      type="button"
+                      className={adminToolbarMenuButtonClass}
+                      disabled={adminSelectedTargetKeys.length === 0}
+                      onClick={() => handleBatchActionClick("content", "selected")}
+                    >
+                      {str.admin.batchMenus.content.selected}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {openBatchMenu === "pinyin" ? (
+                <div className="w-full max-w-sm rounded-md border bg-white p-2 shadow-lg">
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      className={adminToolbarMenuButtonClass}
+                      disabled={adminTargetsWithContentCount === 0}
+                      onClick={() => handleBatchActionClick("pinyin", "missing_only")}
+                    >
+                      {str.admin.batchMenus.pinyin.missingOnly}
+                    </button>
+                    <button
+                      type="button"
+                      className={adminToolbarMenuButtonClass}
+                      disabled={adminTargetsWithContentCount === 0}
+                      onClick={() => handleBatchActionClick("pinyin", "all")}
+                    >
+                      {str.admin.batchMenus.pinyin.all}
+                    </button>
+                    <button
+                      type="button"
+                      className={adminToolbarMenuButtonClass}
+                      disabled={filteredTargetsWithSavedContentCount === 0}
+                      onClick={() => handleBatchActionClick("pinyin", "filtered")}
+                    >
+                      {str.admin.batchMenus.pinyin.filtered}
+                    </button>
+                    <button
+                      type="button"
+                      className={adminToolbarMenuButtonClass}
+                      disabled={selectedTargetsWithSavedContentCount === 0}
+                      onClick={() => handleBatchActionClick("pinyin", "selected")}
+                    >
+                      {str.admin.batchMenus.pinyin.selected}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <p className="text-xs text-amber-700">{str.admin.preloadWarning}</p>
           </div>
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-md border">
+      {batchWarningKind ? (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/25 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-md space-y-3 rounded-lg border bg-white p-4 shadow-xl"
+          >
+            <h3 className="font-medium">
+              {batchWarningKind === "content_all"
+                ? str.admin.batchWarningDialogs.contentAll.title
+                : str.admin.batchWarningDialogs.pinyinAll.title}
+            </h3>
+            <p className="text-sm text-gray-700">
+              {batchWarningKind === "content_all"
+                ? str.admin.batchWarningDialogs.contentAll.message
+                : str.admin.batchWarningDialogs.pinyinAll.message}
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 disabled:opacity-50"
+                disabled={adminToolbarBusy}
+                onClick={() => setBatchWarningKind(null)}
+              >
+                {batchWarningKind === "content_all"
+                  ? str.admin.batchWarningDialogs.contentAll.cancelButton
+                  : str.admin.batchWarningDialogs.pinyinAll.cancelButton}
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:opacity-50"
+                disabled={adminToolbarBusy}
+                onClick={handleConfirmBatchWarning}
+              >
+                {batchWarningKind === "content_all"
+                  ? str.admin.batchWarningDialogs.contentAll.confirmButton
+                  : str.admin.batchWarningDialogs.pinyinAll.confirmButton}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {adminNotice ? <p className="text-sm text-blue-700">{adminNotice}</p> : null}
+
+      <div className="relative z-0 overflow-x-auto rounded-md border">
         <table className={`min-w-full table-fixed border-collapse text-sm transition-opacity${isPageTransitionPending ? " opacity-50" : ""}`}>
           <thead>
             <tr className="border-b bg-gray-50">
               <th className="w-16 px-3 py-2 text-left"></th>
-              <th className="w-[15%] px-3 py-2 text-left">
+              <th className="w-[14%] px-3 py-2 text-left">
                 {str.admin.table.headers.character} ({str.admin.table.headers.pronunciation})
               </th>
-              <th className="w-[25%] px-3 py-2 text-left">{str.admin.table.headers.meaningZh}</th>
-              <th className="px-3 py-2 text-left">{str.admin.table.headers.phrase}</th>
+              <th className="w-[16%] px-3 py-2 text-left">{str.admin.table.headers.meaningZh}</th>
+              <th className="w-[18%] pl-3 pr-0 py-2 text-left">{str.admin.table.headers.phrase}</th>
               <th className="px-3 py-2 text-left">{str.admin.table.headers.example}</th>
             </tr>
           </thead>
@@ -1226,8 +1501,9 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 const isRegenerating = target ? adminRegeneratingKey === target.key : false;
                 const isSaving = target ? adminSavingKey === target.key : false;
                 const isDeleting = target ? adminDeletingKey === target.key : false;
-                const isEditingThis = row.rowKey === adminEditingExampleRowKey;
+                const isEditingExample = row.rowKey === adminEditingExample?.rowKey;
                 const isEditingMeaning = row.rowKey === adminEditingMeaning?.rowKey;
+                const isEditingPhrase = row.rowKey === adminEditingPhrase?.rowKey;
 
                 return (
                   <AdminTableRowComponent
@@ -1240,10 +1516,17 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     isSaving={isSaving}
                     isDeleting={isDeleting}
                     adminPreloading={adminPreloading}
-                    isEditingThis={isEditingThis}
+                    isEditingExample={isEditingExample}
                     isEditingMeaning={isEditingMeaning}
+                    isEditingPhrase={isEditingPhrase}
                     editingMeaningValue={
                       isEditingMeaning ? adminEditingMeaning?.nextMeaningZh ?? row.meaningZh : row.meaningZh
+                    }
+                    editingPhraseValue={
+                      isEditingPhrase ? adminEditingPhrase?.nextPhrase ?? row.phrase : row.phrase
+                    }
+                    editingExampleValue={
+                      isEditingExample ? adminEditingExample?.nextExample ?? row.example : row.example
                     }
                     str={str}
                     onRegenerate={stableOnRegenerate}
@@ -1258,6 +1541,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     onUpdateEditingMeaningInput={stableOnUpdateEditingMeaningInput}
                     onSaveMeaningEdit={stableOnSaveMeaningEdit}
                     onCancelMeaningEdit={stableOnCancelMeaningEdit}
+                    onEditPhrase={stableOnEditPhrase}
+                    onUpdateEditingPhraseInput={stableOnUpdateEditingPhraseInput}
+                    onSavePhraseEdit={stableOnSavePhraseEdit}
+                    onCancelPhraseEdit={stableOnCancelPhraseEdit}
                     onAddPhraseRow={stableOnAddPhraseRow}
                     onUpdatePendingPhraseInput={stableOnUpdatePendingPhraseInput}
                     onSavePendingPhrase={stableOnSavePendingPhrase}
@@ -1265,9 +1552,11 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     onToggleFillTestInclude={stableOnToggleFillTestInclude}
                     onRegeneratePhrase={stableOnRegeneratePhrase}
                     onDeletePhrase={stableOnDeletePhrase}
-                    onInlineEditExample={stableOnInlineEditExample}
                     onRegenerateExample={stableOnRegenerateExample}
                     onEditExample={stableOnEditExample}
+                    onUpdateEditingExampleInput={stableOnUpdateEditingExampleInput}
+                    onSaveExampleEdit={stableOnSaveExampleEdit}
+                    onCancelExampleEdit={stableOnCancelExampleEdit}
                     onDeleteExample={stableOnDeleteExample}
                     onToggleSelection={stableOnToggleSelection}
                   />

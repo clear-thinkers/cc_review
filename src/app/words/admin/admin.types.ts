@@ -60,6 +60,20 @@ export type AdminEditingMeaning = {
   nextMeaningZh: string;
 };
 
+export type AdminEditingPhrase = {
+  rowKey: string;
+  targetKey: string;
+  originalPhrase: string;
+  nextPhrase: string;
+};
+
+export type AdminEditingExample = {
+  rowKey: string;
+  targetKey: string;
+  originalExample: string;
+  nextExample: string;
+};
+
 export type AdminTableRenderRow = AdminTableRow & {
   showCharacterCell: boolean;
   showMeaningCell: boolean;
@@ -77,6 +91,14 @@ export type AdminStatsFilter =
   | "missing_content"
   | "ready_for_testing"
   | "excluded_for_testing";
+
+export type AdminBatchGenerationScope =
+  | "missing_only"
+  | "all"
+  | "filtered"
+  | "selected";
+
+export type AdminBatchActionMenuKind = "content" | "pinyin";
 
 export type AdminTargetContentStatus =
   | "missing_content"

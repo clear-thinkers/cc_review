@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { wordsStrings } from "../words.strings";
 import type {
+  AdminEditingExample,
+  AdminEditingPhrase,
+  AdminBatchGenerationScope,
   AdminContentStats,
   AdminStatsFilter,
   AdminTableRow,
@@ -58,6 +61,16 @@ describe("Admin Types", () => {
     expect(filters).toHaveLength(6);
   });
 
+  it("allows creating AdminBatchGenerationScope values", () => {
+    const scopes: AdminBatchGenerationScope[] = [
+      "missing_only",
+      "all",
+      "filtered",
+      "selected",
+    ];
+    expect(scopes).toHaveLength(4);
+  });
+
   it("allows creating AdminContentStats objects", () => {
     const stats: AdminContentStats = {
       targetStatusByKey: {
@@ -70,6 +83,26 @@ describe("Admin Types", () => {
       targetsExcludedForTesting: 10,
     };
     expect(stats.targetsWithContent).toBe(50);
+  });
+
+  it("allows creating AdminEditingPhrase objects", () => {
+    const editingPhrase: AdminEditingPhrase = {
+      rowKey: "row-phrase-1",
+      targetKey: "char-a|pin-yin-a",
+      originalPhrase: "原词组",
+      nextPhrase: "新词组",
+    };
+    expect(editingPhrase.nextPhrase).toBe("新词组");
+  });
+
+  it("allows creating AdminEditingExample objects", () => {
+    const editingExample: AdminEditingExample = {
+      rowKey: "row-example-1",
+      targetKey: "char-a|pin-yin-a",
+      originalExample: "原例句",
+      nextExample: "新例句",
+    };
+    expect(editingExample.nextExample).toBe("新例句");
   });
 });
 
@@ -89,6 +122,30 @@ describe("Admin string parity", () => {
   it("keeps admin message keys aligned across locales", () => {
     expect(Object.keys(wordsStrings.en.admin.messages).sort()).toEqual(
       Object.keys(wordsStrings.zh.admin.messages).sort()
+    );
+  });
+
+  it("keeps admin batch-menu keys aligned across locales", () => {
+    expect(Object.keys(wordsStrings.en.admin.batchMenus).sort()).toEqual(
+      Object.keys(wordsStrings.zh.admin.batchMenus).sort()
+    );
+    expect(Object.keys(wordsStrings.en.admin.batchMenus.content).sort()).toEqual(
+      Object.keys(wordsStrings.zh.admin.batchMenus.content).sort()
+    );
+    expect(Object.keys(wordsStrings.en.admin.batchMenus.pinyin).sort()).toEqual(
+      Object.keys(wordsStrings.zh.admin.batchMenus.pinyin).sort()
+    );
+  });
+
+  it("keeps admin warning-dialog keys aligned across locales", () => {
+    expect(Object.keys(wordsStrings.en.admin.batchWarningDialogs).sort()).toEqual(
+      Object.keys(wordsStrings.zh.admin.batchWarningDialogs).sort()
+    );
+    expect(Object.keys(wordsStrings.en.admin.batchWarningDialogs.contentAll).sort()).toEqual(
+      Object.keys(wordsStrings.zh.admin.batchWarningDialogs.contentAll).sort()
+    );
+    expect(Object.keys(wordsStrings.en.admin.batchWarningDialogs.pinyinAll).sort()).toEqual(
+      Object.keys(wordsStrings.zh.admin.batchWarningDialogs.pinyinAll).sort()
     );
   });
 

@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 import type {
+  AdminEditingExample,
+  AdminEditingPhrase,
   AdminEditingMeaning,
   AdminPendingMeaning,
   AdminPendingPhrase,
@@ -26,7 +28,8 @@ export function useAdminState() {
   const [adminPendingPhrases, setAdminPendingPhrases] = useState<AdminPendingPhrase[]>([]);
   const [adminPendingMeanings, setAdminPendingMeanings] = useState<AdminPendingMeaning[]>([]);
   const [adminEditingMeaning, setAdminEditingMeaning] = useState<AdminEditingMeaning | null>(null);
-  const [adminEditingExampleRowKey, setAdminEditingExampleRowKey] = useState<string | null>(null);
+  const [adminEditingPhrase, setAdminEditingPhrase] = useState<AdminEditingPhrase | null>(null);
+  const [adminEditingExample, setAdminEditingExample] = useState<AdminEditingExample | null>(null);
   const [adminStatsFilter, setAdminStatsFilter] = useState<AdminStatsFilter>("targets");
   const [adminSelectedTargetKeys, setAdminSelectedTargetKeys] = useState<string[]>([]);
   const [adminCreatingReviewTestSession, setAdminCreatingReviewTestSession] = useState(false);
@@ -65,8 +68,10 @@ export function useAdminState() {
     setAdminPendingMeanings,
     adminEditingMeaning,
     setAdminEditingMeaning,
-    adminEditingExampleRowKey,
-    setAdminEditingExampleRowKey,
+    adminEditingPhrase,
+    setAdminEditingPhrase,
+    adminEditingExample,
+    setAdminEditingExample,
     adminStatsFilter,
     setAdminStatsFilter,
     adminSelectedTargetKeys,

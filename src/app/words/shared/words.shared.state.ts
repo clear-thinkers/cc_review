@@ -85,6 +85,9 @@ import {
   shouldShowManualEditPopup,
 } from "./words.shared.utils";
 import type {
+  AdminEditingExample,
+  AdminBatchGenerationScope,
+  AdminEditingPhrase,
   AdminEditingMeaning,
   AdminPendingMeaning,
   AdminPendingPhrase,
@@ -120,6 +123,16 @@ import type {
   ReviewTestSessionTargetDraft,
   SortedDueWord,
 } from "../review/review.types";
+
+type AdminBatchActionOptions = {
+  scope?: AdminBatchGenerationScope;
+  targetKeys?: string[];
+};
+
+type AdminScopedSavedContentEntry = {
+  target: AdminTarget;
+  content: FlashcardLlmResponse;
+};
 import type {
   AllWordsSortKey,
 } from "../all/all.types";
@@ -285,8 +298,10 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setAdminPendingMeanings,
     adminEditingMeaning,
     setAdminEditingMeaning,
-    adminEditingExampleRowKey,
-    setAdminEditingExampleRowKey,
+    adminEditingPhrase,
+    setAdminEditingPhrase,
+    adminEditingExample,
+    setAdminEditingExample,
     adminStatsFilter,
     setAdminStatsFilter,
     adminSelectedTargetKeys,
@@ -844,17 +859,23 @@ const gradeLabels = getGradeLabels(str);
     setAdminEditingMeaning((previous) =>
       previous && validTargetKeys.has(previous.targetKey) ? previous : null
     );
+    setAdminEditingPhrase((previous) =>
+      previous && validTargetKeys.has(previous.targetKey) ? previous : null
+    );
+    setAdminEditingExample((previous) =>
+      previous && validTargetKeys.has(previous.targetKey) ? previous : null
+    );
   }, [adminTargets]);
 
   useEffect(() => {
-    if (!adminEditingExampleRowKey) {
+    if (!adminEditingExample) {
       return;
     }
 
-    if (!adminTableRows.some((row) => row.rowKey === adminEditingExampleRowKey)) {
-      setAdminEditingExampleRowKey(null);
+    if (!adminTableRows.some((row) => row.rowKey === adminEditingExample.rowKey)) {
+      setAdminEditingExample(null);
     }
-  }, [adminEditingExampleRowKey, adminTableRows]);
+  }, [adminEditingExample, adminTableRows]);
 
   useEffect(() => {
     if (!adminEditingMeaning) {
@@ -865,6 +886,16 @@ const gradeLabels = getGradeLabels(str);
       setAdminEditingMeaning(null);
     }
   }, [adminEditingMeaning, adminTableRows]);
+
+  useEffect(() => {
+    if (!adminEditingPhrase) {
+      return;
+    }
+
+    if (!adminTableRows.some((row) => row.rowKey === adminEditingPhrase.rowKey)) {
+      setAdminEditingPhrase(null);
+    }
+  }, [adminEditingPhrase, adminTableRows]);
 
   function isAdminStatsFilterActive(filter: AdminStatsFilter): boolean {
     return adminStatsFilter === filter;
@@ -1212,6 +1243,74 @@ const gradeLabels = getGradeLabels(str);
     });
   }
 
+  async function generatePhrasePinyin(params: {
+    target: AdminTarget;
+    meaning: string;
+    meaningEn?: string;
+    phrase: string;
+  }): Promise<string> {
+    const payload = await requestGeneratedPhraseDetailContent({
+      mode: "phrase_details",
+      character: params.target.character,
+      pronunciation: params.target.pronunciation,
+      meaning: params.meaning,
+      meaning_en: params.meaningEn,
+      phrase: params.phrase,
+      existing_examples: [],
+    });
+    return payload.pinyin.trim();
+  }
+
+  function getAdminTargetsInRequestedOrder(targetKeys: string[]): AdminTarget[] {
+    const requestedKeys = new Set(targetKeys);
+    return adminTargets.filter((target) => requestedKeys.has(target.key));
+  }
+
+  function resolveAdminBatchTargets(options?: AdminBatchActionOptions): AdminTarget[] {
+    const scope = options?.scope ?? "missing_only";
+    if (scope === "all") {
+      return adminTargets;
+    }
+
+    if (scope === "selected") {
+      return getAdminTargetsInRequestedOrder(adminSelectedTargetKeys);
+    }
+
+    if (scope === "filtered") {
+      return getAdminTargetsInRequestedOrder(options?.targetKeys ?? []);
+    }
+
+    return adminTargets.filter(
+      (target) => (adminContentStats.targetStatusByKey[target.key] ?? "missing_content") === "missing_content"
+    );
+  }
+
+  async function listScopedSavedAdminContentEntries(
+    options?: AdminBatchActionOptions
+  ): Promise<AdminScopedSavedContentEntry[]> {
+    const resolvedTargets = resolveAdminBatchTargets(options);
+    if (resolvedTargets.length === 0) {
+      return [];
+    }
+
+    const allSavedContentEntries = await getAllFlashcardContents();
+    const targetByKey = new Map(resolvedTargets.map((target) => [target.key, target] as const));
+
+    return allSavedContentEntries
+      .map((entry) => {
+        const target = targetByKey.get(entry.key);
+        if (!target) {
+          return null;
+        }
+
+        return {
+          target,
+          content: cloneFlashcardLlmResponse(entry.content),
+        };
+      })
+      .filter((entry): entry is AdminScopedSavedContentEntry => entry !== null);
+  }
+
   function updateAdminJson(key: string, value: string) {
     setAdminJsonByKey((previous) => ({
       ...previous,
@@ -1229,13 +1328,12 @@ const gradeLabels = getGradeLabels(str);
     setAdminEditingMeaning((previous) =>
       previous?.targetKey === targetKey ? null : previous
     );
-    setAdminEditingExampleRowKey((previous) => {
-      if (!previous) {
-        return null;
-      }
-      const editingRow = adminTableRows.find((row) => row.rowKey === previous);
-      return editingRow?.targetKey === targetKey ? null : previous;
-    });
+    setAdminEditingPhrase((previous) =>
+      previous?.targetKey === targetKey ? null : previous
+    );
+    setAdminEditingExample((previous) =>
+      previous?.targetKey === targetKey ? null : previous
+    );
   }
 
   function showAdminManualEditPopup(message: string) {
@@ -1407,6 +1505,7 @@ const gradeLabels = getGradeLabels(str);
     }
 
     setAdminNotice(null);
+    setAdminEditingPhrase(null);
     setAdminEditingMeaning((previous): AdminEditingMeaning | null => {
       if (previous?.rowKey === row.rowKey) {
         return null;
@@ -1418,6 +1517,30 @@ const gradeLabels = getGradeLabels(str);
         originalMeaningZh: row.meaningZh,
         originalMeaningEn: row.meaningEn,
         nextMeaningZh: row.meaningZh,
+      };
+    });
+  }
+
+  function handleAdminEditPhrase(row: AdminTableRow) {
+    const target = adminTargetByKey.get(row.targetKey);
+    if (!target) {
+      setAdminNotice("Missing admin target for phrase row.");
+      return;
+    }
+
+    setAdminNotice(null);
+    setAdminEditingMeaning(null);
+    setAdminEditingExample(null);
+    setAdminEditingPhrase((previous): AdminEditingPhrase | null => {
+      if (previous?.rowKey === row.rowKey) {
+        return null;
+      }
+
+      return {
+        rowKey: row.rowKey,
+        targetKey: row.targetKey,
+        originalPhrase: row.phrase,
+        nextPhrase: row.phrase,
       };
     });
   }
@@ -1435,6 +1558,21 @@ const gradeLabels = getGradeLabels(str);
 
   function cancelAdminMeaningEdit() {
     setAdminEditingMeaning(null);
+  }
+
+  function updateAdminEditingPhraseInput(value: string) {
+    setAdminEditingPhrase((previous) =>
+      previous
+        ? {
+            ...previous,
+            nextPhrase: value,
+          }
+        : previous
+    );
+  }
+
+  function cancelAdminPhraseEdit() {
+    setAdminEditingPhrase(null);
   }
 
   async function handleAdminSavePendingPhrase(row: AdminTableRow) {
@@ -1722,6 +1860,114 @@ const gradeLabels = getGradeLabels(str);
     }
   }
 
+  async function handleAdminSavePhraseEdit(row: AdminTableRow) {
+    if (row.rowType !== "existing") {
+      return;
+    }
+
+    const target = adminTargetByKey.get(row.targetKey);
+    if (!target) {
+      setAdminNotice("Missing admin target for phrase row.");
+      return;
+    }
+
+    if (!adminEditingPhrase || adminEditingPhrase.rowKey !== row.rowKey) {
+      setAdminNotice("Phrase edit draft not found.");
+      return;
+    }
+
+    const nextPhrase = adminEditingPhrase.nextPhrase.trim();
+    if (!nextPhrase) {
+      setAdminNotice(str.admin.messages.phraseRequired);
+      return;
+    }
+
+    if (!nextPhrase.includes(target.character)) {
+      setAdminNotice(str.admin.messages.phraseMustInclude.replace("{character}", target.character));
+      return;
+    }
+
+    if (nextPhrase === row.phrase.trim()) {
+      setAdminEditingPhrase(null);
+      return;
+    }
+
+    setAdminSavingKey(target.key);
+    setAdminNotice(null);
+
+    try {
+      const nextDraft = cloneFlashcardLlmResponse(readAdminDraft(target));
+      const location = findAdminPhraseLocation(nextDraft, row);
+      if (!location) {
+        throw new Error("Phrase row not found in current draft.");
+      }
+
+      const meaning = nextDraft.meanings[location.meaningIndex];
+      const nextPhraseKey = normalizePhraseCompareKey(nextPhrase);
+      const hasSamePhrase = meaning.phrases.some(
+        (item, index) =>
+          index !== location.phraseIndex &&
+          normalizePhraseCompareKey(item.phrase) === nextPhraseKey
+      );
+      if (hasSamePhrase) {
+        throw new Error("This phrase already exists for the selected meaning.");
+      }
+
+      const generatedPhraseDetail = await requestGeneratedPhraseDetailContent({
+        mode: "phrase_details",
+        character: target.character,
+        pronunciation: target.pronunciation,
+        meaning: meaning.definition,
+        meaning_en: meaning.definition_en,
+        phrase: nextPhrase,
+        existing_examples: meaning.phrases
+          .filter((_, index) => index !== location.phraseIndex)
+          .map((item) => item.example.trim())
+          .filter(Boolean),
+      });
+
+      const generatedExamplePinyin = await generateExamplePinyin({
+        target,
+        meaning: meaning.definition,
+        meaningEn: meaning.definition_en,
+        phrase: nextPhrase,
+        example: generatedPhraseDetail.example,
+      });
+
+      meaning.phrases[location.phraseIndex] = {
+        ...meaning.phrases[location.phraseIndex],
+        phrase: nextPhrase,
+        pinyin: generatedPhraseDetail.pinyin,
+        example: generatedPhraseDetail.example,
+        example_pinyin: generatedExamplePinyin,
+      };
+
+      const normalized = normalizeAdminDraftResponse(nextDraft, {
+        character: target.character,
+        pronunciation: target.pronunciation,
+      });
+
+      await putFlashcardContent(target.character, target.pronunciation, normalized);
+      upsertAdminDraft(target, normalized, true);
+      setAdminEditingPhrase(null);
+      setAdminNotice(
+        str.admin.messages.phraseEditSaved
+          .replace("{character}", target.character)
+          .replace("{pronunciation}", target.pronunciation)
+          .replace("{phrase}", nextPhrase)
+      );
+    } catch (error) {
+      const message = getErrorMessage(error, str.admin.messages.phraseEditError);
+      if (shouldShowManualEditPopup(message)) {
+        showAdminManualEditPopup(message);
+      } else {
+        setAdminNotice(message);
+      }
+    } finally {
+      setAdminSavingKey(null);
+    }
+  }
+
   async function handleAdminRegenerate(target: AdminTarget) {
     setAdminRegeneratingKey(target.key);
     setAdminNotice(null);
@@ -1762,37 +2008,6 @@ const gradeLabels = getGradeLabels(str);
         throw new Error("No valid meanings after normalization. Please adjust content.");
       }
 
-      const editingRow =
-        adminEditingExampleRowKey === null
-          ? null
-          : adminTableRows.find(
-              (row) =>
-                row.rowKey === adminEditingExampleRowKey &&
-                row.targetKey === target.key &&
-                row.rowType === "existing"
-            ) ?? null;
-      if (editingRow) {
-        const location = findAdminPhraseLocation(normalized, editingRow);
-        if (!location) {
-          throw new Error("Edited example row not found in current draft.");
-        }
-
-        const meaning = normalized.meanings[location.meaningIndex];
-        const phraseItem = meaning.phrases[location.phraseIndex];
-        const example = phraseItem.example.trim();
-        if (example) {
-          phraseItem.example_pinyin = await generateExamplePinyin({
-            target,
-            meaning: meaning.definition,
-            meaningEn: meaning.definition_en,
-            phrase: phraseItem.phrase,
-            example,
-          });
-        } else {
-          phraseItem.example_pinyin = "";
-        }
-      }
-
       await putFlashcardContent(target.character, target.pronunciation, normalized);
       updateAdminJson(target.key, JSON.stringify(normalized, null, 2));
       setAdminSavedByKey((previous) => ({
@@ -1803,7 +2018,6 @@ const gradeLabels = getGradeLabels(str);
         ...previous,
         [target.key]: normalized,
       }));
-      setAdminEditingExampleRowKey(null);
       setAdminNotice(`Saved ${target.character} / ${target.pronunciation}.`);
     } catch (error) {
       setAdminNotice(getErrorMessage(error, "Save failed. Please verify JSON format."));
@@ -2032,7 +2246,20 @@ const gradeLabels = getGradeLabels(str);
     }
 
     setAdminNotice(null);
-    setAdminEditingExampleRowKey((previous) => (previous === row.rowKey ? null : row.rowKey));
+    setAdminEditingPhrase(null);
+    setAdminEditingMeaning(null);
+    setAdminEditingExample((previous): AdminEditingExample | null => {
+      if (previous?.rowKey === row.rowKey) {
+        return null;
+      }
+
+      return {
+        rowKey: row.rowKey,
+        targetKey: row.targetKey,
+        originalExample: row.example,
+        nextExample: row.example,
+      };
+    });
   }
 
   async function handleAdminToggleFillTestInclude(row: AdminTableRow, includeInFillTest: boolean) {
@@ -2075,18 +2302,57 @@ const gradeLabels = getGradeLabels(str);
     }
   }
 
-  function handleAdminInlineEditExample(row: AdminTableRow, nextExample: string) {
+  function updateAdminEditingExampleInput(value: string) {
+    setAdminEditingExample((previous) =>
+      previous
+        ? {
+            ...previous,
+            nextExample: value,
+          }
+        : previous
+    );
+  }
+
+  function cancelAdminExampleEdit() {
+    setAdminEditingExample(null);
+  }
+
+  async function handleAdminSaveExampleEdit(row: AdminTableRow) {
+    if (row.rowType !== "existing") {
+      return;
+    }
+
     const target = adminTargetByKey.get(row.targetKey);
     if (!target) {
       setAdminNotice("Missing admin target for example row.");
       return;
     }
 
-    try {
-      if (nextExample === row.example) {
-        return;
-      }
+    if (!adminEditingExample || adminEditingExample.rowKey !== row.rowKey) {
+      setAdminNotice("Example edit draft not found.");
+      return;
+    }
 
+    const nextExample = adminEditingExample.nextExample.trim();
+    if (!nextExample) {
+      setAdminNotice(str.admin.messages.exampleRequired);
+      return;
+    }
+
+    if (!nextExample.includes(row.phrase)) {
+      setAdminNotice(str.admin.messages.exampleMustInclude);
+      return;
+    }
+
+    if (nextExample === row.example.trim()) {
+      setAdminEditingExample(null);
+      return;
+    }
+
+    setAdminSavingKey(target.key);
+    setAdminNotice(null);
+
+    try {
       const nextDraft = cloneFlashcardLlmResponse(readAdminDraft(target));
       const location = findAdminPhraseLocation(nextDraft, row);
       if (!location) {
@@ -2094,11 +2360,33 @@ const gradeLabels = getGradeLabels(str);
       }
 
       const meaning = nextDraft.meanings[location.meaningIndex];
-      meaning.phrases[location.phraseIndex].example = nextExample;
-      meaning.phrases[location.phraseIndex].example_pinyin = "";
-      writeAdminDraft(target, nextDraft);
+      const phraseItem = meaning.phrases[location.phraseIndex];
+      phraseItem.example = nextExample;
+      phraseItem.example_pinyin = await generateExamplePinyin({
+        target,
+        meaning: meaning.definition,
+        meaningEn: meaning.definition_en,
+        phrase: phraseItem.phrase,
+        example: nextExample,
+      });
+
+      const normalized = normalizeAdminDraftResponse(nextDraft, {
+        character: target.character,
+        pronunciation: target.pronunciation,
+      });
+
+      await putFlashcardContent(target.character, target.pronunciation, normalized);
+      upsertAdminDraft(target, normalized, true);
+      setAdminEditingExample(null);
+      setAdminNotice(
+        str.admin.messages.exampleEditSaved
+          .replace("{character}", target.character)
+          .replace("{pronunciation}", target.pronunciation)
+      );
     } catch (error) {
-      setAdminNotice(getErrorMessage(error, "Example edit failed."));
+      setAdminNotice(getErrorMessage(error, str.admin.messages.exampleEditError));
+    } finally {
+      setAdminSavingKey(null);
     }
   }
 
@@ -2144,11 +2432,19 @@ const gradeLabels = getGradeLabels(str);
     await handleAdminDeletePhraseRow(row, "example");
   }
 
-  async function handleAdminPreloadAll() {
-    if (adminTargets.length === 0 || adminPreloading) {
+  async function handleAdminPreloadAll(options?: AdminBatchActionOptions) {
+    if (adminPreloading || adminRefreshingAllPinyin) {
       return;
     }
 
+    const resolvedTargets = resolveAdminBatchTargets(options);
+    if (resolvedTargets.length === 0) {
+      setAdminNotice(str.admin.messages.noBatchContentTargets);
+      return;
+    }
+
+    const scope = options?.scope ?? "missing_only";
+    const overwriteExisting = scope !== "missing_only";
     const concurrency = 3;
     preloadCancelRef.current = false;
     setAdminPreloading(true);
@@ -2159,7 +2455,7 @@ const gradeLabels = getGradeLabels(str);
     let skippedCount = 0;
     let failedCount = 0;
     let cancelled = false;
-    const total = adminTargets.length;
+    const total = resolvedTargets.length;
 
     try {
       for (let batchStart = 0; batchStart < total; batchStart += concurrency) {
@@ -2176,11 +2472,11 @@ const gradeLabels = getGradeLabels(str);
             .replace("{total}", String(total))
         );
 
-        const batchTargets = adminTargets.slice(batchStart, batchEnd);
+        const batchTargets = resolvedTargets.slice(batchStart, batchEnd);
         const results = await Promise.allSettled(
           batchTargets.map(async (target) => {
             const existing = await getFlashcardContent(target.character, target.pronunciation);
-            if (existing?.content) {
+            if (!overwriteExisting && existing?.content) {
               return { outcome: "skipped" as const, target, content: existing.content };
             }
             const generated = await requestGeneratedFlashcardContent({
@@ -2233,10 +2529,15 @@ const gradeLabels = getGradeLabels(str);
     setAdminPreloadCancelling(true);
   }
 
-  async function handleAdminRefreshAllPinyin() {
-    const allContent = await getAllFlashcardContents();
-    if (allContent.length === 0) {
-      setAdminNotice(str.admin.messages.noContentToRefresh);
+  async function handleAdminRefreshAllPinyin(options?: AdminBatchActionOptions) {
+    if (adminRefreshingAllPinyin || adminPreloading) {
+      return;
+    }
+
+    const scope = options?.scope ?? "missing_only";
+    const scopedEntries = await listScopedSavedAdminContentEntries(options);
+    if (scopedEntries.length === 0) {
+      setAdminNotice(str.admin.messages.noBatchPinyinTargets);
       return;
     }
 
@@ -2246,41 +2547,60 @@ const gradeLabels = getGradeLabels(str);
 
     let refreshedCount = 0;
     let failedCount = 0;
-    const total = allContent.length;
+    const total = scopedEntries.length;
 
     try {
       for (let contentIndex = 0; contentIndex < total; contentIndex += 1) {
-        const entry = allContent[contentIndex];
-        const target = { character: entry.character, pronunciation: entry.pronunciation, key: buildFlashcardLlmRequestKey({ character: entry.character, pronunciation: entry.pronunciation }) };
-        
+        const { target, content } = scopedEntries[contentIndex];
         setAdminProgressText(
-          `Refreshing pinyin ${contentIndex + 1}/${total}: ${target.character} / ${target.pronunciation}`
+          str.admin.pinyinRefreshProgress
+            .replace("{current}", String(contentIndex + 1))
+            .replace("{total}", String(total))
+            .replace("{character}", target.character)
+            .replace("{pronunciation}", target.pronunciation)
         );
 
-        try {
-          const content = cloneFlashcardLlmResponse(entry.content);
-          let hasChanges = false;
+        let hasChanges = false;
+        let targetFailed = false;
 
+        try {
           for (const meaning of content.meanings) {
             for (const phraseItem of meaning.phrases) {
+              const phrase = phraseItem.phrase.trim();
+              const phrasePinyin = phraseItem.pinyin.trim();
               const example = phraseItem.example.trim();
               const examplePinyin = (phraseItem.example_pinyin ?? "").trim();
-              
-              // Regenerate example pinyin if example exists
-              if (example && !examplePinyin) {
+
+              const shouldRefreshPhrasePinyin =
+                Boolean(phrase) && (scope === "missing_only" ? !phrasePinyin : true);
+              if (shouldRefreshPhrasePinyin) {
                 try {
-                  const newPinyin = await generateExamplePinyin({
+                  phraseItem.pinyin = await generatePhrasePinyin({
                     target,
                     meaning: meaning.definition,
                     meaningEn: meaning.definition_en,
-                    phrase: phraseItem.phrase,
-                    example,
+                    phrase,
                   });
-                  phraseItem.example_pinyin = newPinyin;
                   hasChanges = true;
                 } catch {
-                  // Skip on failure for this phrase
-                  continue;
+                  targetFailed = true;
+                }
+              }
+
+              const shouldRefreshExamplePinyin =
+                Boolean(example) && (scope === "missing_only" ? !examplePinyin : true);
+              if (shouldRefreshExamplePinyin) {
+                try {
+                  phraseItem.example_pinyin = await generateExamplePinyin({
+                    target,
+                    meaning: meaning.definition,
+                    meaningEn: meaning.definition_en,
+                    phrase,
+                    example,
+                  });
+                  hasChanges = true;
+                } catch {
+                  targetFailed = true;
                 }
               }
             }
@@ -2289,6 +2609,10 @@ const gradeLabels = getGradeLabels(str);
           if (hasChanges) {
             await putFlashcardContent(target.character, target.pronunciation, content);
             updateAdminJson(target.key, JSON.stringify(content, null, 2));
+            setAdminSavedByKey((previous) => ({
+              ...previous,
+              [target.key]: true,
+            }));
             setFlashcardLlmData((previous) => ({
               ...previous,
               [target.key]: content,
@@ -2296,6 +2620,10 @@ const gradeLabels = getGradeLabels(str);
             refreshedCount += 1;
           }
         } catch {
+          targetFailed = true;
+        }
+
+        if (targetFailed) {
           failedCount += 1;
         }
       }
@@ -3562,10 +3890,15 @@ const gradeLabels = getGradeLabels(str);
     handleAdminSavePendingMeaning,
     removeAdminPendingMeaning,
     adminEditingMeaning,
+    adminEditingPhrase,
     handleAdminEditMeaning,
+    handleAdminEditPhrase,
     updateAdminEditingMeaningInput,
+    updateAdminEditingPhraseInput,
     handleAdminSaveMeaningEdit,
+    handleAdminSavePhraseEdit,
     cancelAdminMeaningEdit,
+    cancelAdminPhraseEdit,
     handleAdminAddPhraseRow,
     updateAdminPendingPhraseInput,
     handleAdminSavePendingPhrase,
@@ -3574,11 +3907,13 @@ const gradeLabels = getGradeLabels(str);
     handleAdminToggleFillTestInclude,
     handleAdminRegeneratePhrase,
     handleAdminDeletePhrase,
-    adminEditingExampleRowKey,
-    handleAdminInlineEditExample,
+    adminEditingExample,
+    updateAdminEditingExampleInput,
     renderSentenceWithPinyin,
     handleAdminRegenerateExample,
     handleAdminEditExample,
+    handleAdminSaveExampleEdit,
+    cancelAdminExampleEdit,
     handleAdminDeleteExample,
     toggleAdminTargetSelection,
     selectAdminTargetKeys,
