@@ -1483,7 +1483,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 {str.admin.table.headers.character} ({str.admin.table.headers.pronunciation})
               </th>
               <th className="w-[16%] px-3 py-2 text-left">{str.admin.table.headers.meaningZh}</th>
-              <th className="w-[18%] pl-3 pr-0 py-2 text-left">{str.admin.table.headers.phrase}</th>
+              <th className="w-[19%] pl-3 pr-0 py-2 text-left">{str.admin.table.headers.phrase}</th>
               <th className="px-3 py-2 text-left">{str.admin.table.headers.example}</th>
             </tr>
           </thead>
