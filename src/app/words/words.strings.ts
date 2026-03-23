@@ -199,6 +199,15 @@ export const wordsStrings = {
         fullyWrong: "Fully wrong:",
         coinsEarned: "Coins Earned:",
       },
+      warning: {
+        title: "Coins will be lost",
+        body: "If you stop or leave this quiz now, all {coins} coins earned so far will be lost.",
+        confirmLeave:
+          "If you leave this quiz now, all {coins} coins earned so far will be lost.\n\nDo you want to leave the quiz?",
+        stayButton: "Stay in quiz",
+        leaveButton: "Leave quiz",
+        imageAlt: "Sad milk puddle warning",
+      },
       completionMessage: "Fill-test quiz complete.",
       reviewTestSession: {
         activeSession: "Test session quiz: {name} ({count} characters)",
@@ -745,6 +754,15 @@ export const wordsStrings = {
         partiallyCorrect: "部分正确:",
         fullyWrong: "全部错误:",
         coinsEarned: "获得金币:",
+      },
+      warning: {
+        title: "离开会丢失金币",
+        body: "如果现在停止或离开本次测试，当前累计的 {coins} 个金币都会丢失。",
+        confirmLeave:
+          "如果现在离开本次测试，当前累计的 {coins} 个金币都会丢失。\n\n要离开测试吗？",
+        stayButton: "继续测试",
+        leaveButton: "离开测试",
+        imageAlt: "难过的牛奶警告图",
       },
       completionMessage: "填空测试已完成",
       reviewTestSession: {

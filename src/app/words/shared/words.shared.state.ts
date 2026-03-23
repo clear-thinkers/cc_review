@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, startTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { useXinhuaFlashcardInfo } from "@/hooks/useXinhuaFlashcardInfo";
 import {
   addWords,
@@ -408,6 +408,80 @@ const gradeLabels = getGradeLabels(str);
     }));
     return calculateSessionCoins(gradeData);
   }, [quizHistory]);
+
+  const shouldWarnOnQuizExit =
+    isFillTestReviewPage &&
+    quizInProgress &&
+    session?.role === "child" &&
+    !(session?.isPlatformAdmin ?? false);
+  const quizExitWarningBody = str.fillTest.warning.body.replace(
+    "{coins}",
+    String(quizSessionCoins)
+  );
+  const [quizExitWarningOpen, setQuizExitWarningOpen] = useState(false);
+  const pendingQuizExitActionRef = useRef<(() => void | Promise<void>) | null>(null);
+  const quizExitWarningOpenRef = useRef(false);
+  const skipNextPopStateGuardRef = useRef(false);
+
+  useEffect(() => {
+    quizExitWarningOpenRef.current = quizExitWarningOpen;
+  }, [quizExitWarningOpen]);
+
+  const requestQuizExit = useCallback((action: () => void | Promise<void>) => {
+    if (!shouldWarnOnQuizExit) {
+      void action();
+      return;
+    }
+
+    pendingQuizExitActionRef.current = action;
+    setQuizExitWarningOpen(true);
+  }, [shouldWarnOnQuizExit]);
+
+  const closeQuizExitWarning = useCallback(() => {
+    pendingQuizExitActionRef.current = null;
+    setQuizExitWarningOpen(false);
+  }, []);
+
+  const confirmQuizExit = useCallback(async () => {
+    const action = pendingQuizExitActionRef.current;
+    pendingQuizExitActionRef.current = null;
+    setQuizExitWarningOpen(false);
+    if (action) {
+      await action();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!shouldWarnOnQuizExit) {
+      skipNextPopStateGuardRef.current = false;
+      pendingQuizExitActionRef.current = null;
+      setQuizExitWarningOpen(false);
+      return;
+    }
+
+    const handlePopState = () => {
+      if (skipNextPopStateGuardRef.current) {
+        skipNextPopStateGuardRef.current = false;
+        return;
+      }
+
+      if (quizExitWarningOpenRef.current) {
+        skipNextPopStateGuardRef.current = true;
+        window.history.forward();
+        return;
+      }
+
+      skipNextPopStateGuardRef.current = true;
+      window.history.forward();
+      requestQuizExit(() => {
+        skipNextPopStateGuardRef.current = true;
+        window.history.back();
+      });
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [requestQuizExit, shouldWarnOnQuizExit]);
 
   const flashcardSummary = useMemo(() => {
     return flashcardHistory.reduce(
@@ -915,7 +989,7 @@ const gradeLabels = getGradeLabels(str);
     resetQuizWordState();
   }
 
-  async function handleStopQuizSession() {
+  async function performStopQuizSession() {
     stopQuizSession();
     if (isFillTestReviewPage) {
       await refreshAll();
@@ -924,6 +998,10 @@ const gradeLabels = getGradeLabels(str);
     }
     setQuizNotice("Fill-test quiz stopped.");
     await refreshAll();
+  }
+
+  async function handleStopQuizSession() {
+    requestQuizExit(() => performStopQuizSession());
   }
 
   const refreshWords = useCallback(async () => {
@@ -3540,6 +3618,12 @@ const gradeLabels = getGradeLabels(str);
     ...sectionVm,
     activeMenuPage,
     navItems,
+    shouldWarnOnQuizExit,
+    quizExitWarningOpen,
+    quizExitWarningBody,
+    requestQuizExit,
+    closeQuizExitWarning,
+    confirmQuizExit,
   };
 }
 

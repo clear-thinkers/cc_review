@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, useEffect, type ReactNode } from "react";
+import { useRef, useState, useEffect, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, useAuth } from "@/lib/authContext";
 import type { AvatarId } from "@/lib/auth.types";
@@ -47,8 +47,37 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
   };
 
   const handleLogout = async () => {
-    await clearSession();
-    router.push('/login');
+    vm.requestQuizExit(async () => {
+      await clearSession();
+      router.push('/login');
+    });
+  };
+
+  const handleSwitchProfile = () => {
+    vm.requestQuizExit(() => {
+      switchProfile();
+    });
+  };
+
+  const handleNavClick = (event: ReactMouseEvent<HTMLAnchorElement>, href: string) => {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    if (!vm.shouldWarnOnQuizExit) {
+      return;
+    }
+
+    event.preventDefault();
+    vm.requestQuizExit(() => {
+      router.push(href);
+    });
   };
 
   return (
@@ -117,7 +146,7 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
 
               <p className="text-xs font-medium text-gray-700">{session.userName}</p>
               <button
-                onClick={switchProfile}
+                onClick={handleSwitchProfile}
                 className="w-full rounded-md border px-3 py-2 text-xs font-medium hover:bg-[#e8f6e8] hover:border-[#7bc28f]"
               >
                 {vm.str.nav.switchProfile}
@@ -136,6 +165,7 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={(event) => handleNavClick(event, item.href)}
                 className={
                   vm.activeMenuPage === item.page
                     ? "rounded-md border-2 border-[#7bc28f] bg-[#e8f6e8] px-4 py-2 text-sm font-semibold text-[#2d4f3f]"
@@ -167,6 +197,53 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
           {children}
         </div>
       </div>
+      {vm.quizExitWarningOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-950/35 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="quiz-exit-warning-title"
+            className="w-full max-w-xl rounded-[2rem] border-4 border-red-400 bg-[#fff8f6] p-5 shadow-[0_24px_80px_rgba(127,29,29,0.28)]"
+          >
+            <div className="flex flex-col gap-4 md:flex-row md:items-center">
+              <div className="mx-auto w-full max-w-[12rem] shrink-0 md:mx-0">
+                <img
+                  src="/icon/warning1_sad-milk-puddle.png"
+                  alt={vm.str.fillTest.warning.imageAlt}
+                  className="w-full object-contain"
+                />
+              </div>
+              <div className="space-y-3 text-center md:text-left">
+                <div className="flex items-center justify-center gap-3 md:justify-start">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-600 text-3xl font-black text-white">
+                    !
+                  </div>
+                  <h2 id="quiz-exit-warning-title" className="text-2xl font-semibold text-red-900">
+                    {vm.str.fillTest.warning.title}
+                  </h2>
+                </div>
+                <p className="text-base leading-7 text-red-900">{vm.quizExitWarningBody}</p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={vm.closeQuizExitWarning}
+                    className="rounded-full border-2 border-red-200 bg-white px-5 py-2.5 font-semibold text-red-800 transition hover:bg-red-50"
+                  >
+                    {vm.str.fillTest.warning.stayButton}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void vm.confirmQuizExit()}
+                    className="rounded-full border-2 border-red-600 bg-red-600 px-5 py-2.5 font-semibold text-white transition hover:bg-red-700"
+                  >
+                    {vm.str.fillTest.warning.leaveButton}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
