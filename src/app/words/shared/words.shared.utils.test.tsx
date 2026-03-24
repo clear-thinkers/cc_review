@@ -48,6 +48,15 @@ function collectRtTexts(node: ReactNode): string[] {
   return texts;
 }
 
+function getRootClassName(node: ReactNode): string {
+  if (!isValidElement(node)) {
+    return "";
+  }
+
+  const className = (node.props as { className?: string }).className;
+  return typeof className === "string" ? className : "";
+}
+
 describe("tokenizePinyinSyllables", () => {
   it("keeps full syllables when pinyin contains tone-mark vowels", () => {
     expect(tokenizePinyinSyllables("l\u0101 ch\u0113")).toEqual(["l\u0101", "ch\u0113"]);
@@ -66,6 +75,19 @@ describe("pinyin rendering regression guard", () => {
       renderSentenceWithPinyin("\u6211\u62c9\u8f66\u3002", "w\u01d2 l\u0101 ch\u0113")
     );
     expect(rtTexts).toEqual(["w\u01d2", "l\u0101", "ch\u0113"]);
+  });
+
+  it("allows wrapped sentence layout when requested", () => {
+    const className = getRootClassName(
+      renderSentenceWithPinyin(
+        "\u8fd9\u573a\u767e\u7c73\u8d5b\u8dd1\u4e2d\uff0c\u4e24\u4f4d\u9009\u624b\u5e76\u9a7e\u9f50\u9a71\u3002",
+        "zh\u00e8 ch\u01ceng b\u01cei m\u01d0 s\u00e0i p\u01ceo zh\u014dng li\u01ceng w\u00e8i xu\u01cen sh\u01d2u b\u00ecng ji\u00e0 q\u00ed q\u016b",
+        { allowWrap: true }
+      )
+    );
+
+    expect(className).toContain("flex-wrap");
+    expect(className).toContain("max-w-full");
   });
 });
 

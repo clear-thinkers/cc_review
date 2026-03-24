@@ -1,0 +1,67 @@
+export type ShopIngredient = {
+  name: string;
+  quantity: string;
+  unit?: string;
+};
+
+export type ShopSpecialIngredientOption = {
+  key: string;
+  label: string;
+  effect: string;
+};
+
+export type ShopSpecialIngredientSlot = {
+  slotKey: string;
+  label: string;
+  maxSelections: number;
+  options: ShopSpecialIngredientOption[];
+};
+
+export type ShopVariantIconRule = {
+  match: string[];
+  iconPath: string;
+};
+
+export type ShopRecipe = {
+  id: string;
+  slug: string;
+  title: string;
+  displayOrder: number;
+  isActive: boolean;
+  intro: string;
+  unlockCostCoins: number;
+  baseIngredients: ShopIngredient[];
+  specialIngredientSlots: ShopSpecialIngredientSlot[];
+  variantIconRules: ShopVariantIconRule[];
+};
+
+export type ShopRecipeUnlock = {
+  userId: string;
+  recipeId: string;
+  coinsSpent: number;
+  unlockedAt: number;
+};
+
+export type UnlockShopRecipeErrorCode =
+  | "already_unlocked"
+  | "insufficient_coins"
+  | "recipe_not_available"
+  | "forbidden"
+  | "unknown";
+
+export type UnlockShopRecipeResult =
+  | {
+      success: true;
+      code: "unlocked";
+      recipeId: string;
+      remainingCoins: number;
+      coinsSpent: number;
+    }
+  | {
+      success: false;
+      code: UnlockShopRecipeErrorCode;
+      recipeId: string | null;
+      remainingCoins: number | null;
+      coinsSpent: number;
+      message?: string;
+    };
