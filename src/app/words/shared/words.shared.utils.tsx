@@ -89,6 +89,7 @@ export function getNavItems(
     { href: "/words/prompts", label: `${str.nav.aiPrompts}`, page: "prompts" },
     { href: "/words/debug", label: `${str.nav.debug}`, page: "debug" },
     { href: "/words/shop", label: `${str.nav.shop}`, page: "shop" },
+    { href: "/words/shop-admin", label: `${str.nav.shopAdmin}`, page: "shopAdmin" },
   ];
 
   return allItems.filter(item => 

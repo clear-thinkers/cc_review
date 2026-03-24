@@ -23,6 +23,12 @@ import { calculateNextState, isDue } from "./scheduler";
 import type { Grade } from "./scheduler";
 import type { GradeResult } from "./review";
 import { normalizeUnlockShopRecipeResult } from "./shop";
+import {
+  normalizeShopLocalizedIngredients,
+  normalizeShopLocalizedIntro,
+  normalizeShopLocalizedSpecialIngredientSlots,
+  normalizeShopLocalizedTitle,
+} from "./shop";
 import type {
   Textbook,
   LessonTag,
@@ -259,13 +265,17 @@ interface SupabaseShopRecipeRow {
   id: string;
   slug: string;
   title: string;
+  title_i18n?: unknown;
   display_order: number;
   is_active: boolean;
   variant_icon_rules: unknown;
   intro: string;
+  intro_i18n?: unknown;
   unlock_cost_coins: number;
   base_ingredients: unknown;
+  base_ingredients_i18n?: unknown;
   special_ingredient_slots: unknown;
+  special_ingredient_slots_i18n?: unknown;
 }
 
 interface SupabaseShopRecipeUnlockRow {
@@ -287,18 +297,33 @@ interface SupabaseShopTransactionRow {
 }
 
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
+  const baseIngredients = Array.isArray(row.base_ingredients)
+    ? (row.base_ingredients as ShopRecipe["baseIngredients"])
+    : [];
+  const specialIngredientSlots = Array.isArray(row.special_ingredient_slots)
+    ? (row.special_ingredient_slots as ShopRecipe["specialIngredientSlots"])
+    : [];
+
   return {
     id: row.id,
     slug: row.slug,
     title: row.title,
+    titleI18n: normalizeShopLocalizedTitle(row.title_i18n, row.title),
     displayOrder: row.display_order,
     isActive: row.is_active,
     intro: row.intro,
+    introI18n: normalizeShopLocalizedIntro(row.intro_i18n, row.intro),
     unlockCostCoins: row.unlock_cost_coins,
-    baseIngredients: Array.isArray(row.base_ingredients) ? row.base_ingredients as ShopRecipe["baseIngredients"] : [],
-    specialIngredientSlots: Array.isArray(row.special_ingredient_slots)
-      ? (row.special_ingredient_slots as ShopRecipe["specialIngredientSlots"])
-      : [],
+    baseIngredients,
+    baseIngredientsI18n: normalizeShopLocalizedIngredients(
+      row.base_ingredients_i18n,
+      baseIngredients
+    ),
+    specialIngredientSlots,
+    specialIngredientSlotsI18n: normalizeShopLocalizedSpecialIngredientSlots(
+      row.special_ingredient_slots_i18n,
+      specialIngredientSlots
+    ),
     variantIconRules: Array.isArray(row.variant_icon_rules)
       ? (row.variant_icon_rules as ShopRecipe["variantIconRules"])
       : [],

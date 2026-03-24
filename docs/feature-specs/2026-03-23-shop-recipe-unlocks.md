@@ -11,7 +11,7 @@ The requested behavior is:
 - Show recipes in a fixed 3x3 icon wall
 - Keep locked tiles greyed out by default
 - Unlock one recipe per food type, not one per expression/variant image
-- Support recipe metadata with 1-2 optional special-ingredient slots that can affect the resulting facial expression or special effect of the food item
+- Support recipe metadata with optional specialty-ingredient slots that can explain which extra ingredients produce each specialty art variant
 - Show a coin bag with the child user's current wallet balance
 - Use a single maintainable script for all coin-spend logic instead of scattering hardcoded costs across components
 - Store recipe formula data in a new database table
@@ -26,6 +26,7 @@ The requested behavior is:
 - Spend 25 coins to unlock a recipe
 - Display recipe details in a popup after unlock
 - Store recipe formulas, special-ingredient slots, and variant rules in a new backend table
+- Render recipe metadata in the child user's active app language, with English fallback when a translation is still missing
 - Centralize spend rules in a dedicated domain script
 
 ## Out of Scope
@@ -41,6 +42,27 @@ The requested behavior is:
 - Any change to quiz coin earning rules
 
 ## Proposed Behavior
+
+### 0. Reward asset naming and canonical unlock art
+
+- Reward PNG filenames follow this convention:
+  - `{food}_{ingredients}_{mood}.png`
+  - `food` is the food type token
+  - `ingredients` is either `plain` or one or more specialty ingredient tokens joined by `+`
+  - `mood` is the baked-in facial expression or mood effect for that final rendered art
+- Example:
+  - `donut_chocolate+sprinkles_sleep.png`
+  - food type: `donut`
+  - specialty ingredients: `chocolate`, `sprinkles`
+  - mood effect: `sleep`
+- Asset filename parsing is a maintenance-time concern only. The app does not scan `public/rewards` at runtime.
+- Runtime rendering still reads `shop_recipes.variant_icon_rules` as the source of truth for recipe art.
+- Unlocking a recipe unlocks one canonical icon for that food type, not every PNG variant.
+- When a `plain` asset exists, that `plain` icon is the canonical unlock art.
+- If a food type temporarily has no `plain` asset, the recipe may still stay unlockable if its recipe row explicitly designates a fallback canonical unlock icon.
+- Current known exception:
+  - `milkshake` is allowed to stay unlockable even while `milkshake_plain.png` is missing.
+- Once the recipe is unlocked, the child can open it and view its ingredients.
 
 ### 1. Route and access model
 
@@ -65,6 +87,9 @@ The requested behavior is:
 
 - Initial catalog entries are deduped to one recipe per food type from the current `public/rewards` assets.
 - Expression or mood variants are not separate unlocks.
+- Asset food tokens may use hyphenated names such as `bubble-tea` or `rice-ball`.
+- Recipe slugs remain stable database ids such as `bubble_tea` and `rice_ball`.
+- Maintenance-time sync logic is responsible for translating asset food tokens to recipe slugs.
 - The initial food-type catalog for v1 is:
   - `bubble_tea`
   - `bun`
@@ -75,7 +100,6 @@ The requested behavior is:
   - `rice_ball`
   - `tangyuan`
   - `zongzi`
-- `trouphy_1.png` is excluded because it is not a food recipe.
 - The first 9 wall positions are seeded with those food types in explicit display order.
 - In v1, the 9 seeded food types fill the full wall.
 - Display order must be stored explicitly in recipe data, not inferred from filesystem order at runtime.
@@ -97,23 +121,24 @@ The requested behavior is:
 - Example: `donut` is one unlock, even though multiple donut art variants exist.
 - Each unlocked recipe contains:
   - required base ingredients
-  - zero, one, or two special-ingredient slots
-  - rules describing how special ingredients affect the resulting art variant
-- Special ingredients do not create separate paid unlocks in v1.
-- Special ingredients are recipe metadata that explain why one food type may appear with different facial expressions or effects.
+  - zero, one, or more specialty-ingredient options
+  - rules describing how specialty ingredient combinations map to art variants
+- Specialty ingredients do not create separate paid unlocks in v1.
+- The mood/effect is determined by the final PNG variant and may belong to an ingredient combination rather than to a single ingredient in isolation.
+- This means the app should treat mood as metadata on the rendered variant, not as a guaranteed property of one ingredient token by itself.
 
 ### 6. Special-ingredient slots
 
-- Each recipe supports `0`, `1`, or `2` special-ingredient slots.
-- A special-ingredient slot represents an optional modifier layer on top of base ingredients.
-- Special ingredients can influence:
-  - facial expression
-  - mood
-  - decorative effect
-  - other future visual traits
-- The data model must support naming the slot, listing allowed options, and describing the visual effect of each option.
-- In v1, the recipe popup displays these optional slots as part of recipe information.
-- In v1, special ingredients are descriptive metadata only; there is no inventory or consumption system for them yet.
+- Each recipe supports `0`, `1`, or more specialty-ingredient options grouped into one or more slots.
+- A specialty-ingredient slot represents optional extra ingredients layered on top of base ingredients.
+- A rendered specialty variant may require one ingredient or multiple ingredients.
+- The data model must support:
+  - naming the slot
+  - listing allowed ingredient options
+  - allowing more than one selection when a food has combination variants
+  - describing the option in child-friendly language
+- In v1, the recipe popup displays these specialty ingredients as recipe information only.
+- In v1, specialty ingredients are descriptive metadata only; there is no inventory or consumption system for them yet.
 - The schema must still be ready for future interactive variant selection without redesign.
 
 ### 7. Recipe popup
@@ -123,7 +148,7 @@ The requested behavior is:
   - the food title
   - a brief intro
   - required base ingredients and quantities
-  - optional special-ingredient slots and their possible effect notes
+  - optional specialty-ingredient slots and their option notes
 - The popup does not need cooking actions in v1.
 - The popup is read-only in v1.
 
@@ -152,13 +177,17 @@ Suggested columns:
 | `id` | uuid | Primary key |
 | `slug` | text | Stable recipe id, e.g. `donut` |
 | `title` | text | Display title |
+| `title_i18n` | jsonb | `{ en, zh }` localized title content |
 | `display_order` | integer | Explicit wall position order |
 | `is_active` | boolean | Allows soft-hiding future recipes |
-| `variant_icon_rules` | jsonb | Maps special-ingredient combos to image paths |
+| `variant_icon_rules` | jsonb | Maps specialty-ingredient combos to image paths |
 | `intro` | text | Brief food description |
+| `intro_i18n` | jsonb | `{ en, zh }` localized intro content |
 | `unlock_cost_coins` | integer | Defaults to `25` in v1 |
 | `base_ingredients` | jsonb | Array of `{ name, quantity, unit }` |
-| `special_ingredient_slots` | jsonb | Array of 0-2 slot descriptors |
+| `base_ingredients_i18n` | jsonb | `{ en: [...], zh: [...] }` localized ingredient rows |
+| `special_ingredient_slots` | jsonb | Array of specialty-ingredient slot descriptors |
+| `special_ingredient_slots_i18n` | jsonb | `{ en: [...], zh: [...] }` localized slot labels and notes |
 | `created_at` | timestamptz | Audit timestamp |
 | `updated_at` | timestamptz | Audit timestamp |
 
@@ -167,12 +196,12 @@ Suggested `special_ingredient_slots` shape:
 ```json
 [
   {
-    "slotKey": "expression",
-    "label": "Expression Boost",
-    "maxSelections": 1,
+    "slotKey": "specialty_ingredients",
+    "label": "Special Ingredients",
+    "maxSelections": 2,
     "options": [
-      { "key": "smile_syrup", "label": "Smile Syrup", "effect": "smile face" },
-      { "key": "sleepy_cream", "label": "Sleepy Cream", "effect": "sleepy face" }
+      { "key": "chocolate", "label": "Chocolate", "effect": "used in specialty recipes" },
+      { "key": "sprinkles", "label": "Sprinkles", "effect": "used in specialty recipes" }
     ]
   }
 ]
@@ -184,25 +213,47 @@ Suggested `variant_icon_rules` shape:
 [
   {
     "match": [],
-    "iconPath": "/rewards/donut_smile_1.png"
+    "iconPath": "/rewards/donut_plain.png"
   },
   {
-    "match": ["sleepy_cream"],
-    "iconPath": "/rewards/donut_sleep_1.png"
+    "match": ["strawberry"],
+    "iconPath": "/rewards/donut_strawberry_ambitious.png"
   },
   {
-    "match": ["spark_pop"],
-    "iconPath": "/rewards/donut_excited_1.png"
+    "match": ["chocolate", "sprinkles"],
+    "iconPath": "/rewards/donut_chocolate+sprinkles_sleep.png"
   }
 ]
 ```
 
 Rendering rule:
 
-- `match: []` is the canonical default icon rule.
+- `match: []` is the canonical default icon rule when a plain or explicit fallback unlock icon is available.
 - Rendering uses one lookup path only: find all rules whose `match` array is a subset of the currently active special ingredients.
 - When multiple rules match, the most specific rule wins, defined as the rule with the longest `match` array.
 - This removes the need for a separate `base_icon_path` column.
+
+### Recipe data ownership
+
+- `base_ingredients` is authored manually and is not inferred from filenames.
+- `intro`, `title`, `unlock_cost_coins`, and `display_order` are authored manually.
+- Localized child-facing recipe metadata is stored in the `*_i18n` columns and resolved from the active app locale.
+- English remains the compatibility baseline in `title`, `intro`, `base_ingredients`, and `special_ingredient_slots`.
+- When the active locale is `zh` but a translation is blank, the child UI falls back to English for that field.
+- `variant_icon_rules` should be generated or refreshed from `public/rewards` filenames during maintenance, then persisted to `shop_recipes`.
+- `special_ingredient_slots` may be generated from asset ingredient tokens as a baseline, then refined manually for child-friendly labels and notes.
+
+### Asset sync maintenance flow
+
+- The app must not infer shop art directly from the filesystem at runtime.
+- Instead, maintain a sync script that:
+  - scans `public/rewards`
+  - parses filenames using the current naming convention
+  - groups assets by food type
+  - emits SQL updates for `shop_recipes.variant_icon_rules`
+  - emits a baseline `special_ingredient_slots` structure from the parsed ingredient tokens
+- This script is the preferred maintenance path when new PNGs are added later.
+- Hand-authored recipe metadata such as `base_ingredients` remains in `shop_recipes` and is maintained separately from asset sync.
 
 ### Table 2: `shop_recipe_unlocks`
 
@@ -283,6 +334,7 @@ Constraints:
 - Load recipe catalog + unlocked state on page load
 - Load current wallet balance
 - Refresh wall and balance after successful unlock
+- Render the canonical unlock icon from persisted recipe data, not from live filename parsing in the browser
 
 ### Domain layer
 
@@ -303,6 +355,7 @@ Constraints:
 - Add `shop_recipe_unlocks`
 - Add indexes and RLS policies
 - Seed initial recipe rows for the 9 current food types
+- Add a maintenance script that can regenerate asset-driven recipe art mappings when reward PNGs change
 
 ## Edge Cases
 
@@ -315,7 +368,9 @@ Constraints:
 - Recipe has no special-ingredient slots.
 - Recipe has one special-ingredient slot.
 - Recipe has two special-ingredient slots.
+- Recipe has a specialty variant requiring two ingredients joined by `+`.
 - Variant icon rule is missing for a listed special ingredient combo.
+- Recipe has no `plain` asset but is intentionally kept unlockable through an explicit fallback rule.
 - Parent opens direct link to `/words/shop`.
 - Old users have a wallet row but no unlock rows yet.
 
@@ -324,7 +379,7 @@ Constraints:
 - If unlock spend and unlock insert are not transactional, duplicate charges are possible.
 - If display order is inferred from files instead of persisted data, future asset additions will silently reshuffle the wall.
 - If the UI treats each image file as a unique unlock, the model will drift from the requested one-food-type design.
-- If special-ingredient slots are modeled too narrowly, future variant rules will require a schema rewrite.
+- If special-ingredient slots assume one ingredient always maps to one mood, future combo variants will produce misleading metadata.
 - If shop balance is derived from quiz history instead of wallet state, the child could see incorrect spendable coins.
 
 ## Test Plan
@@ -336,6 +391,8 @@ Constraints:
   - duplicate unlock does not double-charge
   - inactive recipe cannot be unlocked
   - wallet balance decreases by exactly 25 on success
+  - canonical unlock icon selection prefers `plain` when present
+  - explicit fallback unlock icon works for foods without a `plain` asset
 - UI tests:
   - child sees `Shop` nav item
   - parent does not see `Shop` nav item
@@ -346,6 +403,7 @@ Constraints:
   - unlocked tile opens popup
   - popup shows intro and ingredient quantities
   - popup shows special-ingredient slot labels when configured
+  - combo-ingredient variants resolve to the most specific icon rule
 - Permission tests:
   - parent direct route access is blocked
   - child unlock writes only to their own `user_id`
@@ -357,9 +415,10 @@ Constraints:
 3. Seed the initial 9 food-type recipes with explicit display order.
 4. Add `src/lib/shop.ts` as the single spend-logic entry point and define the unlock contracts/result shapes with the backend path design.
 5. Add the transactional unlock backend path to implement that contract.
-6. Build the 3x3 wall and coin bag UI.
-7. Add unlocked recipe popup.
-8. Add tests for permissions, spend logic, and wall rendering.
+6. Add an asset sync maintenance script for reward PNG parsing and SQL generation.
+7. Build the 3x3 wall and coin bag UI.
+8. Add unlocked recipe popup.
+9. Add tests for permissions, spend logic, and wall rendering.
 
 ## Acceptance Criteria
 
@@ -372,5 +431,6 @@ Constraints:
 - The coin bag shows the user's current wallet balance.
 - After unlock, the tile shows the food icon and becomes clickable.
 - Clicking an unlocked recipe opens a popup with intro and ingredient quantities.
-- Each recipe can describe up to two optional special-ingredient slots.
+- Each recipe can describe specialty-ingredient options, including multi-ingredient combinations.
 - All coin-spend rules are maintained through one centralized shop logic script rather than UI hardcoding.
+- Reward PNG additions can be incorporated through a maintenance sync flow instead of manual runtime inference.

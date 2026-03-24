@@ -198,3 +198,39 @@ h3 {
 .kids-page .stats-gold strong {
   color: #6a5326;
 }
+
+.kids-page .shop-admin-root .shop-admin-pane,
+.kids-page section.shop-admin-pane {
+  box-shadow: none;
+  overflow: visible;
+  animation: none;
+}
+
+.kids-page .shop-admin-root .shop-admin-pane::before,
+.kids-page section.shop-admin-pane::before {
+  display: none;
+}
+
+.kids-page .shop-admin-root .shop-admin-recipe-card {
+  border-radius: 1rem;
+  transform: none;
+}
+
+.kids-page .shop-admin-root .shop-admin-recipe-card:hover:not(:disabled) {
+  transform: none;
+}
+
+.kids-page .shop-admin-root button {
+  border-radius: 0.9rem;
+  font-weight: 600;
+}
+
+.kids-page .shop-admin-root .shop-admin-pill {
+  border-radius: 9999px;
+}
+
+.kids-page .shop-admin-root .shop-admin-label {
+  letter-spacing: 0.04em;
+  text-transform: none;
+  line-height: 1.5;
+}

@@ -1,3 +1,10 @@
+export type ShopLocale = "en" | "zh";
+
+export type ShopLocalizedValue<T> = {
+  en: T;
+  zh: T;
+};
+
 export type ShopIngredient = {
   name: string;
   quantity: string;
@@ -26,12 +33,16 @@ export type ShopRecipe = {
   id: string;
   slug: string;
   title: string;
+  titleI18n: ShopLocalizedValue<string>;
   displayOrder: number;
   isActive: boolean;
   intro: string;
+  introI18n: ShopLocalizedValue<string>;
   unlockCostCoins: number;
   baseIngredients: ShopIngredient[];
+  baseIngredientsI18n: ShopLocalizedValue<ShopIngredient[]>;
   specialIngredientSlots: ShopSpecialIngredientSlot[];
+  specialIngredientSlotsI18n: ShopLocalizedValue<ShopSpecialIngredientSlot[]>;
   variantIconRules: ShopVariantIconRule[];
 };
 
@@ -58,6 +69,7 @@ export type ShopTransaction = {
 export type UnlockShopRecipeErrorCode =
   | "already_unlocked"
   | "insufficient_coins"
+  | "plain_icon_missing"
   | "recipe_not_available"
   | "forbidden"
   | "unknown";

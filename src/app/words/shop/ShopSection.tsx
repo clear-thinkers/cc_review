@@ -21,6 +21,8 @@ import {
 import {
   SHOP_WALL_SIZE,
   canAffordRecipeUnlock,
+  getShopRecipeContentForLocale,
+  resolvePlainShopRecipeIconPath,
   resolveShopRecipeIconPath,
 } from "@/lib/shop";
 
@@ -39,6 +41,8 @@ function buildUnlockNotice(
       return strings.alreadyUnlocked;
     case "insufficient_coins":
       return strings.insufficientCoins;
+    case "plain_icon_missing":
+      return strings.recipeNotOpenYet;
     case "recipe_not_available":
       return strings.recipeUnavailable;
     case "forbidden":
@@ -61,11 +65,16 @@ function formatShopTransactionDateTime(timestamp: number, locale: "en" | "zh"): 
 function buildShopTransactionActionLabel(
   transaction: ShopTransaction,
   recipesById: Map<string, ShopRecipe>,
+  locale: "en" | "zh",
   strings: WordsWorkspaceVM["str"]["shop"]
 ): string {
   if (transaction.actionType === "unlock_recipe") {
     const recipeTitle =
-      (transaction.recipeId ? recipesById.get(transaction.recipeId)?.title : null) ??
+      (transaction.recipeId
+        ? recipesById.get(transaction.recipeId)
+          ? getShopRecipeContentForLocale(recipesById.get(transaction.recipeId)!, locale).title
+          : null
+        : null) ??
       strings.history.unknownRecipe;
     return formatWithToken(strings.history.actionUnlockRecipe, "{title}", recipeTitle);
   }
@@ -77,36 +86,39 @@ function getTileCardClassName(
   recipeState: "reserved" | "locked" | "unlocked"
 ): string {
   if (recipeState === "reserved") {
-    return "flex h-full min-h-[220px] flex-col gap-3 rounded-lg border-2 border-gray-300 bg-gray-100 p-4 text-gray-600";
+    return "flex h-full min-h-[250px] flex-col gap-4 rounded-[1.75rem] border border-[#d8d1c1] bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(242,238,228,0.96))] p-5 text-gray-600 shadow-[0_16px_34px_rgba(115,92,40,0.08)]";
   }
 
   if (recipeState === "locked") {
-    return "flex h-full min-h-[220px] flex-col gap-3 rounded-lg border-2 border-gray-300 bg-gray-100 p-4";
+    return "flex h-full min-h-[250px] flex-col gap-4 rounded-[1.75rem] border border-[#d7d2c6] bg-[linear-gradient(180deg,rgba(245,245,244,0.96),rgba(232,232,231,0.98))] p-5 shadow-[0_16px_34px_rgba(115,92,40,0.08)]";
   }
 
-  return "flex h-full min-h-[220px] flex-col gap-3 rounded-lg border-2 border-[#dcc38a] bg-[#fcf8ef] p-4 text-left";
+  return "flex h-full min-h-[250px] flex-col gap-4 !rounded-[1.75rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-5 text-left shadow-[0_18px_38px_rgba(166,128,42,0.1)]";
 }
 
 function getTileArtClassName(recipeState: "reserved" | "locked" | "unlocked"): string {
   if (recipeState === "unlocked") {
-    return "flex min-h-[120px] items-center justify-center rounded-md border bg-white p-3";
+    return "relative flex min-h-[138px] items-center justify-center overflow-hidden rounded-[1.4rem] border border-[#eadfbe] bg-[linear-gradient(180deg,rgba(255,255,255,0.28),rgba(255,255,255,0.08))] p-4";
   }
 
-  return "flex min-h-[120px] items-center justify-center rounded-md border border-dashed border-gray-400 bg-gray-200 p-3";
+  return "flex min-h-[138px] items-center justify-center rounded-[1.4rem] border border-dashed border-gray-400/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.45),rgba(214,214,214,0.75))] p-4";
 }
 
 function RecipeModal({
   recipe,
+  locale,
   strings,
   onClose,
 }: {
   recipe: ShopRecipe;
+  locale: "en" | "zh";
   strings: WordsWorkspaceVM["str"]["shop"];
   onClose: () => void;
 }) {
   if (typeof document === "undefined") {
     return null;
   }
+  const localizedRecipe = getShopRecipeContentForLocale(recipe, locale);
 
   return createPortal(
     <div
@@ -124,7 +136,7 @@ function RecipeModal({
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 id="shop-recipe-title" className="text-xl font-semibold text-gray-900">
-                {recipe.title}
+                {localizedRecipe.title}
               </h2>
             </div>
             <button
@@ -139,15 +151,15 @@ function RecipeModal({
           <div className="mt-4 space-y-4">
             <div className="space-y-2 rounded-lg border p-4">
               <h3 className="font-medium">{strings.modal.intro}</h3>
-              <p className="text-sm text-gray-700">{recipe.intro}</p>
+              <p className="text-sm text-gray-700">{localizedRecipe.intro}</p>
             </div>
 
             <div className="space-y-2 rounded-lg border p-4">
               <h3 className="font-medium">{strings.modal.baseIngredients}</h3>
               <div className="space-y-2">
-                {recipe.baseIngredients.map((ingredient) => (
+                {localizedRecipe.baseIngredients.map((ingredient, index) => (
                   <div
-                    key={`${recipe.id}-${ingredient.name}`}
+                    key={`${recipe.id}-${index}`}
                     className="rounded-md border bg-white px-3 py-2 text-sm text-gray-700"
                   >
                     <strong>{ingredient.name}</strong>{" "}
@@ -162,11 +174,11 @@ function RecipeModal({
 
             <div className="space-y-2 rounded-lg border p-4">
               <h3 className="font-medium">{strings.modal.specialSlots}</h3>
-              {recipe.specialIngredientSlots.length === 0 ? (
+              {localizedRecipe.specialIngredientSlots.length === 0 ? (
                 <p className="text-sm text-gray-600">{strings.modal.noSpecialSlots}</p>
               ) : (
                 <div className="space-y-2">
-                  {recipe.specialIngredientSlots.map((slot: ShopSpecialIngredientSlot) => (
+                  {localizedRecipe.specialIngredientSlots.map((slot: ShopSpecialIngredientSlot) => (
                     <div
                       key={`${recipe.id}-${slot.slotKey}`}
                       className="rounded-md border bg-white px-3 py-3"
@@ -286,6 +298,7 @@ function HistoryModal({
                         {buildShopTransactionActionLabel(
                           transaction,
                           recipesById,
+                          locale,
                           strings
                         )}
                       </td>
@@ -416,6 +429,10 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
     setUnlockingRecipeId(recipe.id);
 
     try {
+      if (!resolvePlainShopRecipeIconPath(recipe.variantIconRules)) {
+        throw new Error(`Plain icon missing for recipe unlock: ${recipe.slug}`);
+      }
+
       const result = await unlockShopRecipe(recipe.id);
       if (!result.success) {
         if (result.code === "already_unlocked") {
@@ -459,7 +476,11 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
       );
       setNotice({
         tone: "success",
-        text: formatWithToken(vm.str.shop.unlockSuccess, "{title}", recipe.title),
+        text: formatWithToken(
+          vm.str.shop.unlockSuccess,
+          "{title}",
+          getShopRecipeContentForLocale(recipe, locale).title
+        ),
       });
       try {
         const transactionRows = await listShopTransactions();
@@ -471,7 +492,10 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
       console.error("Failed to unlock recipe:", error);
       setNotice({
         tone: "error",
-        text: vm.str.shop.unlockFailed,
+        text:
+          error instanceof Error && error.message.includes("Plain icon missing")
+            ? vm.str.shop.recipeNotOpenYet
+            : vm.str.shop.unlockFailed,
       });
     } finally {
       setUnlockingRecipeId(null);
@@ -539,7 +563,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
             </p>
           </div>
 
-          <div className="grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+          <div className="grid max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
             {Array.from({ length: SHOP_WALL_SIZE }, (_, index) => {
               const displayOrder = index + 1;
               const recipe = recipesByOrder.get(displayOrder);
@@ -564,62 +588,77 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
               }
 
               const isUnlocked = unlockedRecipeIds.has(recipe.id);
-              const iconPath = resolveShopRecipeIconPath(recipe.variantIconRules, []);
+              const plainIconPath = resolvePlainShopRecipeIconPath(recipe.variantIconRules);
+              const iconPath = plainIconPath ?? resolveShopRecipeIconPath(recipe.variantIconRules, []);
+              const localizedRecipe = getShopRecipeContentForLocale(recipe, locale);
 
               if (isUnlocked) {
                 return (
-                  <button
-                    key={recipe.id}
-                    type="button"
-                    className={getTileCardClassName("unlocked")}
-                    onClick={() => setSelectedRecipe(recipe)}
-                  >
+                  <article key={recipe.id} className={getTileCardClassName("unlocked")}>
                     <div className={getTileArtClassName("unlocked")}>
+                      <div className="pointer-events-none absolute inset-x-6 bottom-4 h-5 rounded-full bg-[radial-gradient(circle,rgba(181,138,56,0.22),rgba(181,138,56,0))] blur-md" />
                       {iconPath ? (
                         <img
                           src={iconPath}
-                          alt={recipe.title}
-                          className="h-28 w-28 object-contain"
+                          alt={localizedRecipe.title}
+                          className="relative z-[1] h-28 w-28 object-contain drop-shadow-[0_10px_18px_rgba(113,78,28,0.18)] sm:h-32 sm:w-32"
                         />
                       ) : null}
                     </div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">
+                    <p className="text-xs uppercase tracking-[0.18em] text-[#8d7a55]">
                       {vm.str.shop.unlocked}
                     </p>
-                    <p className="text-base leading-tight font-semibold text-gray-900">
-                      {recipe.title}
+                    <p className="text-xl leading-tight font-semibold text-[#203529]">
+                      {localizedRecipe.title}
                     </p>
-                    <p className="text-sm text-gray-600">{vm.str.shop.modal.baseIngredients}</p>
-                  </button>
+                    <p className="text-sm leading-6 text-[#6f8266]">
+                      {localizedRecipe.intro}
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-auto border-2 border-[#d8bc76] bg-[#fff6dc] px-4 py-2.5 text-sm font-semibold text-[#7b5b24] shadow-[0_8px_18px_rgba(168,127,43,0.12)] transition hover:bg-[#fff0c6]"
+                      onClick={() => setSelectedRecipe(recipe)}
+                    >
+                      {vm.str.shop.showIngredients}
+                    </button>
+                  </article>
                 );
               }
 
               const canAfford = canAffordRecipeUnlock(walletCoins, recipe);
+              const isOpenForUnlocking = Boolean(plainIconPath);
 
               return (
                 <article key={recipe.id} className={getTileCardClassName("locked")}>
                   <div className={getTileArtClassName("locked")}>
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-2xl font-semibold text-gray-500">
+                    <div className="flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-white/85 text-3xl font-semibold text-gray-500 shadow-inner">
                       ?
                     </div>
                   </div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500">
+                  <p className="text-xs uppercase tracking-[0.18em] text-gray-500">
                     {vm.str.shop.locked}
                   </p>
-                  <p className="text-base leading-tight font-semibold text-gray-700">
-                    {recipe.title}
+                  <p className="text-xl leading-tight font-semibold text-[#576c58]">
+                    {localizedRecipe.title}
                   </p>
-                  <p className="text-sm text-gray-600">
-                    {formatWithToken(
-                      canAfford ? vm.str.shop.unlockCost : vm.str.shop.notEnoughCoins,
-                      "{coins}",
-                      String(recipe.unlockCostCoins)
-                    )}
+                  <p className="text-sm leading-6 text-gray-600">
+                    {localizedRecipe.intro}
+                  </p>
+                  <p className="text-sm leading-6 text-gray-600">
+                    {isOpenForUnlocking
+                      ? formatWithToken(
+                          canAfford ? vm.str.shop.unlockCost : vm.str.shop.notEnoughCoins,
+                          "{coins}",
+                          String(recipe.unlockCostCoins)
+                        )
+                      : vm.str.shop.recipeNotOpenYet}
                   </p>
                   <button
                     type="button"
                     className="rounded-md border-2 border-amber-400 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
-                    disabled={!canAfford || unlockingRecipeId === recipe.id}
+                    disabled={
+                      !isOpenForUnlocking || !canAfford || unlockingRecipeId === recipe.id
+                    }
                     onClick={() => void handleUnlock(recipe)}
                   >
                     {unlockingRecipeId === recipe.id
@@ -636,6 +675,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
       {selectedRecipe ? (
         <RecipeModal
           recipe={selectedRecipe}
+          locale={locale}
           strings={vm.str.shop}
           onClose={() => setSelectedRecipe(null)}
         />

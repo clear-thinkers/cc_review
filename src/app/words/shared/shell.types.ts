@@ -9,6 +9,7 @@ export type NavPage =
   | "all"
   | "review"
   | "shop"
+  | "shopAdmin"
   | "admin"
   | "results"
   | "prompts"

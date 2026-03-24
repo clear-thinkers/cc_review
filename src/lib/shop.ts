@@ -1,10 +1,16 @@
 import type {
+  ShopIngredient,
+  ShopLocale,
+  ShopLocalizedValue,
   ShopRecipe,
+  ShopSpecialIngredientSlot,
   ShopVariantIconRule,
   UnlockShopRecipeResult,
 } from "@/app/words/shop/shop.types";
 
 export const SHOP_WALL_SIZE = 9;
+const SHOP_PLAIN_ICON_TOKEN = "plain";
+const SHOP_LOCALES: ShopLocale[] = ["en", "zh"];
 
 function normalizeMatchKeys(keys: string[]): string[] {
   return Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean))).sort();
@@ -42,6 +48,149 @@ export function resolveShopRecipeIconPath(
   return bestRule?.iconPath ?? null;
 }
 
+function isPlainShopIconPath(iconPath: string): boolean {
+  const normalizedPath = iconPath.trim().toLowerCase();
+  if (!normalizedPath) {
+    return false;
+  }
+
+  const fileName = normalizedPath.split("/").at(-1) ?? normalizedPath;
+  return fileName.includes(SHOP_PLAIN_ICON_TOKEN);
+}
+
+function normalizeShopIngredientList(
+  raw: unknown,
+  fallback: ShopIngredient[]
+): ShopIngredient[] {
+  return Array.isArray(raw) ? (raw as ShopIngredient[]) : fallback;
+}
+
+function normalizeShopSpecialIngredientSlotList(
+  raw: unknown,
+  fallback: ShopSpecialIngredientSlot[]
+): ShopSpecialIngredientSlot[] {
+  return Array.isArray(raw) ? (raw as ShopSpecialIngredientSlot[]) : fallback;
+}
+
+function normalizeShopLocalizedStringValue(
+  raw: unknown,
+  fallback: string
+): ShopLocalizedValue<string> {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const en = typeof source.en === "string" ? source.en : fallback;
+  const zh = typeof source.zh === "string" ? source.zh : en;
+  return { en, zh };
+}
+
+function normalizeShopLocalizedListValue<T>(
+  raw: unknown,
+  fallback: T[],
+  parseList: (rawValue: unknown, fallbackValue: T[]) => T[]
+): ShopLocalizedValue<T[]> {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const en = parseList(source.en, fallback);
+  const zh = parseList(source.zh, en);
+  return { en, zh };
+}
+
+export function normalizeShopLocalizedTitle(
+  raw: unknown,
+  fallback: string
+): ShopLocalizedValue<string> {
+  return normalizeShopLocalizedStringValue(raw, fallback);
+}
+
+export function normalizeShopLocalizedIntro(
+  raw: unknown,
+  fallback: string
+): ShopLocalizedValue<string> {
+  return normalizeShopLocalizedStringValue(raw, fallback);
+}
+
+export function normalizeShopLocalizedIngredients(
+  raw: unknown,
+  fallback: ShopIngredient[]
+): ShopLocalizedValue<ShopIngredient[]> {
+  return normalizeShopLocalizedListValue(raw, fallback, normalizeShopIngredientList);
+}
+
+export function normalizeShopLocalizedSpecialIngredientSlots(
+  raw: unknown,
+  fallback: ShopSpecialIngredientSlot[]
+): ShopLocalizedValue<ShopSpecialIngredientSlot[]> {
+  return normalizeShopLocalizedListValue(
+    raw,
+    fallback,
+    normalizeShopSpecialIngredientSlotList
+  );
+}
+
+export function resolveShopLocalizedString(
+  localized: ShopLocalizedValue<string>,
+  locale: ShopLocale,
+  fallback: string
+): string {
+  const preferred = localized[locale].trim();
+  if (preferred) {
+    return preferred;
+  }
+  const english = localized.en.trim();
+  if (english) {
+    return english;
+  }
+  return fallback;
+}
+
+export function resolveShopLocalizedList<T>(
+  localized: ShopLocalizedValue<T[]>,
+  locale: ShopLocale,
+  fallback: T[]
+): T[] {
+  const preferred = localized[locale];
+  if (preferred.length > 0) {
+    return preferred;
+  }
+  if (localized.en.length > 0) {
+    return localized.en;
+  }
+  return fallback;
+}
+
+export function getShopRecipeContentForLocale(
+  recipe: ShopRecipe,
+  locale: ShopLocale
+): {
+  title: string;
+  intro: string;
+  baseIngredients: ShopIngredient[];
+  specialIngredientSlots: ShopSpecialIngredientSlot[];
+} {
+  return {
+    title: resolveShopLocalizedString(recipe.titleI18n, locale, recipe.title),
+    intro: resolveShopLocalizedString(recipe.introI18n, locale, recipe.intro),
+    baseIngredients: resolveShopLocalizedList(
+      recipe.baseIngredientsI18n,
+      locale,
+      recipe.baseIngredients
+    ),
+    specialIngredientSlots: resolveShopLocalizedList(
+      recipe.specialIngredientSlotsI18n,
+      locale,
+      recipe.specialIngredientSlots
+    ),
+  };
+}
+
+export function resolvePlainShopRecipeIconPath(
+  variantIconRules: ShopVariantIconRule[]
+): string | null {
+  const plainRules = variantIconRules
+    .filter((rule) => isPlainShopIconPath(rule.iconPath))
+    .sort((left, right) => normalizeMatchKeys(left.match).length - normalizeMatchKeys(right.match).length);
+
+  return plainRules[0]?.iconPath ?? null;
+}
+
 type UnlockShopRecipeRpcResult = {
   success?: boolean;
   code?: string;
@@ -69,6 +218,7 @@ export function normalizeUnlockShopRecipeResult(raw: unknown): UnlockShopRecipeR
   const normalizedCode =
     code === "already_unlocked" ||
     code === "insufficient_coins" ||
+    code === "plain_icon_missing" ||
     code === "recipe_not_available" ||
     code === "forbidden"
       ? code

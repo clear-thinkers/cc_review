@@ -5,6 +5,7 @@ export type ProtectedRoute =
   | '/words/add'
   | '/words/all'
   | '/words/admin'
+  | '/words/shop-admin'
   | '/words/prompts'
   | '/words/results'
   | '/words/shop'
@@ -34,6 +35,9 @@ export function canAccessRoute(
     case '/words/admin':
     case '/words/prompts':
       return role === 'parent';
+
+    case '/words/shop-admin':
+      return isPlatformAdmin;
     
     case '/words/review/fill-test':
     case '/words/shop':
