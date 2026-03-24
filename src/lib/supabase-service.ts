@@ -15,6 +15,7 @@ import type { QuizSession } from "@/app/words/results/results.types";
 import type { Wallet } from "@/app/words/shared/coins.types";
 import type {
   ShopRecipe,
+  ShopTransaction,
   ShopRecipeUnlock,
   UnlockShopRecipeResult,
 } from "@/app/words/shop/shop.types";
@@ -274,6 +275,17 @@ interface SupabaseShopRecipeUnlockRow {
   unlocked_at: string;
 }
 
+interface SupabaseShopTransactionRow {
+  id: string;
+  user_id: string;
+  recipe_id: string | null;
+  action_type: "unlock_recipe";
+  coins_spent: number;
+  beginning_balance: number;
+  ending_balance: number;
+  created_at: string;
+}
+
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
   return {
     id: row.id,
@@ -299,6 +311,19 @@ function toShopRecipeUnlock(row: SupabaseShopRecipeUnlockRow): ShopRecipeUnlock 
     recipeId: row.recipe_id,
     coinsSpent: row.coins_spent,
     unlockedAt: new Date(row.unlocked_at).getTime(),
+  };
+}
+
+function toShopTransaction(row: SupabaseShopTransactionRow): ShopTransaction {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    recipeId: row.recipe_id,
+    actionType: row.action_type,
+    coinsSpent: row.coins_spent,
+    beginningBalance: row.beginning_balance,
+    endingBalance: row.ending_balance,
+    createdAt: new Date(row.created_at).getTime(),
   };
 }
 
@@ -859,6 +884,18 @@ export async function listShopRecipeUnlocks(): Promise<ShopRecipeUnlock[]> {
     .eq("user_id", userId);
   if (error) throw new Error(`listShopRecipeUnlocks: ${error.message}`);
   return ((data ?? []) as SupabaseShopRecipeUnlockRow[]).map(toShopRecipeUnlock);
+}
+
+export async function listShopTransactions(): Promise<ShopTransaction[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("shop_coin_transactions")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`listShopTransactions: ${error.message}`);
+  return ((data ?? []) as SupabaseShopTransactionRow[]).map(toShopTransaction);
 }
 
 export async function unlockShopRecipe(recipeId: string): Promise<UnlockShopRecipeResult> {

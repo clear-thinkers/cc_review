@@ -325,6 +325,8 @@ export const wordsStrings = {
       pageDescription:
         "Unlock food recipes with coins, then tap an unlocked recipe to see the ingredients.",
       coinBag: "Coin Bag",
+      balanceUnit: "Coins",
+      openHistory: "Open coin history",
       wallLabel: "Recipe Wall",
       locked: "Locked",
       reserved: "Coming Soon",
@@ -347,6 +349,21 @@ export const wordsStrings = {
         noSpecialSlots: "No special ingredients for this recipe yet.",
         slotLimit: "Up to {count}",
         close: "Close",
+      },
+      history: {
+        tooltip: "Tap to open a pop-up of your shop coin history.",
+        title: "Shop Coin History",
+        description: "This list shows coins you spent in the shop.",
+        empty: "No shop spending yet.",
+        unknownRecipe: "Recipe",
+        actionUnlockRecipe: "Unlocked {title}",
+        headers: {
+          dateTime: "Date & Time",
+          action: "Action",
+          cost: "Cost",
+          beginningBalance: "Beginning",
+          endingBalance: "Ending",
+        },
       },
     },
 
@@ -1004,8 +1021,10 @@ export const wordsStrings = {
 
     shop: {
       pageTitle: "食谱商店",
-      pageDescription: "使用金币解锁食物食谱，解锁后点击食谱即可查看所需材料。",
+      pageDescription: "使用金币解锁食谱，解锁后点击食谱即可查看所需材料。",
       coinBag: "金币袋",
+      balanceUnit: "金币",
+      openHistory: "打开金币记录",
       wallLabel: "食谱墙",
       locked: "未解锁",
       reserved: "敬请期待",
@@ -1028,6 +1047,21 @@ export const wordsStrings = {
         noSpecialSlots: "这个食谱暂时没有特殊材料。",
         slotLimit: "最多 {count} 个",
         close: "关闭",
+      },
+      history: {
+        tooltip: "点击后可弹出查看你的商店金币记录。",
+        title: "商店金币记录",
+        description: "这里只显示你在商店里花掉的金币。",
+        empty: "还没有商店消费记录。",
+        unknownRecipe: "食谱",
+        actionUnlockRecipe: "已解锁 {title}",
+        headers: {
+          dateTime: "日期时间",
+          action: "操作",
+          cost: "花费",
+          beginningBalance: "开始余额",
+          endingBalance: "结束余额",
+        },
       },
     },
 

@@ -42,6 +42,19 @@ export type ShopRecipeUnlock = {
   unlockedAt: number;
 };
 
+export type ShopTransactionAction = "unlock_recipe";
+
+export type ShopTransaction = {
+  id: string;
+  userId: string;
+  recipeId: string | null;
+  actionType: ShopTransactionAction;
+  coinsSpent: number;
+  beginningBalance: number;
+  endingBalance: number;
+  createdAt: number;
+};
+
 export type UnlockShopRecipeErrorCode =
   | "already_unlocked"
   | "insufficient_coins"

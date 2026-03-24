@@ -8,7 +8,7 @@ Children can currently earn coins through quiz play, but there is no child-facin
 
 The requested behavior is:
 - Add a new child-only shop page where coins can be spent to unlock food recipes
-- Show recipes in a fixed 5x5 icon wall
+- Show recipes in a fixed 3x3 icon wall
 - Keep locked tiles greyed out by default
 - Unlock one recipe per food type, not one per expression/variant image
 - Support recipe metadata with 1-2 optional special-ingredient slots that can affect the resulting facial expression or special effect of the food item
@@ -20,7 +20,7 @@ The requested behavior is:
 
 - Add a new top-level page at `/words/shop`
 - Restrict the page to child users only
-- Display a 5x5 recipe wall with 25 fixed slots
+- Display a 3x3 recipe wall with 9 fixed slots
 - Map the initial recipe catalog from the existing `public/rewards` food art, deduped to one entry per food type
 - Persist unlocked recipes per child user
 - Spend 25 coins to unlock a recipe
@@ -49,10 +49,10 @@ The requested behavior is:
 - Parent users who navigate directly to `/words/shop` are redirected using the same route-guard pattern already used elsewhere in the words app.
 - The sidebar/nav should include `Shop` only when the current profile can access it.
 
-### 2. 5x5 recipe wall
+### 2. 3x3 recipe wall
 
-- The main UI is a fixed 5x5 wall with 25 total tiles.
-- All 25 tiles always render, even when the current recipe catalog contains fewer than 25 foods.
+- The main UI is a fixed 3x3 wall with 9 total tiles.
+- All 9 tiles always render, even when the current recipe catalog contains fewer than 9 foods.
 - Empty future slots remain greyed out placeholders.
 - Locked recipe tiles show a grey background and locked state styling.
 - Unlocked recipe tiles show the food item's icon.
@@ -77,7 +77,7 @@ The requested behavior is:
   - `zongzi`
 - `trouphy_1.png` is excluded because it is not a food recipe.
 - The first 9 wall positions are seeded with those food types in explicit display order.
-- The remaining 16 positions stay reserved as locked placeholders for future recipes.
+- In v1, the 9 seeded food types fill the full wall.
 - Display order must be stored explicitly in recipe data, not inferred from filesystem order at runtime.
 - An inactive recipe in a named wall position renders as a locked placeholder, identical to an empty future slot. Its position is never backfilled by the next active recipe.
 
@@ -275,7 +275,7 @@ Constraints:
 
 - New child-facing shop page and modal
 - New coin bag summary display
-- New 5x5 wall rendering logic
+- New 3x3 wall rendering logic
 - Locked/unlocked tile states
 
 ### Shared state
@@ -311,7 +311,7 @@ Constraints:
 - Child double-clicks unlock rapidly.
 - Same recipe unlock request is retried after a slow network response.
 - Recipe exists in wall order but is marked inactive.
-- Catalog has fewer than 25 active recipes.
+- Catalog has fewer than 9 active recipes.
 - Recipe has no special-ingredient slots.
 - Recipe has one special-ingredient slot.
 - Recipe has two special-ingredient slots.
@@ -357,7 +357,7 @@ Constraints:
 3. Seed the initial 9 food-type recipes with explicit display order.
 4. Add `src/lib/shop.ts` as the single spend-logic entry point and define the unlock contracts/result shapes with the backend path design.
 5. Add the transactional unlock backend path to implement that contract.
-6. Build the 5x5 wall and coin bag UI.
+6. Build the 3x3 wall and coin bag UI.
 7. Add unlocked recipe popup.
 8. Add tests for permissions, spend logic, and wall rendering.
 
@@ -365,8 +365,8 @@ Constraints:
 
 - A child user can open `/words/shop`.
 - A parent user cannot use `/words/shop`.
-- The shop page shows a 5x5 wall with 25 visible positions.
-- The initial 9 food types appear in fixed order; remaining slots are placeholders.
+- The shop page shows a 3x3 wall with 9 visible positions.
+- The initial 9 food types appear in fixed order and fill the wall.
 - Locked recipes render greyed out.
 - Unlocking a recipe costs 25 coins.
 - The coin bag shows the user's current wallet balance.

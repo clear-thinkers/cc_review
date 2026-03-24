@@ -4,7 +4,7 @@ import type {
   UnlockShopRecipeResult,
 } from "@/app/words/shop/shop.types";
 
-export const SHOP_WALL_SIZE = 25;
+export const SHOP_WALL_SIZE = 9;
 
 function normalizeMatchKeys(keys: string[]): string[] {
   return Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean))).sort();
