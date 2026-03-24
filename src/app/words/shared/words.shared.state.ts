@@ -1978,8 +1978,9 @@ const gradeLabels = getGradeLabels(str);
         pronunciation: target.pronunciation,
       });
 
-      writeAdminDraft(target, generated);
-      setAdminNotice(`Regenerated ${target.character} / ${target.pronunciation}. Review and save if suitable.`);
+      await putFlashcardContent(target.character, target.pronunciation, generated);
+      upsertAdminDraft(target, generated, true);
+      setAdminNotice(`Regenerated and saved ${target.character} / ${target.pronunciation}.`);
     } catch (error) {
       setAdminNotice(getErrorMessage(error, "Regenerate failed."));
     } finally {
