@@ -525,7 +525,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
           )}
         </div>
       </td>
-      <td className="px-3 py-2">
+      <td className="min-w-0 px-3 py-2">
         <div className="flex flex-col gap-1">
           {isPendingPhraseRow || isPendingMeaningRow ? (
             isPendingMeaningRow ? (
@@ -557,8 +557,8 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               autoFocus
             />
           ) : (
-            <div className="text-base leading-tight">
-              {renderSentenceWithPinyin(row.example, row.examplePinyin)}
+            <div className="min-w-0 text-base leading-tight">
+              {renderSentenceWithPinyin(row.example, row.examplePinyin, { allowWrap: true })}
             </div>
           )}
           {!target || isPendingPhraseRow || isPendingMeaningRow || isEmptyTargetRow ? null : (

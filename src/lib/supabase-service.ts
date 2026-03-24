@@ -13,9 +13,16 @@ import type { Word } from "./types";
 import type { FlashcardLlmResponse } from "./flashcardLlm";
 import type { QuizSession } from "@/app/words/results/results.types";
 import type { Wallet } from "@/app/words/shared/coins.types";
+import type {
+  ShopRecipe,
+  ShopTransaction,
+  ShopRecipeUnlock,
+  UnlockShopRecipeResult,
+} from "@/app/words/shop/shop.types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade } from "./scheduler";
 import type { GradeResult } from "./review";
+import { normalizeUnlockShopRecipeResult } from "./shop";
 import type {
   Textbook,
   LessonTag,
@@ -243,6 +250,80 @@ function toWallet(row: {
     totalCoins: row.total_coins,
     lastUpdatedAt: new Date(row.last_updated_at).getTime(),
     version: row.version,
+  };
+}
+
+// â”€â”€â”€ Internal: Shop row converters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+interface SupabaseShopRecipeRow {
+  id: string;
+  slug: string;
+  title: string;
+  display_order: number;
+  is_active: boolean;
+  variant_icon_rules: unknown;
+  intro: string;
+  unlock_cost_coins: number;
+  base_ingredients: unknown;
+  special_ingredient_slots: unknown;
+}
+
+interface SupabaseShopRecipeUnlockRow {
+  user_id: string;
+  recipe_id: string;
+  coins_spent: number;
+  unlocked_at: string;
+}
+
+interface SupabaseShopTransactionRow {
+  id: string;
+  user_id: string;
+  recipe_id: string | null;
+  action_type: "unlock_recipe";
+  coins_spent: number;
+  beginning_balance: number;
+  ending_balance: number;
+  created_at: string;
+}
+
+function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    displayOrder: row.display_order,
+    isActive: row.is_active,
+    intro: row.intro,
+    unlockCostCoins: row.unlock_cost_coins,
+    baseIngredients: Array.isArray(row.base_ingredients) ? row.base_ingredients as ShopRecipe["baseIngredients"] : [],
+    specialIngredientSlots: Array.isArray(row.special_ingredient_slots)
+      ? (row.special_ingredient_slots as ShopRecipe["specialIngredientSlots"])
+      : [],
+    variantIconRules: Array.isArray(row.variant_icon_rules)
+      ? (row.variant_icon_rules as ShopRecipe["variantIconRules"])
+      : [],
+  };
+}
+
+function toShopRecipeUnlock(row: SupabaseShopRecipeUnlockRow): ShopRecipeUnlock {
+  return {
+    userId: row.user_id,
+    recipeId: row.recipe_id,
+    coinsSpent: row.coins_spent,
+    unlockedAt: new Date(row.unlocked_at).getTime(),
+  };
+}
+
+function toShopTransaction(row: SupabaseShopTransactionRow): ShopTransaction {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    recipeId: row.recipe_id,
+    actionType: row.action_type,
+    coinsSpent: row.coins_spent,
+    beginningBalance: row.beginning_balance,
+    endingBalance: row.ending_balance,
+    createdAt: new Date(row.created_at).getTime(),
   };
 }
 
@@ -783,6 +864,46 @@ export async function updateWallet(coinsEarned: number): Promise<Wallet> {
     .single();
   if (error) throw new Error(`updateWallet: ${error.message}`);
   return toWallet(data);
+}
+
+export async function listShopRecipes(): Promise<ShopRecipe[]> {
+  const { data, error } = await supabase
+    .from("shop_recipes")
+    .select("*")
+    .order("display_order", { ascending: true });
+  if (error) throw new Error(`listShopRecipes: ${error.message}`);
+  return ((data ?? []) as SupabaseShopRecipeRow[]).map(toShopRecipe);
+}
+
+export async function listShopRecipeUnlocks(): Promise<ShopRecipeUnlock[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("shop_recipe_unlocks")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("user_id", userId);
+  if (error) throw new Error(`listShopRecipeUnlocks: ${error.message}`);
+  return ((data ?? []) as SupabaseShopRecipeUnlockRow[]).map(toShopRecipeUnlock);
+}
+
+export async function listShopTransactions(): Promise<ShopTransaction[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("shop_coin_transactions")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`listShopTransactions: ${error.message}`);
+  return ((data ?? []) as SupabaseShopTransactionRow[]).map(toShopTransaction);
+}
+
+export async function unlockShopRecipe(recipeId: string): Promise<UnlockShopRecipeResult> {
+  const { data, error } = await supabase.rpc("unlock_shop_recipe", {
+    p_recipe_id: recipeId,
+  });
+  if (error) throw new Error(`unlockShopRecipe: ${error.message}`);
+  return normalizeUnlockShopRecipeResult(data);
 }
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────

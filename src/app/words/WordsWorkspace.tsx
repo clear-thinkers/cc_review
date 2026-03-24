@@ -7,6 +7,7 @@ import DebugSection from "./debug/DebugSection";
 import HomeFlowSection from "./home/HomeFlowSection";
 import PromptsSection from "./prompts/PromptsSection";
 import ResultsSection from "./results/ResultsSection";
+import ShopSection from "./shop/ShopSection";
 import DueReviewSection from "./review/DueReviewSection";
 import FillTestReviewSection from "./review/fill-test/FillTestReviewSection";
 import FlashcardReviewSection from "./review/flashcard/FlashcardReviewSection";
@@ -28,6 +29,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
       <HomeFlowSection vm={vm} />
       <AddSection vm={vm} />
       <DueReviewSection vm={vm} />
+      <ShopSection vm={vm} />
       <FlashcardReviewSection vm={vm} />
       <FillTestReviewSection vm={vm} />
       <AdminSection vm={vm} />

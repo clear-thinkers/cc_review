@@ -83,11 +83,12 @@ export function getNavItems(
     { href: "/words", label: `${str.nav.appFlow}`, page: "home" },
     { href: "/words/add", label: `${str.nav.addCharacters}`, page: "add" },
     { href: "/words/all", label: `${str.nav.allCharacters}`, page: "all" },
-    { href: "/words/admin", label: `${str.nav.contentAdmin}`, page: "admin" },
     { href: "/words/review", label: `${str.nav.dueReview}`, page: "review" },
+    { href: "/words/admin", label: `${str.nav.contentAdmin}`, page: "admin" },
     { href: "/words/results", label: `${str.nav.quizResults}`, page: "results" },
     { href: "/words/prompts", label: `${str.nav.aiPrompts}`, page: "prompts" },
     { href: "/words/debug", label: `${str.nav.debug}`, page: "debug" },
+    { href: "/words/shop", label: `${str.nav.shop}`, page: "shop" },
   ];
 
   return allItems.filter(item => 
@@ -712,7 +713,13 @@ export function renderPhraseWithPinyin(phrase: string, pinyin: string): ReactNod
   );
 }
 
-export function renderSentenceWithPinyin(sentence: string, pinyin: string): ReactNode {
+export function renderSentenceWithPinyin(
+  sentence: string,
+  pinyin: string,
+  options?: {
+    allowWrap?: boolean;
+  }
+): ReactNode {
   if (!pinyin.trim()) {
     return sentence;
   }
@@ -725,14 +732,16 @@ export function renderSentenceWithPinyin(sentence: string, pinyin: string): Reac
 
   const pinyinParts = alignPinyinPartsForCount(hanziCount, pinyin);
   let hanziIndex = 0;
+  const allowWrap = options?.allowWrap ?? false;
+  const containerClassName = allowWrap
+    ? "flex max-w-full flex-wrap items-end gap-x-0.5 gap-y-1"
+    : "inline-flex flex-nowrap items-end gap-0.5 overflow-x-auto";
 
-  // GUARDRAIL: Pinyin rendering uses flex-nowrap (not flex-wrap) to prevent ruby element breaking.
-  // Previous issue: flex-wrap caused ruby (<rt> pinyin) to separate from characters, truncating display.
-  // Fix: Use flex-nowrap + overflow-x-auto, and flex-col on ruby for top-positioned pinyin.
-  // Add whitespace-nowrap to <rt> to prevent pinyin syllables from wrapping.
-  // Use items-end to align punctuation at baseline with characters (not at top with pinyin).
+  // GUARDRAIL: Default to flex-nowrap to keep ruby text attached to each Hanzi token.
+  // Admin examples can opt into wrapping so long sentences break across rows without
+  // allowing individual ruby/punctuation nodes to split apart mid-token.
   return (
-    <span className="inline-flex flex-nowrap items-end gap-0.5 overflow-x-auto">
+    <span className={containerClassName}>
       {chars.map((char, index) => {
         if (!isHanziCharacter(char)) {
           return (

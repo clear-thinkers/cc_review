@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 import { CoinAnimation } from "./coins.animation";
@@ -13,21 +12,13 @@ type QuizCelebrationWindow = Window & {
 };
 
 export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
-  const router = useRouter();
   const {
     isFillTestReviewPage,
     str,
     quizNotice,
     quizInProgress,
-    QUIZ_SELECTION_MODES,
-    quizSelectionMode,
-    setQuizSelectionMode,
-    getSelectionModeLabel,
-    plannedQuizWords,
     quizCompleted,
     quizHistory,
-    setQuizCompleted,
-    startQuizSession,
     currentQuizWord,
     quizIndex,
     quizQueue,
@@ -53,14 +44,6 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     moveQuizForward,
     quizSummary,
     quizSessionCoins,
-    completedReviewTestSessionName,
-    returnToDueReviewAfterReviewTestSession,
-    gradeLabels,
-    calculateNextState,
-    manualSelectionSet,
-    toggleManualSelection,
-    formatDateTime,
-    getFamiliarity,
   } = vm;
 
   // Celebration animation state
@@ -395,22 +378,6 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
               🪙 {str.fillTest.summary.coinsEarned} {quizSessionCoins}
             </p>
           </div>
-          <button
-            type="button"
-            className="rounded-full border-4 border-amber-500 bg-amber-50 px-8 py-2 text-lg font-semibold text-amber-900 transition-colors hover:bg-amber-100"
-            onClick={() =>
-              completedReviewTestSessionName
-                ? returnToDueReviewAfterReviewTestSession(
-                    "completed",
-                    completedReviewTestSessionName
-                  )
-                : router.push("/words/review")
-            }
-          >
-            {completedReviewTestSessionName
-              ? str.fillTest.reviewTestSession.returnToDueReviewButton
-              : str.results.goToReviewPage}
-          </button>
         </div>
       ) : null}
     </section>

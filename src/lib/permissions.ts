@@ -7,6 +7,7 @@ export type ProtectedRoute =
   | '/words/admin'
   | '/words/prompts'
   | '/words/results'
+  | '/words/shop'
   | '/words/review'
   | '/words/review/flashcard'
   | '/words/review/fill-test'
@@ -35,6 +36,7 @@ export function canAccessRoute(
       return role === 'parent';
     
     case '/words/review/fill-test':
+    case '/words/shop':
       return role === 'child';
     
     case '/words':
