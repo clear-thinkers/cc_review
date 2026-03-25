@@ -5,6 +5,13 @@ import { useLocale } from "@/app/shared/locale";
 import { useSession } from "@/lib/authContext";
 import { getShopRecipeContentForLocale, resolvePlainShopRecipeIconPath } from "@/lib/shop";
 import type { ShopIngredient, ShopLocale, ShopRecipe } from "../shop/shop.types";
+import {
+  type ShopAdminIngredientCatalogItem,
+  type ShopAdminIngredientPricesResponse,
+  buildShopIngredientFromCatalog,
+  getShopIngredientCatalogEntry,
+  listShopIngredientCatalog,
+} from "../shop/shopIngredients";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
   areShopRecipeAdminDraftsEqual,
@@ -42,18 +49,32 @@ function swapItems<T>(items: T[], fromIndex: number, direction: -1 | 1): T[] {
   return next;
 }
 
+function clearIngredientKey(ingredient: ShopIngredient): ShopIngredient {
+  const { ingredientKey: _discarded, ...next } = ingredient;
+  return next;
+}
+
 export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const locale = useLocale();
   const session = useSession();
   const strings = vm.str.shopAdmin;
+  const ingredientCatalog = listShopIngredientCatalog();
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [recipes, setRecipes] = useState<ShopRecipe[]>([]);
+  const [ingredientCatalogBaseline, setIngredientCatalogBaseline] = useState<
+    ShopAdminIngredientCatalogItem[]
+  >([]);
+  const [ingredientCatalogDraft, setIngredientCatalogDraft] = useState<
+    ShopAdminIngredientCatalogItem[]
+  >([]);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [baselineDraft, setBaselineDraft] = useState<ShopRecipeAdminDraft | null>(null);
   const [draft, setDraft] = useState<ShopRecipeAdminDraft | null>(null);
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState<NoticeState>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [ingredientNotice, setIngredientNotice] = useState<NoticeState>(null);
+  const [isSavingIngredientPrices, setIsSavingIngredientPrices] = useState(false);
 
   const selectedRecipe = useMemo(
     () => recipes.find((recipe) => recipe.id === selectedRecipeId) ?? null,
@@ -68,6 +89,22 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     () => draft !== null && baselineDraft !== null && !areShopRecipeAdminDraftsEqual(draft, baselineDraft),
     [draft, baselineDraft]
   );
+  const hasIngredientPriceChanges = useMemo(
+    () =>
+      JSON.stringify(
+        ingredientCatalogDraft.map((ingredient) => ({
+          key: ingredient.key,
+          costCoins: ingredient.costCoins,
+        }))
+      ) !==
+      JSON.stringify(
+        ingredientCatalogBaseline.map((ingredient) => ({
+          key: ingredient.key,
+          costCoins: ingredient.costCoins,
+        }))
+      ),
+    [ingredientCatalogBaseline, ingredientCatalogDraft]
+  );
 
   useEffect(() => {
     if (vm.page !== "shopAdmin" || !session?.isPlatformAdmin) {
@@ -80,24 +117,58 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       setLoadState("loading");
       setLoadError("");
       try {
-        const response = await fetch("/api/shop-admin/recipes", {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const json = (await response.json()) as ShopAdminRecipesResponse | { error?: string };
-        if (!response.ok) {
-          throw new Error(typeof json === "object" && json && "error" in json ? json.error || strings.loadError : strings.loadError);
+        const [recipesResponse, ingredientPricesResponse] = await Promise.all([
+          fetch("/api/shop-admin/recipes", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }),
+          fetch("/api/shop-admin/ingredient-prices", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }),
+        ]);
+        const recipesJson = (await recipesResponse.json()) as
+          | ShopAdminRecipesResponse
+          | { error?: string };
+        const ingredientPricesJson = (await ingredientPricesResponse.json()) as
+          | ShopAdminIngredientPricesResponse
+          | { error?: string };
+        if (!recipesResponse.ok) {
+          throw new Error(
+            typeof recipesJson === "object" && recipesJson && "error" in recipesJson
+              ? recipesJson.error || strings.loadError
+              : strings.loadError
+          );
         }
-        const nextRecipes = "recipes" in json && Array.isArray(json.recipes) ? json.recipes : [];
+        if (!ingredientPricesResponse.ok) {
+          throw new Error(
+            typeof ingredientPricesJson === "object" &&
+              ingredientPricesJson &&
+              "error" in ingredientPricesJson
+              ? ingredientPricesJson.error || strings.ingredientPricing.loadError
+              : strings.ingredientPricing.loadError
+          );
+        }
+        const nextRecipes =
+          "recipes" in recipesJson && Array.isArray(recipesJson.recipes)
+            ? recipesJson.recipes
+            : [];
+        const nextIngredientCatalog =
+          "ingredients" in ingredientPricesJson &&
+          Array.isArray(ingredientPricesJson.ingredients)
+            ? ingredientPricesJson.ingredients
+            : [];
         if (isCancelled) {
           return;
         }
         setRecipes(nextRecipes);
+        setIngredientCatalogBaseline(nextIngredientCatalog);
+        setIngredientCatalogDraft(nextIngredientCatalog);
         const nextRecipe = nextRecipes.find((recipe) => recipe.id === selectedRecipeId) ?? nextRecipes[0] ?? null;
         setSelectedRecipeId(nextRecipe?.id ?? null);
         const nextDraft = nextRecipe ? buildShopRecipeAdminDraft(nextRecipe) : null;
         setBaselineDraft(nextDraft);
         setDraft(nextDraft);
         setNotice(null);
+        setIngredientNotice(null);
         setLoadState("ready");
       } catch (error) {
         if (!isCancelled) {
@@ -189,6 +260,34 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         zh: [...current.baseIngredients.zh, { name: "", quantity: "", unit: "" }],
       },
     }));
+  }
+
+  function updateIngredientCatalogSelection(index: number, ingredientKey: string) {
+    updateDraft((current) => {
+      const next = {
+        ...current,
+        baseIngredients: {
+          en: current.baseIngredients.en.map((ingredient) => ({ ...ingredient })),
+          zh: current.baseIngredients.zh.map((ingredient) => ({ ...ingredient })),
+        },
+      };
+      const quantity = next.baseIngredients.en[index]?.quantity ?? "";
+
+      if (!ingredientKey) {
+        next.baseIngredients.en[index] = clearIngredientKey(next.baseIngredients.en[index]);
+        next.baseIngredients.zh[index] = clearIngredientKey(next.baseIngredients.zh[index]);
+        return next;
+      }
+
+      const entry = getShopIngredientCatalogEntry(ingredientKey);
+      if (!entry) {
+        return current;
+      }
+
+      next.baseIngredients.en[index] = buildShopIngredientFromCatalog(entry, "en", quantity);
+      next.baseIngredients.zh[index] = buildShopIngredientFromCatalog(entry, "zh", quantity);
+      return next;
+    });
   }
 
   function moveIngredient(index: number, direction: -1 | 1) {
@@ -288,6 +387,64 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       setNotice({ kind: "error", message: getErrorMessage(error, strings.notices.saveError) });
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  function updateIngredientCatalogPrice(index: number, rawValue: string) {
+    const parsedValue = Number.parseInt(rawValue, 10);
+    setIngredientCatalogDraft((current) =>
+      current.map((ingredient, currentIndex) =>
+        currentIndex === index
+          ? {
+              ...ingredient,
+              costCoins:
+                Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : ingredient.costCoins,
+            }
+          : ingredient
+      )
+    );
+    setIngredientNotice(null);
+  }
+
+  async function handleIngredientPriceSave() {
+    if (isSavingIngredientPrices) {
+      return;
+    }
+
+    setIsSavingIngredientPrices(true);
+    setIngredientNotice(null);
+    try {
+      const response = await fetch("/api/shop-admin/ingredient-prices", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.supabaseSession.access_token ?? ""}`,
+        },
+        body: JSON.stringify({
+          ingredients: ingredientCatalogDraft.map((ingredient) => ({
+            key: ingredient.key,
+            costCoins: ingredient.costCoins,
+          })),
+        }),
+      });
+      const json = (await response.json()) as
+        | ShopAdminIngredientPricesResponse
+        | { error?: string };
+      if (!response.ok || !("ingredients" in json) || !Array.isArray(json.ingredients)) {
+        throw new Error(
+          "error" in json ? json.error || strings.ingredientPricing.saveError : strings.ingredientPricing.saveError
+        );
+      }
+      setIngredientCatalogBaseline(json.ingredients);
+      setIngredientCatalogDraft(json.ingredients);
+      setIngredientNotice({ kind: "success", message: strings.ingredientPricing.saveSuccess });
+    } catch (error) {
+      setIngredientNotice({
+        kind: "error",
+        message: getErrorMessage(error, strings.ingredientPricing.saveError),
+      });
+    } finally {
+      setIsSavingIngredientPrices(false);
     }
   }
 
@@ -475,30 +632,88 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             <div className="mt-5 space-y-4">
               {draft.baseIngredients.en.map((englishIngredient, ingredientIndex) => {
                 const chineseIngredient = draft.baseIngredients.zh[ingredientIndex];
+                const selectedIngredientCatalogEntry = getShopIngredientCatalogEntry(
+                  englishIngredient.ingredientKey
+                );
                 return (
                   <div key={`${selectedRecipe.id}-${ingredientIndex}`} className="rounded-xl border border-[#e4dac7] bg-white p-4">
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_150px]">
                       <label className="block">
-                        <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
-                        <input value={englishIngredient.name} onChange={(event) => updateIngredient("en", ingredientIndex, "name", event.target.value)} className={INPUT} maxLength={60} />
-                      </label>
-                      <label className="block">
-                        <span className={LABEL}>{strings.ingredients.nameChinese}</span>
-                        <input value={chineseIngredient?.name ?? ""} onChange={(event) => updateIngredient("zh", ingredientIndex, "name", event.target.value)} className={INPUT} maxLength={60} />
+                        <span className={LABEL}>{strings.ingredients.iconIngredient}</span>
+                        <select
+                          value={englishIngredient.ingredientKey ?? ""}
+                          onChange={(event) =>
+                            updateIngredientCatalogSelection(ingredientIndex, event.target.value)
+                          }
+                          className={INPUT}
+                        >
+                          <option value="">{strings.ingredients.customOption}</option>
+                          {ingredientCatalog.map((catalogEntry) => (
+                            <option key={catalogEntry.key} value={catalogEntry.key}>
+                              {catalogEntry.label[locale]}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label className="block">
                         <span className={LABEL}>{strings.ingredients.quantity}</span>
                         <input value={englishIngredient.quantity} onChange={(event) => updateIngredient("en", ingredientIndex, "quantity", event.target.value)} className={INPUT} maxLength={20} />
                       </label>
-                      <label className="block">
-                        <span className={LABEL}>{strings.ingredients.unitEnglish}</span>
-                        <input value={englishIngredient.unit ?? ""} onChange={(event) => updateIngredient("en", ingredientIndex, "unit", event.target.value)} className={INPUT} maxLength={20} />
-                      </label>
-                      <label className="block">
-                        <span className={LABEL}>{strings.ingredients.unitChinese}</span>
-                        <input value={chineseIngredient?.unit ?? ""} onChange={(event) => updateIngredient("zh", ingredientIndex, "unit", event.target.value)} className={INPUT} maxLength={20} />
-                      </label>
+                      <div className="block">
+                        <span className={LABEL}>{strings.ingredients.iconPreview}</span>
+                        <div className={`${READONLY} flex min-h-[56px] items-center justify-center`}>
+                          {selectedIngredientCatalogEntry?.iconPath ? (
+                            <img
+                              src={selectedIngredientCatalogEntry.iconPath}
+                              alt={selectedIngredientCatalogEntry.label[locale]}
+                              className="h-12 w-12 object-contain"
+                            />
+                          ) : (
+                            strings.ingredients.noIcon
+                          )}
+                        </div>
+                      </div>
                     </div>
+
+                    {selectedIngredientCatalogEntry ? (
+                      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                        <label className="block">
+                          <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
+                          <div className={READONLY}>{selectedIngredientCatalogEntry.label.en}</div>
+                        </label>
+                        <label className="block">
+                          <span className={LABEL}>{strings.ingredients.nameChinese}</span>
+                          <div className={READONLY}>{selectedIngredientCatalogEntry.label.zh}</div>
+                        </label>
+                        <label className="block">
+                          <span className={LABEL}>{strings.ingredients.unitEnglish}</span>
+                          <div className={READONLY}>{selectedIngredientCatalogEntry.defaultUnit.en}</div>
+                        </label>
+                        <label className="block">
+                          <span className={LABEL}>{strings.ingredients.unitChinese}</span>
+                          <div className={READONLY}>{selectedIngredientCatalogEntry.defaultUnit.zh}</div>
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                        <label className="block">
+                          <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
+                          <input value={englishIngredient.name} onChange={(event) => updateIngredient("en", ingredientIndex, "name", event.target.value)} className={INPUT} maxLength={60} />
+                        </label>
+                        <label className="block">
+                          <span className={LABEL}>{strings.ingredients.nameChinese}</span>
+                          <input value={chineseIngredient?.name ?? ""} onChange={(event) => updateIngredient("zh", ingredientIndex, "name", event.target.value)} className={INPUT} maxLength={60} />
+                        </label>
+                        <label className="block">
+                          <span className={LABEL}>{strings.ingredients.unitEnglish}</span>
+                          <input value={englishIngredient.unit ?? ""} onChange={(event) => updateIngredient("en", ingredientIndex, "unit", event.target.value)} className={INPUT} maxLength={20} />
+                        </label>
+                        <label className="block">
+                          <span className={LABEL}>{strings.ingredients.unitChinese}</span>
+                          <input value={chineseIngredient?.unit ?? ""} onChange={(event) => updateIngredient("zh", ingredientIndex, "unit", event.target.value)} className={INPUT} maxLength={20} />
+                        </label>
+                      </div>
+                    )}
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button type="button" onClick={() => moveIngredient(ingredientIndex, -1)} disabled={ingredientIndex === 0} className="shop-admin-pill border border-[#d7c8a5] px-3 py-2 text-xs font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50">{strings.ingredients.moveUp}</button>
                       <button type="button" onClick={() => moveIngredient(ingredientIndex, 1)} disabled={ingredientIndex === draft.baseIngredients.en.length - 1} className="shop-admin-pill border border-[#d7c8a5] px-3 py-2 text-xs font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50">{strings.ingredients.moveDown}</button>
@@ -617,6 +832,109 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           </div>
         </form>
       </div>
+
+      <section className={`shop-admin-pane ${PANEL}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className={LABEL}>{strings.ingredientPricing.title}</p>
+            <h3 className="mt-2 text-xl font-semibold text-[#24423a]">
+              {strings.ingredientPricing.heading}
+            </h3>
+            <p className="mt-2 max-w-3xl text-sm leading-7 text-[#627665]">
+              {strings.ingredientPricing.helper}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setIngredientCatalogDraft(ingredientCatalogBaseline);
+                setIngredientNotice(null);
+              }}
+              disabled={!hasIngredientPriceChanges || isSavingIngredientPrices}
+              className="shop-admin-pill border border-[#d7c8a5] px-4 py-2 text-sm font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {strings.ingredientPricing.reset}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleIngredientPriceSave()}
+              disabled={!hasIngredientPriceChanges || isSavingIngredientPrices}
+              className="shop-admin-pill border border-[#d2b15b] bg-[#fff0bf] px-5 py-2 text-sm font-semibold text-[#8b6f2f] shadow-[0_8px_20px_rgba(210,177,91,0.18)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSavingIngredientPrices
+                ? strings.ingredientPricing.saving
+                : strings.ingredientPricing.save}
+            </button>
+          </div>
+        </div>
+
+        {ingredientNotice ? (
+          <p
+            className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+              ingredientNotice.kind === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            {ingredientNotice.message}
+          </p>
+        ) : null}
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {ingredientCatalogDraft.map((ingredient, index) => (
+            <div
+              key={ingredient.key}
+              className="rounded-xl border border-[#e4dac7] bg-white p-4"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-[#eadfc1] bg-[#fffaf0]">
+                  {ingredient.iconPath ? (
+                    <img
+                      src={ingredient.iconPath}
+                      alt={ingredient.label[locale]}
+                      className="h-12 w-12 object-contain"
+                    />
+                  ) : (
+                    <span className="text-xs font-semibold text-[#9a8f79]">
+                      {strings.ingredients.noIcon}
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-semibold text-[#24423a]">
+                    {ingredient.label[locale]}
+                  </p>
+                  <p className="mt-1 text-xs text-[#7c7464]">{ingredient.key}</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className={LABEL}>{strings.ingredientPricing.unitEnglish}</span>
+                  <div className={READONLY}>{ingredient.defaultUnit.en || strings.ingredientPricing.noUnit}</div>
+                </label>
+                <label className="block">
+                  <span className={LABEL}>{strings.ingredientPricing.unitChinese}</span>
+                  <div className={READONLY}>{ingredient.defaultUnit.zh || strings.ingredientPricing.noUnit}</div>
+                </label>
+              </div>
+
+              <label className="mt-4 block">
+                <span className={LABEL}>{strings.ingredientPricing.cost}</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={ingredient.costCoins}
+                  onChange={(event) => updateIngredientCatalogPrice(index, event.target.value)}
+                  className={INPUT}
+                />
+              </label>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

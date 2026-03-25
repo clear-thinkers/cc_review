@@ -14,6 +14,7 @@ import type { FlashcardLlmResponse } from "./flashcardLlm";
 import type { QuizSession } from "@/app/words/results/results.types";
 import type { Wallet } from "@/app/words/shared/coins.types";
 import type {
+  ShopIngredientPrice,
   ShopRecipe,
   ShopTransaction,
   ShopRecipeUnlock,
@@ -296,6 +297,12 @@ interface SupabaseShopTransactionRow {
   created_at: string;
 }
 
+interface SupabaseShopIngredientPriceRow {
+  ingredient_key: string;
+  cost_coins: number;
+  updated_at: string;
+}
+
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
   const baseIngredients = Array.isArray(row.base_ingredients)
     ? (row.base_ingredients as ShopRecipe["baseIngredients"])
@@ -349,6 +356,14 @@ function toShopTransaction(row: SupabaseShopTransactionRow): ShopTransaction {
     beginningBalance: row.beginning_balance,
     endingBalance: row.ending_balance,
     createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function toShopIngredientPrice(row: SupabaseShopIngredientPriceRow): ShopIngredientPrice {
+  return {
+    ingredientKey: row.ingredient_key,
+    costCoins: row.cost_coins,
+    updatedAt: new Date(row.updated_at).getTime(),
   };
 }
 
@@ -898,6 +913,15 @@ export async function listShopRecipes(): Promise<ShopRecipe[]> {
     .order("display_order", { ascending: true });
   if (error) throw new Error(`listShopRecipes: ${error.message}`);
   return ((data ?? []) as SupabaseShopRecipeRow[]).map(toShopRecipe);
+}
+
+export async function listShopIngredientPrices(): Promise<ShopIngredientPrice[]> {
+  const { data, error } = await supabase
+    .from("shop_ingredient_prices")
+    .select("*")
+    .order("ingredient_key", { ascending: true });
+  if (error) throw new Error(`listShopIngredientPrices: ${error.message}`);
+  return ((data ?? []) as SupabaseShopIngredientPriceRow[]).map(toShopIngredientPrice);
 }
 
 export async function listShopRecipeUnlocks(): Promise<ShopRecipeUnlock[]> {

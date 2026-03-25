@@ -1,5 +1,6 @@
 import type {
   ShopIngredient,
+  ShopIngredientPrice,
   ShopLocale,
   ShopLocalizedValue,
   ShopRecipe,
@@ -7,6 +8,11 @@ import type {
   ShopVariantIconRule,
   UnlockShopRecipeResult,
 } from "@/app/words/shop/shop.types";
+import {
+  findShopIngredientCatalogEntryByAlias,
+  getShopIngredientCatalogEntry,
+  type ShopIngredientCatalogEntry,
+} from "@/app/words/shop/shopIngredients";
 
 export const SHOP_WALL_SIZE = 9;
 const SHOP_PLAIN_ICON_TOKEN = "plain";
@@ -62,7 +68,30 @@ function normalizeShopIngredientList(
   raw: unknown,
   fallback: ShopIngredient[]
 ): ShopIngredient[] {
-  return Array.isArray(raw) ? (raw as ShopIngredient[]) : fallback;
+  if (!Array.isArray(raw)) {
+    return fallback;
+  }
+
+  return raw.map((ingredient) => {
+    const source =
+      ingredient && typeof ingredient === "object"
+        ? (ingredient as Record<string, unknown>)
+        : {};
+    const ingredientKey =
+      typeof source.ingredientKey === "string" ? source.ingredientKey.trim() : "";
+    const costCoins =
+      typeof source.costCoins === "number" && Number.isFinite(source.costCoins)
+        ? source.costCoins
+        : undefined;
+    const unit = typeof source.unit === "string" ? source.unit.trim() : "";
+    return {
+      ...(ingredientKey ? { ingredientKey } : {}),
+      name: typeof source.name === "string" ? source.name.trim() : "",
+      quantity: typeof source.quantity === "string" ? source.quantity.trim() : "",
+      ...(unit ? { unit } : {}),
+      ...(typeof costCoins === "number" ? { costCoins } : {}),
+    };
+  });
 }
 
 function normalizeShopSpecialIngredientSlotList(
@@ -189,6 +218,39 @@ export function resolvePlainShopRecipeIconPath(
     .sort((left, right) => normalizeMatchKeys(left.match).length - normalizeMatchKeys(right.match).length);
 
   return plainRules[0]?.iconPath ?? null;
+}
+
+export function resolveShopIngredientCatalogEntry(
+  ingredient: ShopIngredient
+): ShopIngredientCatalogEntry | null {
+  return (
+    getShopIngredientCatalogEntry(ingredient.ingredientKey) ??
+    findShopIngredientCatalogEntryByAlias(ingredient.name)
+  );
+}
+
+export function resolveShopIngredientIconPath(ingredient: ShopIngredient): string | null {
+  return resolveShopIngredientCatalogEntry(ingredient)?.iconPath ?? null;
+}
+
+export function buildShopIngredientPriceMap(
+  prices: ShopIngredientPrice[]
+): ReadonlyMap<string, number> {
+  return new Map(prices.map((price) => [price.ingredientKey, price.costCoins] as const));
+}
+
+export function resolveShopIngredientCost(
+  ingredient: ShopIngredient,
+  priceByKey?: ReadonlyMap<string, number>
+): number | null {
+  const catalogEntry = resolveShopIngredientCatalogEntry(ingredient);
+  if (catalogEntry) {
+    return priceByKey?.get(catalogEntry.key) ?? catalogEntry.defaultCostCoins;
+  }
+  if (typeof ingredient.costCoins === "number" && Number.isFinite(ingredient.costCoins)) {
+    return ingredient.costCoins;
+  }
+  return null;
 }
 
 type UnlockShopRecipeRpcResult = {

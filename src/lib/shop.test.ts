@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildShopIngredientPriceMap,
   canAffordRecipeUnlock,
   getShopRecipeContentForLocale,
   normalizeUnlockShopRecipeResult,
   resolvePlainShopRecipeIconPath,
+  resolveShopIngredientCost,
+  resolveShopIngredientIconPath,
   resolveShopRecipeIconPath,
 } from "./shop";
 
@@ -62,6 +65,67 @@ describe("resolvePlainShopRecipeIconPath", () => {
         { match: ["sleepy_cream"], iconPath: "/rewards/cake_sleep_1.png" },
       ])
     ).toBeNull();
+  });
+});
+
+describe("resolveShopIngredientIconPath", () => {
+  it("returns the configured ingredient icon when a catalog-backed key exists", () => {
+    expect(
+      resolveShopIngredientIconPath({
+        ingredientKey: "milk",
+        name: "Milk",
+        quantity: "1",
+        unit: "cup",
+      })
+    ).toBe("/ingredients/milk_base.png");
+  });
+
+  it("returns null for custom ingredient rows", () => {
+    expect(
+      resolveShopIngredientIconPath({
+        name: "Black Tea",
+        quantity: "1",
+        unit: "cup",
+      })
+    ).toBeNull();
+  });
+});
+
+describe("resolveShopIngredientCost", () => {
+  it("prefers the shared ingredient price override when present", () => {
+    expect(
+      resolveShopIngredientCost(
+        {
+          ingredientKey: "milk",
+          name: "Milk",
+          quantity: "1",
+          unit: "cup",
+        },
+        buildShopIngredientPriceMap([{ ingredientKey: "milk", costCoins: 9, updatedAt: 0 }])
+      )
+    ).toBe(9);
+  });
+
+  it("falls back to the catalog default cost", () => {
+    expect(
+      resolveShopIngredientCost({
+        ingredientKey: "milk",
+        name: "Milk",
+        quantity: "1",
+        unit: "cup",
+      })
+    ).toBe(4);
+  });
+
+  it("still uses row cost for custom ingredients with no catalog entry", () => {
+    expect(
+      resolveShopIngredientCost({
+        name: "Custom Sauce",
+        quantity: "1",
+        unit: "cup",
+        costCoins: 7,
+      })
+    ).toBe(7);
   });
 });
 

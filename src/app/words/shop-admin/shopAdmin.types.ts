@@ -4,6 +4,7 @@ import type {
   ShopRecipe,
   ShopSpecialIngredientSlot,
 } from "../shop/shop.types";
+import { getShopIngredientCatalogEntry } from "../shop/shopIngredients";
 
 export const SHOP_RECIPE_TITLE_MAX = 80;
 export const SHOP_RECIPE_INTRO_MAX = 240;
@@ -62,8 +63,11 @@ function normalizeIngredientList(raw: unknown): ShopIngredient[] {
       ingredient && typeof ingredient === "object"
         ? (ingredient as Record<string, unknown>)
         : {};
+    const ingredientKey =
+      typeof source.ingredientKey === "string" ? source.ingredientKey.trim() : "";
     const unit = typeof source.unit === "string" ? source.unit.trim() : "";
     return {
+      ...(ingredientKey ? { ingredientKey } : {}),
       name: typeof source.name === "string" ? source.name.trim() : "",
       quantity: typeof source.quantity === "string" ? source.quantity.trim() : "",
       ...(unit ? { unit } : {}),
@@ -172,6 +176,29 @@ export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): strin
   normalized.baseIngredients.en.forEach((ingredient, index) => {
     const rowNumber = index + 1;
     const zhIngredient = normalized.baseIngredients.zh[index];
+    const ingredientKey = ingredient.ingredientKey?.trim() ?? "";
+    const zhIngredientKey = zhIngredient?.ingredientKey?.trim() ?? "";
+    if (ingredientKey !== zhIngredientKey) {
+      errors.push(`Ingredient ${rowNumber}: ingredient icon keys must stay aligned.`);
+    }
+
+    const catalogEntry = ingredientKey ? getShopIngredientCatalogEntry(ingredientKey) : null;
+
+    if (!ingredient.quantity) {
+      errors.push(`Ingredient ${rowNumber}: quantity is required.`);
+    } else if (ingredient.quantity.length > SHOP_RECIPE_INGREDIENT_QUANTITY_MAX) {
+      errors.push(
+        `Ingredient ${rowNumber}: quantity must be ${SHOP_RECIPE_INGREDIENT_QUANTITY_MAX} characters or fewer.`
+      );
+    }
+
+    if (ingredientKey) {
+      if (!catalogEntry) {
+        errors.push(`Ingredient ${rowNumber}: unknown ingredient icon key "${ingredientKey}".`);
+      }
+      return;
+    }
+
     if (!ingredient.name) {
       errors.push(`EN ingredient ${rowNumber}: name is required.`);
     } else if (ingredient.name.length > SHOP_RECIPE_INGREDIENT_NAME_MAX) {
@@ -185,14 +212,6 @@ export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): strin
     } else if (zhIngredient.name.length > SHOP_RECIPE_INGREDIENT_NAME_MAX) {
       errors.push(
         `ZH ingredient ${rowNumber}: name must be ${SHOP_RECIPE_INGREDIENT_NAME_MAX} characters or fewer.`
-      );
-    }
-
-    if (!ingredient.quantity) {
-      errors.push(`Ingredient ${rowNumber}: quantity is required.`);
-    } else if (ingredient.quantity.length > SHOP_RECIPE_INGREDIENT_QUANTITY_MAX) {
-      errors.push(
-        `Ingredient ${rowNumber}: quantity must be ${SHOP_RECIPE_INGREDIENT_QUANTITY_MAX} characters or fewer.`
       );
     }
 
@@ -369,17 +388,52 @@ export function mergeReadonlyShopLocalizedIngredientRows(params: {
     throw new Error("English and Chinese base ingredient rows must stay aligned.");
   }
 
+  const normalizedRows = params.draftIngredients.en.map((ingredient, index) => {
+    const zhIngredient = params.draftIngredients.zh[index];
+    const ingredientKey = ingredient.ingredientKey?.trim() ?? "";
+    const zhIngredientKey = zhIngredient?.ingredientKey?.trim() ?? "";
+    if (ingredientKey !== zhIngredientKey) {
+      throw new Error(`Ingredient ${index + 1}: ingredient icon keys must stay aligned.`);
+    }
+
+    const catalogEntry = ingredientKey ? getShopIngredientCatalogEntry(ingredientKey) : null;
+    if (ingredientKey && !catalogEntry) {
+      throw new Error(`Ingredient ${index + 1}: unknown ingredient icon key "${ingredientKey}".`);
+    }
+
+    return {
+      catalogEntry,
+      enIngredient: ingredient,
+      zhIngredient,
+    };
+  });
+
   return {
-    en: params.draftIngredients.en.map((ingredient) => ({
-      name: ingredient.name.trim(),
-      quantity: ingredient.quantity.trim(),
-      ...(ingredient.unit?.trim() ? { unit: ingredient.unit.trim() } : {}),
-    })),
-    zh: params.draftIngredients.zh.map((ingredient, index) => ({
-      name: ingredient.name.trim(),
-      quantity:
-        ingredient.quantity.trim() || params.draftIngredients.en[index]?.quantity.trim() || "",
-      ...(ingredient.unit?.trim() ? { unit: ingredient.unit.trim() } : {}),
+    en: normalizedRows.map(({ catalogEntry, enIngredient }) => {
+      return {
+        ...(catalogEntry ? { ingredientKey: catalogEntry.key } : {}),
+        name: catalogEntry ? catalogEntry.label.en : enIngredient.name.trim(),
+        quantity: enIngredient.quantity.trim(),
+        ...(catalogEntry
+          ? catalogEntry.defaultUnit.en
+            ? { unit: catalogEntry.defaultUnit.en }
+            : {}
+          : enIngredient.unit?.trim()
+            ? { unit: enIngredient.unit.trim() }
+            : {}),
+      };
+    }),
+    zh: normalizedRows.map(({ catalogEntry, enIngredient, zhIngredient }) => ({
+      ...(catalogEntry ? { ingredientKey: catalogEntry.key } : {}),
+      name: catalogEntry ? catalogEntry.label.zh : zhIngredient.name.trim(),
+      quantity: zhIngredient.quantity.trim() || enIngredient.quantity.trim() || "",
+      ...(catalogEntry
+        ? catalogEntry.defaultUnit.zh
+          ? { unit: catalogEntry.defaultUnit.zh }
+          : {}
+        : zhIngredient.unit?.trim()
+          ? { unit: zhIngredient.unit.trim() }
+          : {}),
     })),
   };
 }

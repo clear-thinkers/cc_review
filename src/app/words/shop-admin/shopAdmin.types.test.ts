@@ -26,16 +26,16 @@ const recipeFixture: ShopRecipe = {
   },
   unlockCostCoins: 25,
   baseIngredients: [
-    { name: "Milk", quantity: "1", unit: "cup" },
+    { ingredientKey: "milk", name: "Milk", quantity: "1", unit: "cup" },
     { name: "Tea", quantity: "2", unit: "bags" },
   ],
   baseIngredientsI18n: {
     en: [
-      { name: " Milk ", quantity: " 1 ", unit: " cup " },
+      { ingredientKey: "milk", name: " Milk ", quantity: " 1 ", unit: " cup " },
       { name: "Tea", quantity: "2", unit: "bags" },
     ],
     zh: [
-      { name: " 牛奶 ", quantity: " 1 ", unit: " 杯 " },
+      { ingredientKey: "milk", name: " 牛奶 ", quantity: " 1 ", unit: " 杯 " },
       { name: "红茶", quantity: "2", unit: "包" },
     ],
   },
@@ -77,11 +77,13 @@ describe("shopAdmin.types", () => {
 
     expect(normalized.title.zh).toBe("珍珠奶茶");
     expect(normalized.baseIngredients.en[0]).toEqual({
+      ingredientKey: "milk",
       name: "Milk",
       quantity: "1",
       unit: "cup",
     });
     expect(normalized.baseIngredients.zh[0]).toEqual({
+      ingredientKey: "milk",
       name: "牛奶",
       quantity: "1",
       unit: "杯",
@@ -183,11 +185,48 @@ describe("shopAdmin.types", () => {
   it("normalizes aligned bilingual ingredient rows", () => {
     const merged = mergeReadonlyShopLocalizedIngredientRows({
       draftIngredients: {
-        en: [{ name: "Milk", quantity: "1", unit: "cup" }],
-        zh: [{ name: "牛奶", quantity: "", unit: "杯" }],
+        en: [{ ingredientKey: "milk", name: "Milk", quantity: "1", unit: "cup" }],
+        zh: [{ ingredientKey: "milk", name: "牛奶", quantity: "", unit: "杯" }],
       },
     });
 
     expect(merged.zh[0].quantity).toBe("1");
+    expect(merged.en[0].ingredientKey).toBe("milk");
+  });
+
+  it("rejects unknown ingredient icon keys", () => {
+    const draft = {
+      ...buildShopRecipeAdminDraft(recipeFixture),
+      baseIngredients: {
+        en: [{ ingredientKey: "mystery", name: "Milk", quantity: "1", unit: "cup" }],
+        zh: [{ ingredientKey: "mystery", name: "牛奶", quantity: "1", unit: "杯" }],
+      },
+    };
+
+    expect(validateShopRecipeAdminDraft(draft)).toEqual(
+      expect.arrayContaining(['Ingredient 1: unknown ingredient icon key "mystery".'])
+    );
+  });
+
+  it("reapplies catalog labels and units for icon-backed rows during merge", () => {
+    const merged = mergeReadonlyShopLocalizedIngredientRows({
+      draftIngredients: {
+        en: [{ ingredientKey: "milk", name: "Anything", quantity: "2", unit: "cups" }],
+        zh: [{ ingredientKey: "milk", name: "Whatever", quantity: "", unit: "杯子" }],
+      },
+    });
+
+    expect(merged.en[0]).toEqual({
+      ingredientKey: "milk",
+      name: "Milk",
+      quantity: "2",
+      unit: "cup",
+    });
+    expect(merged.zh[0]).toEqual({
+      ingredientKey: "milk",
+      name: "牛奶",
+      quantity: "2",
+      unit: "杯",
+    });
   });
 });

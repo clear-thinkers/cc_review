@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { useSession } from "@/lib/authContext";
 import { useLocale } from "@/app/shared/locale";
 import type {
+  ShopIngredient,
+  ShopIngredientPrice,
   ShopRecipe,
   ShopTransaction,
   ShopRecipeUnlock,
@@ -13,6 +15,7 @@ import type {
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
   getOrCreateWallet,
+  listShopIngredientPrices,
   listShopRecipeUnlocks,
   listShopRecipes,
   listShopTransactions,
@@ -20,9 +23,12 @@ import {
 } from "@/lib/supabase-service";
 import {
   SHOP_WALL_SIZE,
+  buildShopIngredientPriceMap,
   canAffordRecipeUnlock,
   getShopRecipeContentForLocale,
   resolvePlainShopRecipeIconPath,
+  resolveShopIngredientCost,
+  resolveShopIngredientIconPath,
   resolveShopRecipeIconPath,
 } from "@/lib/shop";
 
@@ -60,6 +66,21 @@ function formatShopTransactionDateTime(timestamp: number, locale: "en" | "zh"): 
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(timestamp));
+}
+
+function formatIngredientAmount(ingredient: ShopIngredient): string {
+  return `${ingredient.quantity}${ingredient.unit ? ` ${ingredient.unit}` : ""}`;
+}
+
+function formatIngredientCost(
+  ingredient: ShopIngredient,
+  strings: WordsWorkspaceVM["str"]["shop"],
+  ingredientPriceByKey: ReadonlyMap<string, number>
+): string {
+  const cost = resolveShopIngredientCost(ingredient, ingredientPriceByKey);
+  return cost === null
+    ? strings.modal.ingredientNoCost
+    : `${cost} ${strings.modal.ingredientCostUnit}`;
 }
 
 function buildShopTransactionActionLabel(
@@ -108,17 +129,23 @@ function RecipeModal({
   recipe,
   locale,
   strings,
+  ingredientPriceByKey,
   onClose,
 }: {
   recipe: ShopRecipe;
   locale: "en" | "zh";
   strings: WordsWorkspaceVM["str"]["shop"];
+  ingredientPriceByKey: ReadonlyMap<string, number>;
   onClose: () => void;
 }) {
+  const [selectedIngredient, setSelectedIngredient] = useState<ShopIngredient | null>(null);
   if (typeof document === "undefined") {
     return null;
   }
   const localizedRecipe = getShopRecipeContentForLocale(recipe, locale);
+  const selectedIngredientIconPath = selectedIngredient
+    ? resolveShopIngredientIconPath(selectedIngredient)
+    : null;
 
   return createPortal(
     <div
@@ -156,19 +183,50 @@ function RecipeModal({
 
             <div className="space-y-2 rounded-lg border p-4">
               <h3 className="font-medium">{strings.modal.baseIngredients}</h3>
-              <div className="space-y-2">
-                {localizedRecipe.baseIngredients.map((ingredient, index) => (
-                  <div
-                    key={`${recipe.id}-${index}`}
-                    className="rounded-md border bg-white px-3 py-2 text-sm text-gray-700"
-                  >
-                    <strong>{ingredient.name}</strong>{" "}
-                    <span>
-                      {ingredient.quantity}
-                      {ingredient.unit ? ` ${ingredient.unit}` : ""}
-                    </span>
-                  </div>
-                ))}
+              <p className="text-xs text-gray-500">{strings.modal.ingredientTapHint}</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {localizedRecipe.baseIngredients.map((ingredient, index) => {
+                  const ingredientIconPath = resolveShopIngredientIconPath(ingredient);
+                  return (
+                    <button
+                      key={`${recipe.id}-${index}`}
+                      type="button"
+                      onClick={() => setSelectedIngredient(ingredient)}
+                      className="rounded-xl border border-[#eadfbe] bg-white px-4 py-3 text-sm text-gray-700 shadow-sm transition hover:border-[#d2b15b] hover:shadow-md"
+                    >
+                      {ingredientIconPath ? (
+                        <div className="flex h-full flex-col items-center gap-3 text-center">
+                          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-2">
+                            <img
+                              src={ingredientIconPath}
+                              alt={ingredient.name}
+                              className="h-full w-full object-contain"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-gray-900">{ingredient.name}</div>
+                            <div className="text-sm text-gray-600">
+                              {formatIngredientAmount(ingredient)}
+                            </div>
+                            <div className="mt-1 text-xs font-medium text-[#8b6f2f]">
+                              {formatIngredientCost(ingredient, strings, ingredientPriceByKey)}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex h-full flex-col justify-center text-center">
+                          <div className="font-semibold text-gray-900">{ingredient.name}</div>
+                          <div className="mt-1 text-sm text-gray-600">
+                            {formatIngredientAmount(ingredient)}
+                          </div>
+                          <div className="mt-1 text-xs font-medium text-[#8b6f2f]">
+                            {formatIngredientCost(ingredient, strings, ingredientPriceByKey)}
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -209,6 +267,61 @@ function RecipeModal({
               )}
             </div>
           </div>
+
+          {selectedIngredient ? (
+            <div
+              className="fixed inset-0 z-[110] flex items-center justify-center bg-black/35 p-4"
+              onClick={() => setSelectedIngredient(null)}
+            >
+              <div
+                className="w-full max-w-md rounded-[1.5rem] border-2 border-[#dcc38a] bg-[#fffaf0] p-5 shadow-[0_24px_60px_rgba(85,122,84,0.18)]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-[#8b6f2f]">
+                      {strings.modal.ingredientDetailsTitle}
+                    </p>
+                    <h3 className="mt-1 text-xl font-semibold text-gray-900">
+                      {selectedIngredient.name}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-md border-2 border-gray-400 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700"
+                    onClick={() => setSelectedIngredient(null)}
+                  >
+                    {strings.modal.close}
+                  </button>
+                </div>
+                <div className="mt-4 space-y-4">
+                  <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-[#eadfbe] bg-white p-6">
+                    {selectedIngredientIconPath ? (
+                      <img
+                        src={selectedIngredientIconPath}
+                        alt={selectedIngredient.name}
+                        className="max-h-[180px] w-auto object-contain"
+                      />
+                    ) : (
+                      <div className="text-sm text-gray-500">{selectedIngredient.name}</div>
+                    )}
+                  </div>
+                  <div className="rounded-xl border border-[#eadfbe] bg-white px-4 py-3">
+                    <div className="text-sm font-semibold text-gray-900">
+                      {strings.modal.ingredientCost}
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-[#8b6f2f]">
+                      {formatIngredientCost(
+                        selectedIngredient,
+                        strings,
+                        ingredientPriceByKey
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>,
@@ -325,6 +438,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
   const locale = useLocale();
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [recipes, setRecipes] = useState<ShopRecipe[]>([]);
+  const [ingredientPrices, setIngredientPrices] = useState<ShopIngredientPrice[]>([]);
   const [walletCoins, setWalletCoins] = useState(0);
   const [unlocks, setUnlocks] = useState<ShopRecipeUnlock[]>([]);
   const [transactions, setTransactions] = useState<ShopTransaction[]>([]);
@@ -346,18 +460,21 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
       setLoadState("loading");
 
       try {
-        const [wallet, recipeRows, unlockRows, transactionRows] = await Promise.all([
-          getOrCreateWallet(),
-          listShopRecipes(),
-          listShopRecipeUnlocks(),
-          listShopTransactions(),
-        ]);
+        const [wallet, ingredientPriceRows, recipeRows, unlockRows, transactionRows] =
+          await Promise.all([
+            getOrCreateWallet(),
+            listShopIngredientPrices(),
+            listShopRecipes(),
+            listShopRecipeUnlocks(),
+            listShopTransactions(),
+          ]);
 
         if (isCancelled) {
           return;
         }
 
         setWalletCoins(wallet.totalCoins);
+        setIngredientPrices(ingredientPriceRows);
         setRecipes(recipeRows);
         setUnlocks(unlockRows);
         setTransactions(transactionRows);
@@ -419,6 +536,10 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
     return map;
   }, [recipes]);
+  const ingredientPriceByKey = useMemo(
+    () => buildShopIngredientPriceMap(ingredientPrices),
+    [ingredientPrices]
+  );
 
   if (vm.page !== "shop") {
     return null;
@@ -677,6 +798,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
           recipe={selectedRecipe}
           locale={locale}
           strings={vm.str.shop}
+          ingredientPriceByKey={ingredientPriceByKey}
           onClose={() => setSelectedRecipe(null)}
         />
       ) : null}

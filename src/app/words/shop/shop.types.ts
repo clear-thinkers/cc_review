@@ -6,9 +6,11 @@ export type ShopLocalizedValue<T> = {
 };
 
 export type ShopIngredient = {
+  ingredientKey?: string;
   name: string;
   quantity: string;
   unit?: string;
+  costCoins?: number;
 };
 
 export type ShopSpecialIngredientOption = {
@@ -51,6 +53,12 @@ export type ShopRecipeUnlock = {
   recipeId: string;
   coinsSpent: number;
   unlockedAt: number;
+};
+
+export type ShopIngredientPrice = {
+  ingredientKey: string;
+  costCoins: number;
+  updatedAt: number;
 };
 
 export type ShopTransactionAction = "unlock_recipe";
