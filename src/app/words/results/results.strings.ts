@@ -9,6 +9,7 @@
 export type ResultsLocaleStrings = {
   locale?: string;  // "en" | "zh" - use string type to avoid union compatibility issues
   pageTitle: string;
+  viewingProfile: string;
   noSessions: string;
   goToReviewPage: string;
   summary: {

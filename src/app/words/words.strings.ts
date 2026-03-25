@@ -281,6 +281,7 @@ export const wordsStrings = {
     results: {
       locale: "en",
       pageTitle: "Quiz Results",
+      viewingProfile: "Showing {name}'s quiz results and earned coins.",
       noSessions: "No quiz sessions yet.",
       goToReviewPage: "Go to Review Page",
       summary: {
@@ -325,6 +326,8 @@ export const wordsStrings = {
       pageTitle: "Recipe Shop",
       pageDescription:
         "Unlock food recipes with coins, then tap an unlocked recipe to see the ingredients.",
+      viewingProfile: "Showing {name}'s coins and recipe unlocks.",
+      parentViewHint: "Switch to the child profile to unlock recipes or spend coins.",
       coinBag: "Coin Bag",
       balanceUnit: "Coins",
       openHistory: "Open coin history",
@@ -353,7 +356,6 @@ export const wordsStrings = {
         ingredientTapHint: "Tap an ingredient card to see a bigger picture and the quantity needed.",
         specialSlots: "Special Ingredients",
         noSpecialSlots: "No special ingredients for this recipe yet.",
-        slotLimit: "Up to {count}",
         close: "Close",
       },
       history: {
@@ -376,7 +378,7 @@ export const wordsStrings = {
     shopAdmin: {
       pageTitle: "Shop Admin",
       pageDescription:
-        "Edit child-facing recipe metadata, base ingredients, and specialty ingredient labels for the recipe wall.",
+        "Edit child-facing recipe metadata, base ingredients, special ingredients, and variant mappings for the recipe wall.",
       loading: "Loading recipe metadata...",
       loadError: "Could not load recipe metadata right now.",
       empty: "No shop recipes found yet.",
@@ -427,8 +429,16 @@ export const wordsStrings = {
         title: "Ingredient Prices",
         heading: "Edit Shared Ingredient Prices",
         helper:
-          "Set the shared price for one ingredient portion / 份 here once. Recipe rows only control how many portions each food needs.",
+          "Set shared prices for both basic and special ingredients here. The editable label follows the current app locale, and recipe rows still only control how many portions each food needs.",
         cost: "Price Per Portion / 份 (coins)",
+        filterAll: "All",
+        filterBasic: "Basic",
+        filterSpecial: "Special",
+        basicBadge: "Basic",
+        specialBadge: "Special",
+        specialSlot: "Slot",
+        specialEffect: "Effect",
+        emptyState: "No ingredients in this filter yet.",
         save: "Save Prices",
         saving: "Saving...",
         reset: "Reset Prices",
@@ -438,18 +448,18 @@ export const wordsStrings = {
       },
       specialty: {
         helper:
-          "Labels and notes are editable in both languages here. Matching keys and artwork stay controlled by the reward filename sync.",
-        slotLabelEnglish: "Slot Label (EN)",
-        slotLabelChinese: "Slot Label (ZH)",
-        optionKey: "Option Key",
-        optionLabelEnglish: "Option Label (EN)",
-        optionLabelChinese: "Option Label (ZH)",
-        optionEffectEnglish: "Effect Note (EN)",
-        optionEffectChinese: "Effect Note (ZH)",
-        maxSelections: "Max selections: {count}",
-        noSlots: "No specialty ingredient slots yet.",
+          "Special ingredients are plain ingredient rows with names and quantities now. Use the variant cards below to define which special ingredient combinations map to each food image.",
+        noSlots: "No special ingredients yet.",
         noVariants: "No variant icons yet.",
         matchAll: "Plain / no extra ingredients",
+        variantHelper:
+          "Assign one or more special ingredient keys to each food variant card. The most specific matching combination wins in the child shop.",
+        variantAssigned: "Mapped Ingredients",
+        variantAvailable: "Available Special Ingredients",
+        variantReadonly: "This fallback variant stays unmapped.",
+        variantPath: "Variant Image Path",
+        variantNoMapped: "No mapped ingredients yet.",
+        variantNoOptions: "Add special ingredient options above before configuring variant mappings.",
       },
       saveBar: {
         clean: "No unsaved changes.",
@@ -1169,6 +1179,7 @@ export const wordsStrings = {
     results: {
       locale: "zh",
       pageTitle: "测验结果",
+      viewingProfile: "当前显示的是 {name} 的测验结果和获得金币。",
       noSessions: "还没有测验记录。",
       goToReviewPage: "前往复习页面",
       summary: {
@@ -1212,6 +1223,8 @@ export const wordsStrings = {
     shop: {
       pageTitle: "食谱商店",
       pageDescription: "使用金币解锁食谱，解锁后点击食谱即可查看所需材料。",
+      viewingProfile: "当前显示的是 {name} 的金币和食谱解锁情况。",
+      parentViewHint: "切换到孩子档案后才能解锁食谱或花费金币。",
       coinBag: "金币袋",
       balanceUnit: "金币",
       openHistory: "打开金币记录",
@@ -1240,7 +1253,6 @@ export const wordsStrings = {
         ingredientTapHint: "点击材料卡片可查看更大的图片和所需数量。",
         specialSlots: "特殊材料",
         noSpecialSlots: "这个食谱暂时没有特殊材料。",
-        slotLimit: "最多 {count} 个",
         close: "关闭",
       },
       history: {
@@ -1262,7 +1274,7 @@ export const wordsStrings = {
 
     shopAdmin: {
       pageTitle: "食谱管理",
-      pageDescription: "编辑食谱墙显示的介绍、基础材料和特殊材料标签。",
+      pageDescription: "编辑食谱墙显示的介绍、基础材料、特殊材料和变体映射。",
       loading: "正在加载食谱资料...",
       loadError: "现在无法加载食谱资料。",
       empty: "还没有食谱资料。",
@@ -1311,8 +1323,16 @@ export const wordsStrings = {
       ingredientPricing: {
         title: "材料价格",
         heading: "统一编辑材料价格",
-        helper: "每种材料的每份价格只在这里设置一次。食谱里的材料行只负责说明这个食物需要多少份。",
+        helper: "基础材料和特殊材料的每份价格都在这里统一设置。可编辑名称会跟随当前语言；食谱里的材料行仍只负责说明这个食物需要多少份。",
         cost: "每份价格（金）",
+        filterAll: "全部",
+        filterBasic: "基础",
+        filterSpecial: "特殊",
+        basicBadge: "基础",
+        specialBadge: "特殊",
+        specialSlot: "栏位",
+        specialEffect: "效果",
+        emptyState: "这个筛选下暂时没有材料。",
         save: "保存价格",
         saving: "保存中...",
         reset: "重置价格",
@@ -1321,18 +1341,17 @@ export const wordsStrings = {
         loadError: "现在无法加载材料价格。",
       },
       specialty: {
-        helper: "这里只编辑给孩子看的英文和中文标签与说明。匹配逻辑和图片仍由奖励文件名同步控制。",
-        slotLabelEnglish: "英文栏位标签",
-        slotLabelChinese: "中文栏位标签",
-        optionKey: "选项键",
-        optionLabelEnglish: "英文选项标签",
-        optionLabelChinese: "中文选项标签",
-        optionEffectEnglish: "英文效果说明",
-        optionEffectChinese: "中文效果说明",
-        maxSelections: "最多可选：{count}",
-        noSlots: "暂时没有特殊材料栏位。",
+        helper: "特殊材料现在只保留名称和数量。下方变体卡片用于定义哪些特殊材料组合会映射到对应食物图片。",
+        noSlots: "暂时没有特殊材料。",
         noVariants: "暂时没有变体图片。",
         matchAll: "Plain / 无额外材料",
+        variantHelper: "为每张食物变体卡分配一个或多个特殊材料键。孩子端会优先使用匹配条件最具体的组合。",
+        variantAssigned: "已映射材料",
+        variantAvailable: "可用特殊材料",
+        variantReadonly: "这个兜底变体保持不映射材料。",
+        variantPath: "变体图片路径",
+        variantNoMapped: "还没有映射材料。",
+        variantNoOptions: "请先在上方添加特殊材料选项，再配置变体映射。",
       },
       saveBar: {
         clean: "没有未保存的更改。",

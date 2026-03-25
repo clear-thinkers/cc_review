@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSession } from "@/lib/authContext";
+import { useEffect, useMemo, useState } from "react";
+import { useAuth, useSession } from "@/lib/authContext";
+import { resolveChildProfileTarget } from "@/lib/child-profile-target";
 import type { QuizSession } from "./results.types";
 import { getAllQuizSessions } from "@/lib/supabase-service";
 import { computeSessionDisplayData, calculateSummaryStats } from "@/lib/results";
@@ -18,17 +19,22 @@ export interface ResultsPageProps {
 
 export function ResultsPage({ strings }: ResultsPageProps) {
   const session = useSession();
+  const { familyProfiles } = useAuth();
   const isChild = session?.role === "child";
   const [sessions, setSessions] = useState<QuizSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const childTarget = useMemo(
+    () => resolveChildProfileTarget(session, familyProfiles),
+    [familyProfiles, session]
+  );
 
   // Load sessions on mount and set up polling
   useEffect(() => {
     const loadSessions = async () => {
       try {
-        const data = await getAllQuizSessions();
+        const data = await getAllQuizSessions(childTarget?.userId);
         setSessions(data);
       } catch (error) {
         console.error("Failed to load quiz sessions:", error);
@@ -42,7 +48,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
     // Poll for new sessions every 1 second to detect changes after grading
     const intervalId = setInterval(loadSessions, 1000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [childTarget?.userId]);
 
   const handleClearClick = () => {
     setShowDialog(true);
@@ -52,7 +58,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
     setIsClearing(true);
     try {
       const { clearAllQuizSessions } = await import("@/lib/supabase-service");
-      await clearAllQuizSessions();
+      await clearAllQuizSessions(childTarget?.userId);
       setSessions([]);
       setShowDialog(false);
     } catch (error) {
@@ -72,6 +78,11 @@ export function ResultsPage({ strings }: ResultsPageProps) {
     <div className={styles.resultsContainer}>
       <div className={styles.resultsHeader}>
         <h1 className={styles.resultsTitle}>{strings.pageTitle}</h1>
+        {childTarget && !childTarget.isCurrentSessionTarget ? (
+          <p className="text-sm text-gray-600">
+            {strings.viewingProfile.replace("{name}", childTarget.userName)}
+          </p>
+        ) : null}
       </div>
 
       {isLoading ? (

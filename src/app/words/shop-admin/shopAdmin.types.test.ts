@@ -3,8 +3,10 @@ import type { ShopRecipe } from "../shop/shop.types";
 import {
   areShopRecipeAdminDraftsEqual,
   buildShopRecipeAdminDraft,
+  listShopAdminVariantIngredientOptions,
   mergeReadonlyShopLocalizedIngredientRows,
-  mergeReadonlySpecialIngredientLogic,
+  mergeReadonlyVariantIconRules,
+  mergeShopLocalizedSpecialIngredientRows,
   normalizeShopRecipeAdminDraft,
   validateShopRecipeAdminDraft,
 } from "./shopAdmin.types";
@@ -15,14 +17,14 @@ const recipeFixture: ShopRecipe = {
   title: "Bubble Tea",
   titleI18n: {
     en: "Bubble Tea",
-    zh: "珍珠奶茶",
+    zh: "\u73cd\u73e0\u5976\u8336",
   },
   displayOrder: 0,
   isActive: true,
   intro: "A sweet milk tea with chewy pearls.",
   introI18n: {
     en: "A sweet milk tea with chewy pearls.",
-    zh: "一杯有嚼劲珍珠的香甜奶茶。",
+    zh: "\u4e00\u676f\u6709\u56bc\u52c1\u73cd\u73e0\u7684\u9999\u751c\u5976\u8336\u3002",
   },
   unlockCostCoins: 25,
   baseIngredients: [
@@ -35,37 +37,28 @@ const recipeFixture: ShopRecipe = {
       { name: "Tea", quantity: 2 },
     ],
     zh: [
-      { ingredientKey: "milk", name: " 牛奶 ", quantity: 1 },
-      { name: "红茶", quantity: 2 },
+      { ingredientKey: "milk", name: " \u725b\u5976 ", quantity: 1 },
+      { name: "\u7ea2\u8336", quantity: 2 },
     ],
   },
-  specialIngredientSlots: [
-    {
-      slotKey: "specialty",
-      label: "Special Ingredient",
-      maxSelections: 1,
-      options: [{ key: "brown-sugar", label: "Brown Sugar", effect: "Wink face" }],
-    },
+  specialIngredients: [
+    { ingredientKey: "brown-sugar", name: "Brown Sugar", quantity: 1 },
+    { ingredientKey: "jasmine", name: "Jasmine", quantity: 1 },
   ],
-  specialIngredientSlotsI18n: {
+  specialIngredientsI18n: {
     en: [
-      {
-        slotKey: "specialty",
-        label: " Special Ingredient ",
-        maxSelections: 1,
-        options: [{ key: "brown-sugar", label: " Brown Sugar ", effect: " Wink face " }],
-      },
+      { ingredientKey: "brown-sugar", name: " Brown Sugar ", quantity: 1 },
+      { ingredientKey: "jasmine", name: " Jasmine ", quantity: 1 },
     ],
     zh: [
-      {
-        slotKey: "specialty",
-        label: " 特殊材料 ",
-        maxSelections: 1,
-        options: [{ key: "brown-sugar", label: " 黑糖 ", effect: " 眨眼表情 " }],
-      },
+      { ingredientKey: "brown-sugar", name: " \u9ed1\u7cd6 ", quantity: 1 },
+      { ingredientKey: "jasmine", name: " \u8336\u8309\u8389 ", quantity: 1 },
     ],
   },
-  variantIconRules: [{ match: [], iconPath: "/rewards/bubble-tea_plain.png" }],
+  variantIconRules: [
+    { match: [], iconPath: "/rewards/bubble-tea_plain.png" },
+    { match: ["brown-sugar", "jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
+  ],
 };
 
 describe("shopAdmin.types", () => {
@@ -73,31 +66,41 @@ describe("shopAdmin.types", () => {
     const draft = buildShopRecipeAdminDraft(recipeFixture);
     const normalized = normalizeShopRecipeAdminDraft(draft);
 
-    expect(normalized.title.zh).toBe("珍珠奶茶");
-    expect(normalized.baseIngredients.en[0]).toEqual({
-      ingredientKey: "milk",
-      name: "Milk",
-      quantity: 1,
-    });
+    expect(normalized.title.zh).toBe("\u73cd\u73e0\u5976\u8336");
     expect(normalized.baseIngredients.zh[0]).toEqual({
       ingredientKey: "milk",
-      name: "牛奶",
+      name: "\u725b\u5976",
       quantity: 1,
     });
-    expect(normalized.specialIngredientSlots.zh[0].options[0].effect).toBe("眨眼表情");
+    expect(normalized.specialIngredients[ "zh" ][0]).toEqual({
+      ingredientKey: "brown-sugar",
+      name: "\u9ed1\u7cd6",
+      quantity: 1,
+    });
+    expect(normalized.variantIconRules[1]).toEqual({
+      match: ["brown-sugar", "jasmine"],
+      iconPath: "/rewards/bubble-tea_combo.png",
+    });
   });
 
   it("compares drafts after normalization", () => {
     const left = buildShopRecipeAdminDraft(recipeFixture);
     const right = buildShopRecipeAdminDraft({
       ...recipeFixture,
-      titleI18n: { en: " Bubble Tea ", zh: " 珍珠奶茶 " },
+      titleI18n: { en: " Bubble Tea ", zh: " \u73cd\u73e0\u5976\u8336 " },
+      variantIconRules: [
+        { match: [], iconPath: "/rewards/bubble-tea_plain.png" },
+        {
+          match: ["jasmine", "brown-sugar", "jasmine"],
+          iconPath: "/rewards/bubble-tea_combo.png",
+        },
+      ],
     });
 
     expect(areShopRecipeAdminDraftsEqual(left, right)).toBe(true);
   });
 
-  it("validates both locales for required fields", () => {
+  it("validates required ingredient names and quantities", () => {
     const draft = {
       ...buildShopRecipeAdminDraft(recipeFixture),
       title: { en: " ", zh: "" },
@@ -106,23 +109,9 @@ describe("shopAdmin.types", () => {
         en: [{ name: "", quantity: 0 }],
         zh: [{ name: "", quantity: 0 }],
       },
-      specialIngredientSlots: {
-        en: [
-          {
-            slotKey: "specialty",
-            label: "",
-            maxSelections: 1,
-            options: [{ key: "brown-sugar", label: "", effect: "" }],
-          },
-        ],
-        zh: [
-          {
-            slotKey: "specialty",
-            label: "",
-            maxSelections: 1,
-            options: [{ key: "brown-sugar", label: "", effect: "" }],
-          },
-        ],
+      specialIngredients: {
+        en: [{ name: "", quantity: 0 }],
+        zh: [{ name: "", quantity: 0 }],
       },
     };
 
@@ -135,54 +124,18 @@ describe("shopAdmin.types", () => {
         "EN ingredient 1: name is required.",
         "ZH ingredient 1: name is required.",
         "Ingredient 1: quantity is required.",
+        "EN special ingredient 1: name is required.",
+        "ZH special ingredient 1: name is required.",
+        "Special ingredient 1: quantity is required.",
       ])
     );
-  });
-
-  it("preserves readonly slot logic for both locales", () => {
-    const merged = mergeReadonlySpecialIngredientLogic({
-      persistedSlots: recipeFixture.specialIngredientSlots,
-      draftSlots: {
-        en: [
-          {
-            slotKey: "specialty",
-            label: "Flavor",
-            maxSelections: 99,
-            options: [
-              {
-                key: "brown-sugar",
-                label: "Brown Sugar Syrup",
-                effect: "Adds the wink mood.",
-              },
-            ],
-          },
-        ],
-        zh: [
-          {
-            slotKey: "specialty",
-            label: "风味",
-            maxSelections: 99,
-            options: [
-              {
-                key: "brown-sugar",
-                label: "黑糖糖浆",
-                effect: "会带来眨眼表情。",
-              },
-            ],
-          },
-        ],
-      },
-    });
-
-    expect(merged.en[0].maxSelections).toBe(1);
-    expect(merged.zh[0].options[0].label).toBe("黑糖糖浆");
   });
 
   it("normalizes aligned bilingual ingredient rows", () => {
     const merged = mergeReadonlyShopLocalizedIngredientRows({
       draftIngredients: {
         en: [{ ingredientKey: "milk", name: "Milk", quantity: 1 }],
-        zh: [{ ingredientKey: "milk", name: "牛奶", quantity: 0 }],
+        zh: [{ ingredientKey: "milk", name: "\u725b\u5976", quantity: 0 }],
       },
     });
 
@@ -190,21 +143,7 @@ describe("shopAdmin.types", () => {
     expect(merged.en[0].ingredientKey).toBe("milk");
   });
 
-  it("rejects unknown ingredient icon keys", () => {
-    const draft = {
-      ...buildShopRecipeAdminDraft(recipeFixture),
-      baseIngredients: {
-        en: [{ ingredientKey: "mystery", name: "Milk", quantity: 1 }],
-        zh: [{ ingredientKey: "mystery", name: "牛奶", quantity: 1 }],
-      },
-    };
-
-    expect(validateShopRecipeAdminDraft(draft)).toEqual(
-      expect.arrayContaining(['Ingredient 1: unknown ingredient icon key "mystery".'])
-    );
-  });
-
-  it("reapplies catalog labels for icon-backed rows during merge", () => {
+  it("reapplies catalog labels for icon-backed base rows during merge", () => {
     const merged = mergeReadonlyShopLocalizedIngredientRows({
       draftIngredients: {
         en: [{ ingredientKey: "milk", name: "Anything", quantity: 2 }],
@@ -219,8 +158,101 @@ describe("shopAdmin.types", () => {
     });
     expect(merged.zh[0]).toEqual({
       ingredientKey: "milk",
-      name: "牛奶",
+      name: "\u725b\u5976",
       quantity: 2,
     });
+  });
+
+  it("keeps keyed special ingredients aligned during merge", () => {
+    const merged = mergeShopLocalizedSpecialIngredientRows({
+      draftIngredients: {
+        en: [{ ingredientKey: "brown-sugar", name: "Brown Sugar", quantity: 2 }],
+        zh: [{ ingredientKey: "brown-sugar", name: "\u9ed1\u7cd6", quantity: 0 }],
+      },
+    });
+
+    expect(merged.en[0]).toEqual({
+      ingredientKey: "brown-sugar",
+      name: "Brown Sugar",
+      quantity: 2,
+    });
+    expect(merged.zh[0]).toEqual({
+      ingredientKey: "brown-sugar",
+      name: "\u9ed1\u7cd6",
+      quantity: 2,
+    });
+  });
+
+  it("lists keyed special ingredients for variant mapping", () => {
+    expect(
+      listShopAdminVariantIngredientOptions(buildShopRecipeAdminDraft(recipeFixture).specialIngredients)
+    ).toEqual([
+      {
+        key: "brown-sugar",
+        label: { en: "Brown Sugar", zh: "\u9ed1\u7cd6" },
+      },
+      {
+        key: "jasmine",
+        label: { en: "Jasmine", zh: "\u8336\u8309\u8389" },
+      },
+    ]);
+  });
+
+  it("rejects duplicate special ingredient keys", () => {
+    const draft = {
+      ...buildShopRecipeAdminDraft(recipeFixture),
+      specialIngredients: {
+        en: [
+          { ingredientKey: "brown-sugar", name: "Brown Sugar", quantity: 1 },
+          { ingredientKey: "brown-sugar", name: "Brown Sugar Again", quantity: 1 },
+        ],
+        zh: [
+          { ingredientKey: "brown-sugar", name: "\u9ed1\u7cd6", quantity: 1 },
+          { ingredientKey: "brown-sugar", name: "\u9ed1\u7cd6\u4e8c", quantity: 1 },
+        ],
+      },
+    };
+
+    expect(validateShopRecipeAdminDraft(draft)).toEqual(
+      expect.arrayContaining([
+        'Special ingredient 2: duplicate ingredient key "brown-sugar".',
+      ])
+    );
+  });
+
+  it("rejects duplicate or unknown variant ingredient combinations", () => {
+    const draft = {
+      ...buildShopRecipeAdminDraft(recipeFixture),
+      variantIconRules: [
+        { match: ["brown-sugar"], iconPath: "/rewards/bubble-tea_plain.png" },
+        { match: ["mystery", "brown-sugar"], iconPath: "/rewards/bubble-tea_other.png" },
+        { match: ["brown-sugar"], iconPath: "/rewards/bubble-tea_dup.png" },
+      ],
+    };
+
+    expect(validateShopRecipeAdminDraft(draft)).toEqual(
+      expect.arrayContaining([
+        'Variant 2: unknown special ingredient key "mystery".',
+        "Variant 3: duplicate ingredient combination.",
+      ])
+    );
+  });
+
+  it("preserves icon paths while applying edited variant matches", () => {
+    expect(
+      mergeReadonlyVariantIconRules({
+        persistedRules: recipeFixture.variantIconRules,
+        draftRules: [
+          { match: ["brown-sugar"], iconPath: "/rewards/ignored.png" },
+          {
+            match: ["brown-sugar", "jasmine", "jasmine"],
+            iconPath: "/rewards/also-ignored.png",
+          },
+        ],
+      })
+    ).toEqual([
+      { match: ["brown-sugar"], iconPath: "/rewards/bubble-tea_plain.png" },
+      { match: ["brown-sugar", "jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
+    ]);
   });
 });

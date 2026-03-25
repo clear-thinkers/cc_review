@@ -9,7 +9,7 @@ import {
   getExistingWordsByHanzi,
   deleteWord as deleteWordFromDb,
   putWord,
-  createQuizSession,
+  recordQuizSession,
   deleteFlashcardContent,
   deleteFlashcardContentByHanzi,
   hasFlashcardContentForHanzi,
@@ -18,7 +18,6 @@ import {
   getFlashcardContent,
   gradeWord,
   putFlashcardContent,
-  updateWallet,
   createLessonTagIfNew,
   assignWordLessonTags,
   createTextbook,
@@ -3679,18 +3678,9 @@ const gradeLabels = getGradeLabels(str);
             coinsEarned,
           };
 
-          console.log("Saving quiz session:", session); // DEBUG
-          await createQuizSession(session);
-          console.log("Quiz session saved successfully"); // DEBUG
-
-          // Update wallet with earned coins
-          try {
-            await updateWallet(coinsEarned);
-            console.log(`Wallet updated with ${coinsEarned} coins`); // DEBUG
-          } catch (walletError) {
-            console.error("Failed to update wallet:", walletError);
-            // Don't block quiz completion if wallet update fails
-          }
+          console.log("Saving quiz session and wallet:", session); // DEBUG
+          await recordQuizSession(session);
+          console.log(`Quiz session and wallet saved with ${coinsEarned} coins`); // DEBUG
         }
       } catch (error) {
         console.error("Failed to save quiz session:", error);

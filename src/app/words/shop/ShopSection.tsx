@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useSession } from "@/lib/authContext";
+import { useAuth, useSession } from "@/lib/authContext";
 import { useLocale } from "@/app/shared/locale";
+import { resolveChildProfileTarget } from "@/lib/child-profile-target";
 import type {
   ShopIngredient,
   ShopRecipe,
   ShopTransaction,
   ShopRecipeUnlock,
-  ShopSpecialIngredientSlot,
 } from "./shop.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
@@ -209,36 +209,33 @@ function RecipeModal({
 
             <div className="space-y-2 rounded-lg border p-4">
               <h3 className="font-medium">{strings.modal.specialSlots}</h3>
-              {localizedRecipe.specialIngredientSlots.length === 0 ? (
+              {localizedRecipe.specialIngredients.length === 0 ? (
                 <p className="text-sm text-gray-600">{strings.modal.noSpecialSlots}</p>
               ) : (
-                <div className="space-y-2">
-                  {localizedRecipe.specialIngredientSlots.map((slot: ShopSpecialIngredientSlot) => (
-                    <div
-                      key={`${recipe.id}-${slot.slotKey}`}
-                      className="rounded-md border bg-white px-3 py-3"
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {localizedRecipe.specialIngredients.map((ingredient, index) => (
+                    <button
+                      key={`${recipe.id}-special-${ingredient.ingredientKey ?? ingredient.name}-${index}`}
+                      type="button"
+                      onClick={() => setSelectedIngredient(ingredient)}
+                      className="flex min-h-[108px] items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition hover:border-[#dcc38a] hover:shadow-[0_10px_24px_rgba(166,128,42,0.12)]"
                     >
-                      <div className="text-sm font-semibold text-gray-900">
-                        {slot.label}
+                      {resolveShopIngredientIconPath(ingredient) ? (
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-2">
+                          <img
+                            src={resolveShopIngredientIconPath(ingredient) ?? ""}
+                            alt={ingredient.name}
+                            className="h-full w-full object-contain"
+                          />
+                        </div>
+                      ) : null}
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900">{ingredient.name}</div>
+                        <div className="mt-1 text-sm text-gray-600">
+                          {formatIngredientAmount(ingredient)}
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {formatWithToken(
-                          strings.modal.slotLimit,
-                          "{count}",
-                          String(slot.maxSelections)
-                        )}
-                      </div>
-                      <div className="mt-2 space-y-1">
-                        {slot.options.map((option) => (
-                          <div
-                            key={`${slot.slotKey}-${option.key}`}
-                            className="text-sm text-gray-700"
-                          >
-                            <strong>{option.label}</strong>: {option.effect}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -408,6 +405,7 @@ function HistoryModal({
 
 export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
   const session = useSession();
+  const { familyProfiles } = useAuth();
   const locale = useLocale();
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [recipes, setRecipes] = useState<ShopRecipe[]>([]);
@@ -420,6 +418,13 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [selectedRecipe, setSelectedRecipe] = useState<ShopRecipe | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [unlockingRecipeId, setUnlockingRecipeId] = useState<string | null>(null);
+  const childTarget = useMemo(
+    () => resolveChildProfileTarget(session, familyProfiles),
+    [familyProfiles, session]
+  );
+  const canUnlockViewedWallet =
+    Boolean(childTarget?.isCurrentSessionTarget) &&
+    (session?.role === "child" || session?.isPlatformAdmin === true);
 
   useEffect(() => {
     if (vm.page !== "shop") {
@@ -434,10 +439,10 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
       try {
         const [wallet, recipeRows, unlockRows, transactionRows] =
           await Promise.all([
-            getOrCreateWallet(),
+            getOrCreateWallet(childTarget?.userId),
             listShopRecipes(),
-            listShopRecipeUnlocks(),
-            listShopTransactions(),
+            listShopRecipeUnlocks(childTarget?.userId),
+            listShopTransactions(childTarget?.userId),
           ]);
 
         if (isCancelled) {
@@ -462,7 +467,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
     return () => {
       isCancelled = true;
     };
-  }, [vm.page]);
+  }, [childTarget?.userId, vm.page]);
 
   useEffect(() => {
     if (!selectedRecipe && !isHistoryOpen) {
@@ -529,7 +534,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
               : [
                   ...current,
                   {
-                    userId: session?.userId ?? "",
+                    userId: childTarget?.userId ?? session?.userId ?? "",
                     recipeId: recipe.id,
                     coinsSpent: result.coinsSpent,
                     unlockedAt: Date.now(),
@@ -554,7 +559,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
           : [
               ...current,
               {
-                userId: session?.userId ?? "",
+                userId: childTarget?.userId ?? session?.userId ?? "",
                 recipeId: result.recipeId,
                 coinsSpent: result.coinsSpent,
                 unlockedAt: Date.now(),
@@ -570,7 +575,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
         ),
       });
       try {
-        const transactionRows = await listShopTransactions();
+        const transactionRows = await listShopTransactions(childTarget?.userId);
         setTransactions(transactionRows);
       } catch (transactionError) {
         console.error("Failed to refresh shop transactions:", transactionError);
@@ -595,6 +600,14 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
         <div className="space-y-2">
           <h2 className="font-medium">{vm.str.shop.pageTitle}</h2>
           <p className="max-w-3xl text-sm text-gray-700">{vm.str.shop.pageDescription}</p>
+          {childTarget && !childTarget.isCurrentSessionTarget ? (
+            <>
+              <p className="text-sm text-gray-600">
+                {vm.str.shop.viewingProfile.replace("{name}", childTarget.userName)}
+              </p>
+              <p className="text-sm text-gray-600">{vm.str.shop.parentViewHint}</p>
+            </>
+          ) : null}
         </div>
         <button
           type="button"
@@ -740,14 +753,17 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
                         )
                       : vm.str.shop.recipeNotOpenYet}
                   </p>
-                  <button
-                    type="button"
-                    className="rounded-md border-2 border-amber-400 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
-                    disabled={
-                      !isOpenForUnlocking || !canAfford || unlockingRecipeId === recipe.id
-                    }
-                    onClick={() => void handleUnlock(recipe)}
-                  >
+                    <button
+                      type="button"
+                      className="rounded-md border-2 border-amber-400 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
+                      disabled={
+                        !isOpenForUnlocking ||
+                        !canAfford ||
+                        unlockingRecipeId === recipe.id ||
+                        !canUnlockViewedWallet
+                      }
+                      onClick={() => void handleUnlock(recipe)}
+                    >
                     {unlockingRecipeId === recipe.id
                       ? `${vm.str.shop.unlock}...`
                       : vm.str.shop.unlock}

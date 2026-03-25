@@ -2,7 +2,7 @@ import type {
   ShopIngredient,
   ShopLocalizedValue,
   ShopRecipe,
-  ShopSpecialIngredientSlot,
+  ShopVariantIconRule,
 } from "../shop/shop.types";
 import { getShopIngredientCatalogEntry } from "../shop/shopIngredients";
 import {
@@ -14,20 +14,26 @@ import {
 export const SHOP_RECIPE_TITLE_MAX = 80;
 export const SHOP_RECIPE_INTRO_MAX = 240;
 export const SHOP_RECIPE_INGREDIENT_NAME_MAX = 60;
-export const SHOP_RECIPE_SPECIAL_LABEL_MAX = 60;
-export const SHOP_RECIPE_SPECIAL_EFFECT_MAX = 120;
 
 export type ShopRecipeAdminDraft = {
   recipeId: string;
   title: ShopLocalizedValue<string>;
   intro: ShopLocalizedValue<string>;
   baseIngredients: ShopLocalizedValue<ShopIngredient[]>;
-  specialIngredientSlots: ShopLocalizedValue<ShopSpecialIngredientSlot[]>;
+  specialIngredients: ShopLocalizedValue<ShopIngredient[]>;
+  variantIconRules: ShopVariantIconRule[];
+};
+
+export type ShopAdminVariantIngredientOption = {
+  key: string;
+  label: ShopLocalizedValue<string>;
 };
 
 export type ShopAdminRecipesResponse = {
   recipes: ShopRecipe[];
 };
+
+type ShopIngredientLabelLookup = ReadonlyMap<string, ShopLocalizedValue<string>>;
 
 export function buildShopRecipeAdminDraft(recipe: ShopRecipe): ShopRecipeAdminDraft {
   return {
@@ -38,17 +44,29 @@ export function buildShopRecipeAdminDraft(recipe: ShopRecipe): ShopRecipeAdminDr
       en: recipe.baseIngredientsI18n.en.map((ingredient) => ({ ...ingredient })),
       zh: recipe.baseIngredientsI18n.zh.map((ingredient) => ({ ...ingredient })),
     },
-    specialIngredientSlots: {
-      en: recipe.specialIngredientSlotsI18n.en.map((slot) => ({
-        ...slot,
-        options: slot.options.map((option) => ({ ...option })),
-      })),
-      zh: recipe.specialIngredientSlotsI18n.zh.map((slot) => ({
-        ...slot,
-        options: slot.options.map((option) => ({ ...option })),
-      })),
+    specialIngredients: {
+      en: recipe.specialIngredientsI18n.en.map((ingredient) => ({ ...ingredient })),
+      zh: recipe.specialIngredientsI18n.zh.map((ingredient) => ({ ...ingredient })),
     },
+    variantIconRules: recipe.variantIconRules.map((rule) => ({
+      iconPath: rule.iconPath,
+      match: normalizeVariantMatchKeys(rule.match),
+    })),
   };
+}
+
+function normalizeVariantMatchKeys(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      raw
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter(Boolean)
+    )
+  ).sort((left, right) => left.localeCompare(right));
 }
 
 function normalizeLocalizedStringValue(raw: unknown): ShopLocalizedValue<string> {
@@ -76,9 +94,7 @@ function normalizeIngredientList(raw: unknown): ShopIngredient[] {
   });
 }
 
-function normalizeLocalizedIngredientList(
-  raw: unknown
-): ShopLocalizedValue<ShopIngredient[]> {
+function normalizeLocalizedIngredientList(raw: unknown): ShopLocalizedValue<ShopIngredient[]> {
   const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   return {
     en: normalizeIngredientList(source.en),
@@ -86,40 +102,41 @@ function normalizeLocalizedIngredientList(
   };
 }
 
-function normalizeSpecialIngredientSlotList(raw: unknown): ShopSpecialIngredientSlot[] {
+function normalizeVariantIconRules(raw: unknown): ShopVariantIconRule[] {
   const list = Array.isArray(raw) ? raw : [];
-  return list.map((slot) => {
-    const source = slot && typeof slot === "object" ? (slot as Record<string, unknown>) : {};
-    const options = Array.isArray(source.options) ? source.options : [];
+  return list.map((rule) => {
+    const source = rule && typeof rule === "object" ? (rule as Record<string, unknown>) : {};
     return {
-      slotKey: typeof source.slotKey === "string" ? source.slotKey.trim() : "",
-      label: typeof source.label === "string" ? source.label.trim() : "",
-      maxSelections:
-        typeof source.maxSelections === "number" && Number.isFinite(source.maxSelections)
-          ? source.maxSelections
-          : 0,
-      options: options.map((option) => {
-        const optionSource =
-          option && typeof option === "object" ? (option as Record<string, unknown>) : {};
-        return {
-          key: typeof optionSource.key === "string" ? optionSource.key.trim() : "",
-          label: typeof optionSource.label === "string" ? optionSource.label.trim() : "",
-          effect:
-            typeof optionSource.effect === "string" ? optionSource.effect.trim() : "",
-        };
-      }),
+      iconPath: typeof source.iconPath === "string" ? source.iconPath.trim() : "",
+      match: normalizeVariantMatchKeys(source.match),
     };
   });
 }
 
-function normalizeLocalizedSpecialIngredientSlotList(
-  raw: unknown
-): ShopLocalizedValue<ShopSpecialIngredientSlot[]> {
-  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  return {
-    en: normalizeSpecialIngredientSlotList(source.en),
-    zh: normalizeSpecialIngredientSlotList(source.zh),
-  };
+export function listShopAdminVariantIngredientOptions(
+  specialIngredients: ShopLocalizedValue<ShopIngredient[]>
+): ShopAdminVariantIngredientOption[] {
+  const optionsByKey = new Map<string, ShopAdminVariantIngredientOption>();
+
+  specialIngredients.en.forEach((englishIngredient, ingredientIndex) => {
+    const chineseIngredient = specialIngredients.zh[ingredientIndex];
+    const key = englishIngredient.ingredientKey?.trim() ?? "";
+    if (!key || optionsByKey.has(key)) {
+      return;
+    }
+
+    optionsByKey.set(key, {
+      key,
+      label: {
+        en: englishIngredient.name.trim() || key,
+        zh: chineseIngredient?.name.trim() || englishIngredient.name.trim() || key,
+      },
+    });
+  });
+
+  return [...optionsByKey.values()].sort((left, right) =>
+    left.label.en.localeCompare(right.label.en)
+  );
 }
 
 export function normalizeShopRecipeAdminDraft(draft: {
@@ -127,17 +144,86 @@ export function normalizeShopRecipeAdminDraft(draft: {
   title?: unknown;
   intro?: unknown;
   baseIngredients?: unknown;
-  specialIngredientSlots?: unknown;
+  specialIngredients?: unknown;
+  variantIconRules?: unknown;
 }): ShopRecipeAdminDraft {
   return {
     recipeId: typeof draft.recipeId === "string" ? draft.recipeId.trim() : "",
     title: normalizeLocalizedStringValue(draft.title),
     intro: normalizeLocalizedStringValue(draft.intro),
     baseIngredients: normalizeLocalizedIngredientList(draft.baseIngredients),
-    specialIngredientSlots: normalizeLocalizedSpecialIngredientSlotList(
-      draft.specialIngredientSlots
-    ),
+    specialIngredients: normalizeLocalizedIngredientList(draft.specialIngredients),
+    variantIconRules: normalizeVariantIconRules(draft.variantIconRules),
   };
+}
+
+function validateLocalizedIngredientRows(params: {
+  rows: ShopLocalizedValue<ShopIngredient[]>;
+  rowLabel: string;
+  requireKnownCatalogKey: boolean;
+}): string[] {
+  const errors: string[] = [];
+
+  if (params.rows.en.length !== params.rows.zh.length) {
+    errors.push(`English and Chinese ${params.rowLabel} rows must stay aligned.`);
+    return errors;
+  }
+
+  const seenSpecialKeys = new Set<string>();
+
+  params.rows.en.forEach((ingredient, index) => {
+    const rowNumber = index + 1;
+    const zhIngredient = params.rows.zh[index];
+    const ingredientKey = ingredient.ingredientKey?.trim() ?? "";
+    const zhIngredientKey = zhIngredient?.ingredientKey?.trim() ?? "";
+    if (ingredientKey !== zhIngredientKey) {
+      errors.push(`${params.rowLabel} ${rowNumber}: ingredient keys must stay aligned.`);
+    }
+
+    if (!ingredient.quantity) {
+      errors.push(`${params.rowLabel} ${rowNumber}: quantity is required.`);
+    } else if (
+      !Number.isInteger(ingredient.quantity) ||
+      ingredient.quantity < SHOP_INGREDIENT_QUANTITY_MIN ||
+      ingredient.quantity > SHOP_INGREDIENT_QUANTITY_MAX
+    ) {
+      errors.push(
+        `${params.rowLabel} ${rowNumber}: quantity must be a whole number from ${SHOP_INGREDIENT_QUANTITY_MIN} to ${SHOP_INGREDIENT_QUANTITY_MAX}.`
+      );
+    }
+
+    if (ingredientKey) {
+      if (params.requireKnownCatalogKey && !getShopIngredientCatalogEntry(ingredientKey)) {
+        errors.push(`${params.rowLabel} ${rowNumber}: unknown ingredient key "${ingredientKey}".`);
+      }
+      if (!params.requireKnownCatalogKey) {
+        if (seenSpecialKeys.has(ingredientKey)) {
+          errors.push(`${params.rowLabel} ${rowNumber}: duplicate ingredient key "${ingredientKey}".`);
+        } else {
+          seenSpecialKeys.add(ingredientKey);
+        }
+      }
+      return;
+    }
+
+    if (!ingredient.name) {
+      errors.push(`EN ${params.rowLabel.toLowerCase()} ${rowNumber}: name is required.`);
+    } else if (ingredient.name.length > SHOP_RECIPE_INGREDIENT_NAME_MAX) {
+      errors.push(
+        `EN ${params.rowLabel.toLowerCase()} ${rowNumber}: name must be ${SHOP_RECIPE_INGREDIENT_NAME_MAX} characters or fewer.`
+      );
+    }
+
+    if (!zhIngredient?.name) {
+      errors.push(`ZH ${params.rowLabel.toLowerCase()} ${rowNumber}: name is required.`);
+    } else if (zhIngredient.name.length > SHOP_RECIPE_INGREDIENT_NAME_MAX) {
+      errors.push(
+        `ZH ${params.rowLabel.toLowerCase()} ${rowNumber}: name must be ${SHOP_RECIPE_INGREDIENT_NAME_MAX} characters or fewer.`
+      );
+    }
+  });
+
+  return errors;
 }
 
 export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): string[] {
@@ -170,134 +256,42 @@ export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): strin
   if (normalized.baseIngredients.en.length === 0) {
     errors.push("Add at least one base ingredient.");
   }
-  if (normalized.baseIngredients.en.length !== normalized.baseIngredients.zh.length) {
-    errors.push("English and Chinese base ingredient rows must stay aligned.");
-  }
 
-  normalized.baseIngredients.en.forEach((ingredient, index) => {
-    const rowNumber = index + 1;
-    const zhIngredient = normalized.baseIngredients.zh[index];
-    const ingredientKey = ingredient.ingredientKey?.trim() ?? "";
-    const zhIngredientKey = zhIngredient?.ingredientKey?.trim() ?? "";
-    if (ingredientKey !== zhIngredientKey) {
-      errors.push(`Ingredient ${rowNumber}: ingredient icon keys must stay aligned.`);
+  errors.push(
+    ...validateLocalizedIngredientRows({
+      rows: normalized.baseIngredients,
+      rowLabel: "Ingredient",
+      requireKnownCatalogKey: true,
+    })
+  );
+  errors.push(
+    ...validateLocalizedIngredientRows({
+      rows: normalized.specialIngredients,
+      rowLabel: "Special ingredient",
+      requireKnownCatalogKey: false,
+    })
+  );
+
+  const allowedVariantOptionKeys = new Set(
+    listShopAdminVariantIngredientOptions(normalized.specialIngredients).map((option) => option.key)
+  );
+  const seenVariantSignatures = new Set<string>();
+  normalized.variantIconRules.forEach((rule, ruleIndex) => {
+    const ruleNumber = ruleIndex + 1;
+    if (!rule.iconPath) {
+      errors.push(`Variant ${ruleNumber}: icon path is required.`);
     }
 
-    const catalogEntry = ingredientKey ? getShopIngredientCatalogEntry(ingredientKey) : null;
-
-    if (!ingredient.quantity) {
-      errors.push(`Ingredient ${rowNumber}: quantity is required.`);
-    } else if (
-      !Number.isInteger(ingredient.quantity) ||
-      ingredient.quantity < SHOP_INGREDIENT_QUANTITY_MIN ||
-      ingredient.quantity > SHOP_INGREDIENT_QUANTITY_MAX
-    ) {
-      errors.push(
-        `Ingredient ${rowNumber}: quantity must be a whole number from ${SHOP_INGREDIENT_QUANTITY_MIN} to ${SHOP_INGREDIENT_QUANTITY_MAX}.`
-      );
+    const signature = rule.match.join("|");
+    if (seenVariantSignatures.has(signature)) {
+      errors.push(`Variant ${ruleNumber}: duplicate ingredient combination.`);
+    } else {
+      seenVariantSignatures.add(signature);
     }
 
-    if (ingredientKey) {
-      if (!catalogEntry) {
-        errors.push(`Ingredient ${rowNumber}: unknown ingredient icon key "${ingredientKey}".`);
-      }
-      return;
-    }
-
-    if (!ingredient.name) {
-      errors.push(`EN ingredient ${rowNumber}: name is required.`);
-    } else if (ingredient.name.length > SHOP_RECIPE_INGREDIENT_NAME_MAX) {
-      errors.push(
-        `EN ingredient ${rowNumber}: name must be ${SHOP_RECIPE_INGREDIENT_NAME_MAX} characters or fewer.`
-      );
-    }
-
-    if (!zhIngredient?.name) {
-      errors.push(`ZH ingredient ${rowNumber}: name is required.`);
-    } else if (zhIngredient.name.length > SHOP_RECIPE_INGREDIENT_NAME_MAX) {
-      errors.push(
-        `ZH ingredient ${rowNumber}: name must be ${SHOP_RECIPE_INGREDIENT_NAME_MAX} characters or fewer.`
-      );
-    }
-  });
-
-  if (
-    normalized.specialIngredientSlots.en.length !==
-    normalized.specialIngredientSlots.zh.length
-  ) {
-    errors.push("English and Chinese specialty ingredient slots must stay aligned.");
-  }
-
-  normalized.specialIngredientSlots.en.forEach((slot, slotIndex) => {
-    const slotNumber = slotIndex + 1;
-    const zhSlot = normalized.specialIngredientSlots.zh[slotIndex];
-    if (!slot.slotKey.trim()) {
-      errors.push(`Special ingredient slot ${slotNumber}: slot key is required.`);
-    }
-
-    if (!slot.label) {
-      errors.push(`EN special ingredient slot ${slotNumber}: label is required.`);
-    } else if (slot.label.length > SHOP_RECIPE_SPECIAL_LABEL_MAX) {
-      errors.push(
-        `EN special ingredient slot ${slotNumber}: label must be ${SHOP_RECIPE_SPECIAL_LABEL_MAX} characters or fewer.`
-      );
-    }
-
-    if (!zhSlot?.label) {
-      errors.push(`ZH special ingredient slot ${slotNumber}: label is required.`);
-    } else if (zhSlot.label.length > SHOP_RECIPE_SPECIAL_LABEL_MAX) {
-      errors.push(
-        `ZH special ingredient slot ${slotNumber}: label must be ${SHOP_RECIPE_SPECIAL_LABEL_MAX} characters or fewer.`
-      );
-    }
-
-    slot.options.forEach((option, optionIndex) => {
-      const optionNumber = optionIndex + 1;
-      const zhOption = zhSlot?.options[optionIndex];
-      if (!option.key.trim()) {
-        errors.push(
-          `Special ingredient slot ${slotNumber}, option ${optionNumber}: option key is required.`
-        );
-      }
-
-      if (!option.label) {
-        errors.push(
-          `EN special ingredient slot ${slotNumber}, option ${optionNumber}: label is required.`
-        );
-      } else if (option.label.length > SHOP_RECIPE_SPECIAL_LABEL_MAX) {
-        errors.push(
-          `EN special ingredient slot ${slotNumber}, option ${optionNumber}: label must be ${SHOP_RECIPE_SPECIAL_LABEL_MAX} characters or fewer.`
-        );
-      }
-
-      if (!zhOption?.label) {
-        errors.push(
-          `ZH special ingredient slot ${slotNumber}, option ${optionNumber}: label is required.`
-        );
-      } else if (zhOption.label.length > SHOP_RECIPE_SPECIAL_LABEL_MAX) {
-        errors.push(
-          `ZH special ingredient slot ${slotNumber}, option ${optionNumber}: label must be ${SHOP_RECIPE_SPECIAL_LABEL_MAX} characters or fewer.`
-        );
-      }
-
-      if (!option.effect) {
-        errors.push(
-          `EN special ingredient slot ${slotNumber}, option ${optionNumber}: note is required.`
-        );
-      } else if (option.effect.length > SHOP_RECIPE_SPECIAL_EFFECT_MAX) {
-        errors.push(
-          `EN special ingredient slot ${slotNumber}, option ${optionNumber}: note must be ${SHOP_RECIPE_SPECIAL_EFFECT_MAX} characters or fewer.`
-        );
-      }
-
-      if (!zhOption?.effect) {
-        errors.push(
-          `ZH special ingredient slot ${slotNumber}, option ${optionNumber}: note is required.`
-        );
-      } else if (zhOption.effect.length > SHOP_RECIPE_SPECIAL_EFFECT_MAX) {
-        errors.push(
-          `ZH special ingredient slot ${slotNumber}, option ${optionNumber}: note must be ${SHOP_RECIPE_SPECIAL_EFFECT_MAX} characters or fewer.`
-        );
+    rule.match.forEach((matchKey) => {
+      if (!allowedVariantOptionKeys.has(matchKey)) {
+        errors.push(`Variant ${ruleNumber}: unknown special ingredient key "${matchKey}".`);
       }
     });
   });
@@ -315,71 +309,13 @@ export function areShopRecipeAdminDraftsEqual(
   );
 }
 
-function mergeReadonlySlotLogicForLocale(params: {
-  persistedSlots: ShopSpecialIngredientSlot[];
-  draftSlots: ShopSpecialIngredientSlot[];
-}): ShopSpecialIngredientSlot[] {
-  const draftBySlotKey = new Map(params.draftSlots.map((slot) => [slot.slotKey, slot] as const));
-  if (draftBySlotKey.size !== params.draftSlots.length) {
-    throw new Error("Duplicate special ingredient slot keys are not allowed.");
-  }
-
-  return params.persistedSlots.map((persistedSlot) => {
-    const matchingDraftSlot = draftBySlotKey.get(persistedSlot.slotKey);
-    if (!matchingDraftSlot) {
-      throw new Error(`Special ingredient slot ${persistedSlot.slotKey} is missing from the draft.`);
-    }
-
-    const draftOptionByKey = new Map(
-      matchingDraftSlot.options.map((option) => [option.key, option] as const)
-    );
-    if (draftOptionByKey.size !== matchingDraftSlot.options.length) {
-      throw new Error(`Special ingredient slot ${persistedSlot.slotKey} contains duplicate option keys.`);
-    }
-
-    return {
-      slotKey: persistedSlot.slotKey,
-      label: matchingDraftSlot.label.trim(),
-      maxSelections: persistedSlot.maxSelections,
-      options: persistedSlot.options.map((persistedOption) => {
-        const matchingDraftOption = draftOptionByKey.get(persistedOption.key);
-        if (!matchingDraftOption) {
-          throw new Error(
-            `Special ingredient option ${persistedOption.key} is missing from slot ${persistedSlot.slotKey}.`
-          );
-        }
-
-        return {
-          key: persistedOption.key,
-          label: matchingDraftOption.label.trim(),
-          effect: matchingDraftOption.effect.trim(),
-        };
-      }),
-    };
-  });
-}
-
-export function mergeReadonlySpecialIngredientLogic(params: {
-  persistedSlots: ShopSpecialIngredientSlot[];
-  draftSlots: ShopLocalizedValue<ShopSpecialIngredientSlot[]>;
-}): ShopLocalizedValue<ShopSpecialIngredientSlot[]> {
-  return {
-    en: mergeReadonlySlotLogicForLocale({
-      persistedSlots: params.persistedSlots,
-      draftSlots: params.draftSlots.en,
-    }),
-    zh: mergeReadonlySlotLogicForLocale({
-      persistedSlots: params.persistedSlots,
-      draftSlots: params.draftSlots.zh,
-    }),
-  };
-}
-
-export function mergeReadonlyShopLocalizedIngredientRows(params: {
+function mergeLocalizedIngredientRows(params: {
   draftIngredients: ShopLocalizedValue<ShopIngredient[]>;
+  labelByKey?: ShopIngredientLabelLookup;
+  requireKnownCatalogKey: boolean;
 }): ShopLocalizedValue<ShopIngredient[]> {
   if (params.draftIngredients.en.length !== params.draftIngredients.zh.length) {
-    throw new Error("English and Chinese base ingredient rows must stay aligned.");
+    throw new Error("English and Chinese ingredient rows must stay aligned.");
   }
 
   const normalizedRows = params.draftIngredients.en.map((ingredient, index) => {
@@ -387,37 +323,91 @@ export function mergeReadonlyShopLocalizedIngredientRows(params: {
     const ingredientKey = ingredient.ingredientKey?.trim() ?? "";
     const zhIngredientKey = zhIngredient?.ingredientKey?.trim() ?? "";
     if (ingredientKey !== zhIngredientKey) {
-      throw new Error(`Ingredient ${index + 1}: ingredient icon keys must stay aligned.`);
+      throw new Error(`Ingredient ${index + 1}: ingredient keys must stay aligned.`);
     }
 
-    const catalogEntry = ingredientKey ? getShopIngredientCatalogEntry(ingredientKey) : null;
-    if (ingredientKey && !catalogEntry) {
-      throw new Error(`Ingredient ${index + 1}: unknown ingredient icon key "${ingredientKey}".`);
+    if (params.requireKnownCatalogKey && ingredientKey && !getShopIngredientCatalogEntry(ingredientKey)) {
+      throw new Error(`Ingredient ${index + 1}: unknown ingredient key "${ingredientKey}".`);
     }
 
     return {
-      catalogEntry,
+      ingredientKey,
       enIngredient: ingredient,
       zhIngredient,
     };
   });
 
   return {
-    en: normalizedRows.map(({ catalogEntry, enIngredient }) => {
+    en: normalizedRows.map(({ ingredientKey, enIngredient }) => {
+      const localizedLabel = ingredientKey
+        ? params.labelByKey?.get(ingredientKey) ?? getShopIngredientCatalogEntry(ingredientKey)?.label ?? null
+        : null;
+
       return {
-        ...(catalogEntry ? { ingredientKey: catalogEntry.key } : {}),
-        name: catalogEntry ? catalogEntry.label.en : enIngredient.name.trim(),
+        ...(ingredientKey ? { ingredientKey } : {}),
+        name: localizedLabel ? localizedLabel.en : enIngredient.name.trim(),
         quantity:
           parseShopIngredientQuantity(enIngredient.quantity) ?? SHOP_INGREDIENT_QUANTITY_MIN,
       };
     }),
-    zh: normalizedRows.map(({ catalogEntry, enIngredient, zhIngredient }) => ({
-      ...(catalogEntry ? { ingredientKey: catalogEntry.key } : {}),
-      name: catalogEntry ? catalogEntry.label.zh : zhIngredient.name.trim(),
-      quantity:
-        parseShopIngredientQuantity(zhIngredient.quantity) ??
-        parseShopIngredientQuantity(enIngredient.quantity) ??
-        SHOP_INGREDIENT_QUANTITY_MIN,
-    })),
+    zh: normalizedRows.map(({ ingredientKey, enIngredient, zhIngredient }) => {
+      const localizedLabel = ingredientKey
+        ? params.labelByKey?.get(ingredientKey) ?? getShopIngredientCatalogEntry(ingredientKey)?.label ?? null
+        : null;
+
+      return {
+        ...(ingredientKey ? { ingredientKey } : {}),
+        name: localizedLabel
+          ? localizedLabel.zh
+          : zhIngredient.name.trim(),
+        quantity:
+          parseShopIngredientQuantity(zhIngredient.quantity) ??
+          parseShopIngredientQuantity(enIngredient.quantity) ??
+          SHOP_INGREDIENT_QUANTITY_MIN,
+      };
+    }),
   };
+}
+
+export function mergeReadonlyShopLocalizedIngredientRows(params: {
+  draftIngredients: ShopLocalizedValue<ShopIngredient[]>;
+  labelByKey?: ShopIngredientLabelLookup;
+}): ShopLocalizedValue<ShopIngredient[]> {
+  return mergeLocalizedIngredientRows({
+    draftIngredients: params.draftIngredients,
+    labelByKey: params.labelByKey,
+    requireKnownCatalogKey: true,
+  });
+}
+
+export function mergeShopLocalizedSpecialIngredientRows(params: {
+  draftIngredients: ShopLocalizedValue<ShopIngredient[]>;
+  labelByKey?: ShopIngredientLabelLookup;
+}): ShopLocalizedValue<ShopIngredient[]> {
+  return mergeLocalizedIngredientRows({
+    draftIngredients: params.draftIngredients,
+    labelByKey: params.labelByKey,
+    requireKnownCatalogKey: false,
+  });
+}
+
+export function mergeReadonlyVariantIconRules(params: {
+  persistedRules: ShopVariantIconRule[];
+  draftRules: ShopVariantIconRule[];
+}): ShopVariantIconRule[] {
+  if (params.persistedRules.length !== params.draftRules.length) {
+    throw new Error("Variant icon rules must stay aligned.");
+  }
+
+  return params.persistedRules.map((persistedRule, index) => {
+    const draftRule = params.draftRules[index];
+    if (!draftRule) {
+      throw new Error(`Variant icon rule ${index + 1} is missing from the draft.`);
+    }
+
+    return {
+      iconPath: persistedRule.iconPath,
+      match: normalizeVariantMatchKeys(draftRule.match),
+    };
+  });
 }

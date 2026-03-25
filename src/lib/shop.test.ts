@@ -176,7 +176,7 @@ describe("normalizeUnlockShopRecipeResult", () => {
     });
   });
 
-  it("keeps the plain icon missing failure code", () => {
+  it("normalizes plain-icon failures", () => {
     expect(
       normalizeUnlockShopRecipeResult({
         success: false,
@@ -201,59 +201,33 @@ describe("getShopRecipeContentForLocale", () => {
           id: "recipe-1",
           slug: "bubble_tea",
           title: "Bubble Tea",
-          titleI18n: { en: "Bubble Tea", zh: "珍珠奶茶" },
+          titleI18n: { en: "Bubble Tea", zh: "\u73cd\u73e0\u5976\u8336" },
           displayOrder: 1,
           isActive: true,
           intro: "Milk tea",
-          introI18n: { en: "Milk tea", zh: "奶茶" },
+          introI18n: { en: "Milk tea", zh: "\u5976\u8336" },
           unlockCostCoins: 25,
           baseIngredients: [{ name: "Milk", quantity: 1 }],
           baseIngredientsI18n: {
             en: [{ name: "Milk", quantity: 1 }],
-            zh: [{ name: "牛奶", quantity: 1 }],
+            zh: [{ name: "\u725b\u5976", quantity: 1 }],
           },
-          specialIngredientSlots: [
-            {
-              slotKey: "specialty",
-              label: "Special Ingredient",
-              maxSelections: 1,
-              options: [{ key: "brown-sugar", label: "Brown Sugar", effect: "Wink" }],
-            },
+          specialIngredients: [
+            { ingredientKey: "brown-sugar", name: "Brown Sugar", quantity: 1 },
           ],
-          specialIngredientSlotsI18n: {
-            en: [
-              {
-                slotKey: "specialty",
-                label: "Special Ingredient",
-                maxSelections: 1,
-                options: [{ key: "brown-sugar", label: "Brown Sugar", effect: "Wink" }],
-              },
-            ],
-            zh: [
-              {
-                slotKey: "specialty",
-                label: "特殊材料",
-                maxSelections: 1,
-                options: [{ key: "brown-sugar", label: "黑糖", effect: "眨眼" }],
-              },
-            ],
+          specialIngredientsI18n: {
+            en: [{ ingredientKey: "brown-sugar", name: "Brown Sugar", quantity: 1 }],
+            zh: [{ ingredientKey: "brown-sugar", name: "\u9ed1\u7cd6", quantity: 1 }],
           },
           variantIconRules: [{ match: [], iconPath: "/rewards/bubble-tea_plain.png" }],
         },
         "zh"
       )
     ).toEqual({
-      title: "珍珠奶茶",
-      intro: "奶茶",
-      baseIngredients: [{ name: "牛奶", quantity: 1 }],
-      specialIngredientSlots: [
-        {
-          slotKey: "specialty",
-          label: "特殊材料",
-          maxSelections: 1,
-          options: [{ key: "brown-sugar", label: "黑糖", effect: "眨眼" }],
-        },
-      ],
+      title: "\u73cd\u73e0\u5976\u8336",
+      intro: "\u5976\u8336",
+      baseIngredients: [{ name: "\u725b\u5976", quantity: 1 }],
+      specialIngredients: [{ ingredientKey: "brown-sugar", name: "\u9ed1\u7cd6", quantity: 1 }],
     });
   });
 
@@ -275,8 +249,8 @@ describe("getShopRecipeContentForLocale", () => {
             en: [{ name: "Flour", quantity: 1 }],
             zh: [],
           },
-          specialIngredientSlots: [],
-          specialIngredientSlotsI18n: { en: [], zh: [] },
+          specialIngredients: [],
+          specialIngredientsI18n: { en: [], zh: [] },
           variantIconRules: [{ match: [], iconPath: "/rewards/cake_plain.png" }],
         },
         "zh"
@@ -285,7 +259,7 @@ describe("getShopRecipeContentForLocale", () => {
       title: "Cake",
       intro: "Soft cake",
       baseIngredients: [{ name: "Flour", quantity: 1 }],
-      specialIngredientSlots: [],
+      specialIngredients: [],
     });
   });
 });

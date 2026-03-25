@@ -3,11 +3,19 @@ import {
   buildShopAdminIngredientCatalogItems,
   type ShopAdminIngredientPricesResponse,
 } from "@/app/words/shop/shopIngredients";
+import type { ShopRecipe } from "@/app/words/shop/shop.types";
+import { normalizeShopLocalizedSpecialIngredients } from "@/lib/shop";
 import { getServerSupabaseClient, supabase } from "@/lib/supabaseClient";
 
 type ShopIngredientPriceRow = {
   ingredient_key: string;
   cost_coins: number;
+  label_i18n?: unknown;
+};
+
+type ShopRecipeSpecialIngredientRow = {
+  special_ingredient_slots: unknown;
+  special_ingredient_slots_i18n?: unknown;
 };
 
 async function authorizePlatformAdmin(request: NextRequest) {
@@ -96,25 +104,59 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return auth.error!;
   }
 
-  const { data, error } = await auth.adminClient
-    .from("shop_ingredient_prices")
-    .select("ingredient_key, cost_coins")
-    .order("ingredient_key", { ascending: true });
+  const [{ data: priceData, error: priceError }, { data: recipeData, error: recipeError }] =
+    await Promise.all([
+      auth.adminClient
+        .from("shop_ingredient_prices")
+        .select("ingredient_key, cost_coins, label_i18n")
+        .order("ingredient_key", { ascending: true }),
+      auth.adminClient
+        .from("shop_recipes")
+        .select("special_ingredient_slots, special_ingredient_slots_i18n"),
+    ]);
 
-  if (error) {
+  if (priceError || recipeError) {
     return NextResponse.json(
       { error: "Could not load ingredient prices." },
       { status: 500 }
     );
   }
 
+  const specialIngredientRecipes: Pick<ShopRecipe, "specialIngredientsI18n">[] = (
+    (recipeData ?? []) as ShopRecipeSpecialIngredientRow[]
+  ).map((row) => {
+    const specialIngredients = Array.isArray(row.special_ingredient_slots)
+      ? (row.special_ingredient_slots as ShopRecipe["specialIngredients"])
+      : [];
+    return {
+      specialIngredientsI18n: normalizeShopLocalizedSpecialIngredients(
+        row.special_ingredient_slots_i18n,
+        specialIngredients
+      ),
+    };
+  });
+
   const response: ShopAdminIngredientPricesResponse = {
     ingredients: buildShopAdminIngredientCatalogItems(
-      ((data ?? []) as ShopIngredientPriceRow[]).map((row) => ({
+      ((priceData ?? []) as ShopIngredientPriceRow[]).map((row) => ({
         ingredientKey: row.ingredient_key,
         costCoins: row.cost_coins,
         updatedAt: Date.now(),
-      }))
+        labelI18n:
+          row.label_i18n && typeof row.label_i18n === "object"
+            ? {
+                en:
+                  typeof (row.label_i18n as { en?: unknown }).en === "string"
+                    ? ((row.label_i18n as { en: string }).en ?? "").trim()
+                    : "",
+                zh:
+                  typeof (row.label_i18n as { zh?: unknown }).zh === "string"
+                    ? ((row.label_i18n as { zh: string }).zh ?? "").trim()
+                    : "",
+              }
+            : undefined,
+      })),
+      specialIngredientRecipes
     ),
   };
 
@@ -154,6 +196,19 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           typeof source.costCoins === "number" && Number.isFinite(source.costCoins)
             ? source.costCoins
             : NaN,
+        labelI18n:
+          source.label && typeof source.label === "object"
+            ? {
+                en:
+                  typeof (source.label as { en?: unknown }).en === "string"
+                    ? ((source.label as { en: string }).en ?? "").trim()
+                    : "",
+                zh:
+                  typeof (source.label as { zh?: unknown }).zh === "string"
+                    ? ((source.label as { zh: string }).zh ?? "").trim()
+                    : "",
+              }
+            : { en: "", zh: "" },
       };
     })
     .filter((ingredient) => ingredient.ingredientKey);
@@ -176,6 +231,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     normalizedIngredients.map((ingredient) => ({
       ingredient_key: ingredient.ingredientKey,
       cost_coins: ingredient.costCoins,
+      label_i18n: ingredient.labelI18n,
       updated_at: new Date().toISOString(),
     })),
     { onConflict: "ingredient_key" }

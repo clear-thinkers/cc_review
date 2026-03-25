@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ShopRecipe } from "@/app/words/shop/shop.types";
 import {
-  mergeReadonlySpecialIngredientLogic,
+  mergeReadonlyVariantIconRules,
+  mergeShopLocalizedSpecialIngredientRows,
   mergeReadonlyShopLocalizedIngredientRows,
   normalizeShopRecipeAdminDraft,
   validateShopRecipeAdminDraft,
@@ -12,7 +13,7 @@ import {
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedIntro,
-  normalizeShopLocalizedSpecialIngredientSlots,
+  normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedTitle,
 } from "@/lib/shop";
 import { getServerSupabaseClient, supabase } from "@/lib/supabaseClient";
@@ -34,11 +35,14 @@ interface SupabaseShopRecipeRow {
   special_ingredient_slots_i18n?: unknown;
 }
 
+interface SupabaseShopIngredientLabelRow {
+  ingredient_key: string;
+  label_i18n?: unknown;
+}
+
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
   const baseIngredients = normalizeShopIngredientList(row.base_ingredients, []);
-  const specialIngredientSlots = Array.isArray(row.special_ingredient_slots)
-    ? (row.special_ingredient_slots as ShopRecipe["specialIngredientSlots"])
-    : [];
+  const specialIngredients = normalizeShopIngredientList(row.special_ingredient_slots, []);
 
   return {
     id: row.id,
@@ -55,10 +59,10 @@ function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
       row.base_ingredients_i18n,
       baseIngredients
     ),
-    specialIngredientSlots,
-    specialIngredientSlotsI18n: normalizeShopLocalizedSpecialIngredientSlots(
+    specialIngredients,
+    specialIngredientsI18n: normalizeShopLocalizedSpecialIngredients(
       row.special_ingredient_slots_i18n,
-      specialIngredientSlots
+      specialIngredients
     ),
     variantIconRules: Array.isArray(row.variant_icon_rules)
       ? (row.variant_icon_rules as ShopRecipe["variantIconRules"])
@@ -191,7 +195,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     title: body.title,
     intro: body.intro,
     baseIngredients: body.baseIngredients,
-    specialIngredientSlots: body.specialIngredientSlots,
+    specialIngredients: body.specialIngredients,
+    variantIconRules: body.variantIconRules,
   });
 
   const validationErrors = validateShopRecipeAdminDraft(normalizedDraft);
@@ -220,15 +225,49 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   const existingRecipe = toShopRecipe(existingRow as SupabaseShopRecipeRow);
-  let mergedSpecialIngredientSlots;
+  const { data: ingredientLabelRows, error: ingredientLabelError } = await auth.adminClient
+    .from("shop_ingredient_prices")
+    .select("ingredient_key, label_i18n");
+
+  if (ingredientLabelError) {
+    return NextResponse.json(
+      { error: "Could not load shared ingredient labels." },
+      { status: 500 }
+    );
+  }
+
+  const ingredientLabelByKey = new Map(
+    ((ingredientLabelRows ?? []) as SupabaseShopIngredientLabelRow[])
+      .map((row) => {
+        if (!row.label_i18n || typeof row.label_i18n !== "object") {
+          return null;
+        }
+        const source = row.label_i18n as { en?: unknown; zh?: unknown };
+        return [
+          row.ingredient_key,
+          {
+            en: typeof source.en === "string" ? source.en.trim() : "",
+            zh: typeof source.zh === "string" ? source.zh.trim() : "",
+          },
+        ] as const;
+      })
+      .filter((entry): entry is readonly [string, { en: string; zh: string }] => entry !== null)
+  );
+  let mergedSpecialIngredients;
   let mergedBaseIngredients;
+  let mergedVariantIconRules;
   try {
-    mergedSpecialIngredientSlots = mergeReadonlySpecialIngredientLogic({
-      persistedSlots: existingRecipe.specialIngredientSlots,
-      draftSlots: normalizedDraft.specialIngredientSlots,
+    mergedSpecialIngredients = mergeShopLocalizedSpecialIngredientRows({
+      draftIngredients: normalizedDraft.specialIngredients,
+      labelByKey: ingredientLabelByKey,
     });
     mergedBaseIngredients = mergeReadonlyShopLocalizedIngredientRows({
       draftIngredients: normalizedDraft.baseIngredients,
+      labelByKey: ingredientLabelByKey,
+    });
+    mergedVariantIconRules = mergeReadonlyVariantIconRules({
+      persistedRules: existingRecipe.variantIconRules,
+      draftRules: normalizedDraft.variantIconRules,
     });
   } catch (error) {
     const message =
@@ -247,8 +286,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       intro_i18n: normalizedDraft.intro,
       base_ingredients: mergedBaseIngredients.en,
       base_ingredients_i18n: mergedBaseIngredients,
-      special_ingredient_slots: mergedSpecialIngredientSlots,
-      special_ingredient_slots_i18n: normalizedDraft.specialIngredientSlots,
+      special_ingredient_slots: mergedSpecialIngredients.en,
+      special_ingredient_slots_i18n: mergedSpecialIngredients,
+      variant_icon_rules: mergedVariantIconRules,
       updated_at: new Date().toISOString(),
     })
     .eq("id", normalizedDraft.recipeId)

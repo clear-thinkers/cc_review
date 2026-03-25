@@ -4,7 +4,6 @@ import type {
   ShopLocale,
   ShopLocalizedValue,
   ShopRecipe,
-  ShopSpecialIngredientSlot,
   ShopVariantIconRule,
   UnlockShopRecipeResult,
 } from "@/app/words/shop/shop.types";
@@ -122,13 +121,6 @@ export function normalizeShopIngredientList(
   });
 }
 
-function normalizeShopSpecialIngredientSlotList(
-  raw: unknown,
-  fallback: ShopSpecialIngredientSlot[]
-): ShopSpecialIngredientSlot[] {
-  return Array.isArray(raw) ? (raw as ShopSpecialIngredientSlot[]) : fallback;
-}
-
 function normalizeShopLocalizedStringValue(
   raw: unknown,
   fallback: string
@@ -171,15 +163,11 @@ export function normalizeShopLocalizedIngredients(
   return normalizeShopLocalizedListValue(raw, fallback, normalizeShopIngredientList);
 }
 
-export function normalizeShopLocalizedSpecialIngredientSlots(
+export function normalizeShopLocalizedSpecialIngredients(
   raw: unknown,
-  fallback: ShopSpecialIngredientSlot[]
-): ShopLocalizedValue<ShopSpecialIngredientSlot[]> {
-  return normalizeShopLocalizedListValue(
-    raw,
-    fallback,
-    normalizeShopSpecialIngredientSlotList
-  );
+  fallback: ShopIngredient[]
+): ShopLocalizedValue<ShopIngredient[]> {
+  return normalizeShopLocalizedListValue(raw, fallback, normalizeShopIngredientList);
 }
 
 export function resolveShopLocalizedString(
@@ -220,7 +208,7 @@ export function getShopRecipeContentForLocale(
   title: string;
   intro: string;
   baseIngredients: ShopIngredient[];
-  specialIngredientSlots: ShopSpecialIngredientSlot[];
+  specialIngredients: ShopIngredient[];
 } {
   return {
     title: resolveShopLocalizedString(recipe.titleI18n, locale, recipe.title),
@@ -230,10 +218,10 @@ export function getShopRecipeContentForLocale(
       locale,
       recipe.baseIngredients
     ),
-    specialIngredientSlots: resolveShopLocalizedList(
-      recipe.specialIngredientSlotsI18n,
+    specialIngredients: resolveShopLocalizedList(
+      recipe.specialIngredientsI18n,
       locale,
-      recipe.specialIngredientSlots
+      recipe.specialIngredients
     ),
   };
 }

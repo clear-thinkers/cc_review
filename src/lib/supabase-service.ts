@@ -28,7 +28,7 @@ import {
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedIntro,
-  normalizeShopLocalizedSpecialIngredientSlots,
+  normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedTitle,
 } from "./shop";
 import type {
@@ -247,17 +247,29 @@ function toReviewTestSession(
 
 // ─── Internal: Wallet row converters ────────────────────────────────────────
 
-function toWallet(row: {
+interface SupabaseWalletRow {
   user_id: string;
+  family_id?: string;
   total_coins: number;
   last_updated_at: string;
   version: number;
-}): Wallet {
+}
+
+function toWallet(row: SupabaseWalletRow): Wallet {
   return {
     userId: row.user_id,
     totalCoins: row.total_coins,
     lastUpdatedAt: new Date(row.last_updated_at).getTime(),
     version: row.version,
+  };
+}
+
+function createZeroWallet(userId: string): Wallet {
+  return {
+    userId,
+    totalCoins: 0,
+    lastUpdatedAt: Date.now(),
+    version: 1,
   };
 }
 
@@ -302,13 +314,12 @@ interface SupabaseShopIngredientPriceRow {
   ingredient_key: string;
   cost_coins: number;
   updated_at: string;
+  label_i18n?: unknown;
 }
 
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
   const baseIngredients = normalizeShopIngredientList(row.base_ingredients, []);
-  const specialIngredientSlots = Array.isArray(row.special_ingredient_slots)
-    ? (row.special_ingredient_slots as ShopRecipe["specialIngredientSlots"])
-    : [];
+  const specialIngredients = normalizeShopIngredientList(row.special_ingredient_slots, []);
 
   return {
     id: row.id,
@@ -325,10 +336,10 @@ function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
       row.base_ingredients_i18n,
       baseIngredients
     ),
-    specialIngredientSlots,
-    specialIngredientSlotsI18n: normalizeShopLocalizedSpecialIngredientSlots(
+    specialIngredients,
+    specialIngredientsI18n: normalizeShopLocalizedSpecialIngredients(
       row.special_ingredient_slots_i18n,
-      specialIngredientSlots
+      specialIngredients
     ),
     variantIconRules: Array.isArray(row.variant_icon_rules)
       ? (row.variant_icon_rules as ShopRecipe["variantIconRules"])
@@ -363,6 +374,20 @@ function toShopIngredientPrice(row: SupabaseShopIngredientPriceRow): ShopIngredi
     ingredientKey: row.ingredient_key,
     costCoins: row.cost_coins,
     updatedAt: new Date(row.updated_at).getTime(),
+    ...(row.label_i18n && typeof row.label_i18n === "object"
+      ? {
+          labelI18n: {
+            en:
+              typeof (row.label_i18n as { en?: unknown }).en === "string"
+                ? ((row.label_i18n as { en: string }).en ?? "").trim()
+                : "",
+            zh:
+              typeof (row.label_i18n as { zh?: unknown }).zh === "string"
+                ? ((row.label_i18n as { zh: string }).zh ?? "").trim()
+                : "",
+          },
+        }
+      : {}),
   };
 }
 
@@ -802,13 +827,18 @@ export async function completeReviewTestSession(sessionId: string): Promise<void
 
 // ─── Quiz Sessions ──────────────────────────────────────────────────────────
 
-export async function getAllQuizSessions(): Promise<QuizSession[]> {
+export async function getAllQuizSessions(targetUserId?: string): Promise<QuizSession[]> {
   const { familyId } = await getSessionMetadata();
-  const { data, error } = await supabase
+  let query = supabase
     .from("quiz_sessions")
     .select("*")
-    .eq("family_id", familyId)
-    .order("created_at", { ascending: false });
+    .eq("family_id", familyId);
+
+  if (targetUserId) {
+    query = query.eq("user_id", targetUserId);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
   if (error) {
     console.error("getAllQuizSessions error:", error);
     return [];
@@ -835,30 +865,45 @@ export async function createQuizSession(session: QuizSession): Promise<void> {
   if (error) throw new Error(`createQuizSession: ${error.message}`);
 }
 
-export async function clearAllQuizSessions(): Promise<void> {
+export async function clearAllQuizSessions(targetUserId?: string): Promise<void> {
   const { familyId } = await getSessionMetadata();
-  const { error } = await supabase
+  let query = supabase
     .from("quiz_sessions")
     .delete()
     .eq("family_id", familyId)
     .gte("id", "");
+
+  if (targetUserId) {
+    query = query.eq("user_id", targetUserId);
+  }
+
+  const { error } = await query;
   if (error) throw new Error(`clearAllQuizSessions: ${error.message}`);
 }
 
 // ─── Wallet ─────────────────────────────────────────────────────────────────
 
-export async function getOrCreateWallet(): Promise<Wallet> {
+interface RecordQuizSessionRpcRow extends SupabaseWalletRow {
+  family_id: string;
+}
+
+export async function getOrCreateWallet(targetUserId?: string): Promise<Wallet> {
   const { familyId, userId } = await getSessionMetadata();
+  const walletUserId = targetUserId ?? userId;
 
   // Try to read existing wallet
   const { data, error: readErr } = await supabase
     .from("wallets")
     .select("*")
-    .eq("user_id", userId)
+    .eq("user_id", walletUserId)
     .maybeSingle();
   if (readErr) throw new Error(`getOrCreateWallet read: ${readErr.message}`);
 
   if (data) return toWallet(data);
+
+  if (walletUserId !== userId) {
+    return createZeroWallet(walletUserId);
+  }
 
   // Create default wallet
   const now = new Date().toISOString();
@@ -875,6 +920,29 @@ export async function getOrCreateWallet(): Promise<Wallet> {
     .single();
   if (writeErr) throw new Error(`getOrCreateWallet write: ${writeErr.message}`);
   return toWallet(created);
+}
+
+export async function recordQuizSession(session: QuizSession): Promise<Wallet> {
+  const { data, error } = await supabase.rpc("record_quiz_session", {
+    p_id: session.id,
+    p_created_at: new Date(session.createdAt).toISOString(),
+    p_session_type: session.sessionType,
+    p_grade_data: session.gradeData,
+    p_fully_correct_count: session.fullyCorrectCount,
+    p_failed_count: session.failedCount,
+    p_partially_correct_count: session.partiallyCorrectCount,
+    p_total_grades: session.totalGrades,
+    p_duration_seconds: session.durationSeconds,
+    p_coins_earned: session.coinsEarned,
+  });
+  if (error) throw new Error(`recordQuizSession: ${error.message}`);
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new Error("recordQuizSession: no wallet row returned");
+  }
+
+  return toWallet(row as RecordQuizSessionRpcRow);
 }
 
 export async function updateWallet(coinsEarned: number): Promise<Wallet> {
@@ -923,24 +991,26 @@ export async function listShopIngredientPrices(): Promise<ShopIngredientPrice[]>
   return ((data ?? []) as SupabaseShopIngredientPriceRow[]).map(toShopIngredientPrice);
 }
 
-export async function listShopRecipeUnlocks(): Promise<ShopRecipeUnlock[]> {
+export async function listShopRecipeUnlocks(targetUserId?: string): Promise<ShopRecipeUnlock[]> {
   const { familyId, userId } = await getSessionMetadata();
+  const unlockUserId = targetUserId ?? userId;
   const { data, error } = await supabase
     .from("shop_recipe_unlocks")
     .select("*")
     .eq("family_id", familyId)
-    .eq("user_id", userId);
+    .eq("user_id", unlockUserId);
   if (error) throw new Error(`listShopRecipeUnlocks: ${error.message}`);
   return ((data ?? []) as SupabaseShopRecipeUnlockRow[]).map(toShopRecipeUnlock);
 }
 
-export async function listShopTransactions(): Promise<ShopTransaction[]> {
+export async function listShopTransactions(targetUserId?: string): Promise<ShopTransaction[]> {
   const { familyId, userId } = await getSessionMetadata();
+  const transactionUserId = targetUserId ?? userId;
   const { data, error } = await supabase
     .from("shop_coin_transactions")
     .select("*")
     .eq("family_id", familyId)
-    .eq("user_id", userId)
+    .eq("user_id", transactionUserId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(`listShopTransactions: ${error.message}`);
   return ((data ?? []) as SupabaseShopTransactionRow[]).map(toShopTransaction);

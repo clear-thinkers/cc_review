@@ -12,19 +12,6 @@ export type ShopIngredient = {
   costCoins?: number;
 };
 
-export type ShopSpecialIngredientOption = {
-  key: string;
-  label: string;
-  effect: string;
-};
-
-export type ShopSpecialIngredientSlot = {
-  slotKey: string;
-  label: string;
-  maxSelections: number;
-  options: ShopSpecialIngredientOption[];
-};
-
 export type ShopVariantIconRule = {
   match: string[];
   iconPath: string;
@@ -42,8 +29,8 @@ export type ShopRecipe = {
   unlockCostCoins: number;
   baseIngredients: ShopIngredient[];
   baseIngredientsI18n: ShopLocalizedValue<ShopIngredient[]>;
-  specialIngredientSlots: ShopSpecialIngredientSlot[];
-  specialIngredientSlotsI18n: ShopLocalizedValue<ShopSpecialIngredientSlot[]>;
+  specialIngredients: ShopIngredient[];
+  specialIngredientsI18n: ShopLocalizedValue<ShopIngredient[]>;
   variantIconRules: ShopVariantIconRule[];
 };
 
@@ -58,6 +45,7 @@ export type ShopIngredientPrice = {
   ingredientKey: string;
   costCoins: number;
   updatedAt: number;
+  labelI18n?: ShopLocalizedValue<string>;
 };
 
 export type ShopTransactionAction = "unlock_recipe";

@@ -3,6 +3,7 @@ import type {
   ShopIngredientPrice,
   ShopLocale,
   ShopLocalizedValue,
+  ShopRecipe,
 } from "./shop.types";
 
 export type ShopIngredientCatalogEntry = {
@@ -13,7 +14,14 @@ export type ShopIngredientCatalogEntry = {
   aliases?: string[];
 };
 
-export type ShopAdminIngredientCatalogItem = ShopIngredientCatalogEntry & {
+export type ShopAdminIngredientCatalogKind = "basic" | "special";
+
+export type ShopAdminIngredientCatalogItem = {
+  key: string;
+  label: ShopLocalizedValue<string>;
+  defaultCostCoins: number;
+  iconPath: string | null;
+  kind: ShopAdminIngredientCatalogKind;
   costCoins: number;
 };
 
@@ -240,13 +248,102 @@ export function buildShopIngredientFromCatalog(
   };
 }
 
-export function buildShopAdminIngredientCatalogItems(
+function mergeLocalizedValue(
+  current: ShopLocalizedValue<string>,
+  incoming: ShopLocalizedValue<string>
+): ShopLocalizedValue<string> {
+  return {
+    en: current.en || incoming.en,
+    zh: current.zh || incoming.zh,
+  };
+}
+
+function resolveIngredientLabelOverride(
+  entryKey: string,
+  fallbackLabel: ShopLocalizedValue<string>,
   prices: ShopIngredientPrice[]
+): ShopLocalizedValue<string> {
+  const matchingPrice = prices.find((price) => price.ingredientKey === entryKey);
+  if (!matchingPrice?.labelI18n) {
+    return fallbackLabel;
+  }
+
+  return {
+    en: matchingPrice.labelI18n.en.trim() || fallbackLabel.en,
+    zh: matchingPrice.labelI18n.zh.trim() || fallbackLabel.zh,
+  };
+}
+
+function listShopSpecialIngredientCatalogEntries(
+  recipes: Pick<ShopRecipe, "specialIngredientsI18n">[]
+): Array<{
+  key: string;
+  label: ShopLocalizedValue<string>;
+}> {
+  const entriesByKey = new Map<
+    string,
+    {
+      key: string;
+      label: ShopLocalizedValue<string>;
+    }
+  >();
+
+  for (const recipe of recipes) {
+    recipe.specialIngredientsI18n.en.forEach((englishIngredient, ingredientIndex) => {
+      const chineseIngredient = recipe.specialIngredientsI18n.zh[ingredientIndex];
+      const key = englishIngredient.ingredientKey?.trim() ?? "";
+        if (!key) {
+          return;
+        }
+
+        const nextEntry = {
+          key,
+          label: {
+            en: englishIngredient.name.trim() || key,
+            zh: chineseIngredient?.name.trim() || englishIngredient.name.trim() || key,
+          },
+        };
+
+        const existingEntry = entriesByKey.get(key);
+        if (!existingEntry) {
+          entriesByKey.set(key, nextEntry);
+          return;
+        }
+
+        entriesByKey.set(key, {
+          key,
+          label: mergeLocalizedValue(existingEntry.label, nextEntry.label),
+        });
+    });
+  }
+
+  return [...entriesByKey.values()].sort((left, right) => left.label.en.localeCompare(right.label.en));
+}
+
+export function buildShopAdminIngredientCatalogItems(
+  prices: ShopIngredientPrice[],
+  recipes: Pick<ShopRecipe, "specialIngredientsI18n">[] = []
 ): ShopAdminIngredientCatalogItem[] {
   const priceByKey = new Map(prices.map((price) => [price.ingredientKey, price.costCoins] as const));
 
-  return SHOP_INGREDIENT_CATALOG.map((entry) => ({
-    ...entry,
+  const basicIngredients = SHOP_INGREDIENT_CATALOG.map((entry) => ({
+    key: entry.key,
+    label: resolveIngredientLabelOverride(entry.key, entry.label, prices),
+    defaultCostCoins: entry.defaultCostCoins,
+    iconPath: entry.iconPath,
+    kind: "basic" as const,
     costCoins: priceByKey.get(entry.key) ?? entry.defaultCostCoins,
   }));
+  const specialIngredients = listShopSpecialIngredientCatalogEntries(recipes)
+    .filter((entry) => !SHOP_INGREDIENT_CATALOG_BY_KEY.has(entry.key))
+    .map((entry) => ({
+      key: entry.key,
+      label: resolveIngredientLabelOverride(entry.key, entry.label, prices),
+      defaultCostCoins: 0,
+      iconPath: null,
+      kind: "special" as const,
+      costCoins: priceByKey.get(entry.key) ?? 0,
+    }));
+
+  return [...basicIngredients, ...specialIngredients];
 }

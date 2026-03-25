@@ -13,15 +13,15 @@ import {
 import type { ShopIngredient, ShopLocale, ShopRecipe } from "../shop/shop.types";
 import {
   type ShopAdminIngredientCatalogItem,
+  type ShopAdminIngredientCatalogKind,
   type ShopAdminIngredientPricesResponse,
-  buildShopIngredientFromCatalog,
   getShopIngredientCatalogEntry,
-  listShopIngredientCatalog,
 } from "../shop/shopIngredients";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
   areShopRecipeAdminDraftsEqual,
   buildShopRecipeAdminDraft,
+  listShopAdminVariantIngredientOptions,
   validateShopRecipeAdminDraft,
   type ShopAdminRecipesResponse,
   type ShopRecipeAdminDraft,
@@ -29,6 +29,7 @@ import {
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type NoticeState = { kind: "success" | "error"; message: string } | null;
+type IngredientPriceFilter = "all" | ShopAdminIngredientCatalogKind;
 
 const PANEL = "rounded-[1.5rem] border border-[#e3dac6] bg-[#fffdf8] p-5 md:p-6";
 const LABEL = "shop-admin-label text-sm font-semibold leading-6 text-[#8b7c5a]";
@@ -39,6 +40,10 @@ const READONLY =
 
 function getRecipeIconPath(recipe: ShopRecipe): string | null {
   return resolvePlainShopRecipeIconPath(recipe.variantIconRules) ?? recipe.variantIconRules[0]?.iconPath ?? null;
+}
+
+function isPlainVariantRuleIcon(iconPath: string): boolean {
+  return iconPath.trim().toLowerCase().split("/").at(-1)?.includes("plain") ?? false;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -60,11 +65,22 @@ function clearIngredientKey(ingredient: ShopIngredient): ShopIngredient {
   return next;
 }
 
+function buildIngredientFromCatalogItem(
+  ingredient: ShopAdminIngredientCatalogItem,
+  locale: ShopLocale,
+  quantity: number
+): ShopIngredient {
+  return {
+    ingredientKey: ingredient.key,
+    name: ingredient.label[locale],
+    quantity,
+  };
+}
+
 export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const locale = useLocale();
   const session = useSession();
   const strings = vm.str.shopAdmin;
-  const ingredientCatalog = listShopIngredientCatalog();
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [recipes, setRecipes] = useState<ShopRecipe[]>([]);
   const [ingredientCatalogBaseline, setIngredientCatalogBaseline] = useState<
@@ -81,6 +97,8 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [isSaving, setIsSaving] = useState(false);
   const [ingredientNotice, setIngredientNotice] = useState<NoticeState>(null);
   const [isSavingIngredientPrices, setIsSavingIngredientPrices] = useState(false);
+  const [ingredientPriceFilter, setIngredientPriceFilter] =
+    useState<IngredientPriceFilter>("all");
 
   const selectedRecipe = useMemo(
     () => recipes.find((recipe) => recipe.id === selectedRecipeId) ?? null,
@@ -101,15 +119,44 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         ingredientCatalogDraft.map((ingredient) => ({
           key: ingredient.key,
           costCoins: ingredient.costCoins,
+          label: ingredient.label,
         }))
       ) !==
       JSON.stringify(
         ingredientCatalogBaseline.map((ingredient) => ({
           key: ingredient.key,
           costCoins: ingredient.costCoins,
+          label: ingredient.label,
         }))
       ),
     [ingredientCatalogBaseline, ingredientCatalogDraft]
+  );
+  const filteredIngredientCatalogDraft = useMemo(
+    () =>
+      ingredientPriceFilter === "all"
+        ? ingredientCatalogDraft
+        : ingredientCatalogDraft.filter((ingredient) => ingredient.kind === ingredientPriceFilter),
+    [ingredientCatalogDraft, ingredientPriceFilter]
+  );
+  const baseIngredientCatalog = useMemo(
+    () => ingredientCatalogDraft.filter((ingredient) => ingredient.kind === "basic"),
+    [ingredientCatalogDraft]
+  );
+  const specialIngredientCatalog = useMemo(
+    () => ingredientCatalogDraft.filter((ingredient) => ingredient.kind === "special"),
+    [ingredientCatalogDraft]
+  );
+  const ingredientCatalogItemByKey = useMemo(
+    () => new Map(ingredientCatalogDraft.map((ingredient) => [ingredient.key, ingredient] as const)),
+    [ingredientCatalogDraft]
+  );
+  const variantIngredientOptions = useMemo(
+    () => (draft ? listShopAdminVariantIngredientOptions(draft.specialIngredients) : []),
+    [draft]
+  );
+  const variantIngredientOptionByKey = useMemo(
+    () => new Map(variantIngredientOptions.map((option) => [option.key, option] as const)),
+    [variantIngredientOptions]
   );
 
   useEffect(() => {
@@ -298,13 +345,13 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         return next;
       }
 
-      const entry = getShopIngredientCatalogEntry(ingredientKey);
+      const entry = ingredientCatalogItemByKey.get(ingredientKey) ?? null;
       if (!entry) {
         return current;
       }
 
-      next.baseIngredients.en[index] = buildShopIngredientFromCatalog(entry, "en", quantity);
-      next.baseIngredients.zh[index] = buildShopIngredientFromCatalog(entry, "zh", quantity);
+      next.baseIngredients.en[index] = buildIngredientFromCatalogItem(entry, "en", quantity);
+      next.baseIngredients.zh[index] = buildIngredientFromCatalogItem(entry, "zh", quantity);
       return next;
     });
   }
@@ -329,40 +376,137 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     }));
   }
 
-  function updateSlotLabel(targetLocale: ShopLocale, slotIndex: number, value: string) {
+  function updateSpecialIngredientName(targetLocale: ShopLocale, index: number, value: string) {
+    updateDraft((current) => {
+      const next = {
+        ...current,
+        specialIngredients: {
+          en: current.specialIngredients.en.map((ingredient) => ({ ...ingredient })),
+          zh: current.specialIngredients.zh.map((ingredient) => ({ ...ingredient })),
+        },
+      };
+
+      next.specialIngredients[targetLocale][index] = {
+        ...next.specialIngredients[targetLocale][index],
+        name: value,
+      };
+      return next;
+    });
+  }
+
+  function updateSpecialIngredientQuantity(index: number, rawValue: string) {
+    updateDraft((current) => {
+      const next = {
+        ...current,
+        specialIngredients: {
+          en: current.specialIngredients.en.map((ingredient) => ({ ...ingredient })),
+          zh: current.specialIngredients.zh.map((ingredient) => ({ ...ingredient })),
+        },
+      };
+      const parsedQuantity =
+        parseShopIngredientQuantity(rawValue) ?? SHOP_INGREDIENT_QUANTITY_MIN;
+      next.specialIngredients.en[index] = {
+        ...next.specialIngredients.en[index],
+        quantity: parsedQuantity,
+      };
+      next.specialIngredients.zh[index] = {
+        ...next.specialIngredients.zh[index],
+        quantity: parsedQuantity,
+      };
+      return next;
+    });
+  }
+
+  function addSpecialIngredientRow() {
     updateDraft((current) => ({
       ...current,
-      specialIngredientSlots: {
-        ...current.specialIngredientSlots,
-        [targetLocale]: current.specialIngredientSlots[targetLocale].map((slot, currentIndex) =>
-          currentIndex === slotIndex ? { ...slot, label: value } : slot
-        ),
+      specialIngredients: {
+        en: [
+          ...current.specialIngredients.en,
+          { name: "", quantity: SHOP_INGREDIENT_QUANTITY_MIN },
+        ],
+        zh: [
+          ...current.specialIngredients.zh,
+          { name: "", quantity: SHOP_INGREDIENT_QUANTITY_MIN },
+        ],
       },
     }));
   }
 
-  function updateOptionField(
-    targetLocale: ShopLocale,
-    slotIndex: number,
-    optionIndex: number,
-    field: "label" | "effect",
-    value: string
-  ) {
+  function updateSpecialIngredientCatalogSelection(index: number, ingredientKey: string) {
+    updateDraft((current) => {
+      const next = {
+        ...current,
+        specialIngredients: {
+          en: current.specialIngredients.en.map((ingredient) => ({ ...ingredient })),
+          zh: current.specialIngredients.zh.map((ingredient) => ({ ...ingredient })),
+        },
+      };
+      const quantity =
+        next.specialIngredients.en[index]?.quantity ?? SHOP_INGREDIENT_QUANTITY_MIN;
+
+      if (!ingredientKey) {
+        next.specialIngredients.en[index] = clearIngredientKey(next.specialIngredients.en[index]);
+        next.specialIngredients.zh[index] = clearIngredientKey(next.specialIngredients.zh[index]);
+        return next;
+      }
+
+      const entry = ingredientCatalogItemByKey.get(ingredientKey) ?? null;
+      if (!entry) {
+        next.specialIngredients.en[index] = {
+          ...next.specialIngredients.en[index],
+          ingredientKey,
+        };
+        next.specialIngredients.zh[index] = {
+          ...next.specialIngredients.zh[index],
+          ingredientKey,
+        };
+        return next;
+      }
+
+      next.specialIngredients.en[index] = buildIngredientFromCatalogItem(entry, "en", quantity);
+      next.specialIngredients.zh[index] = buildIngredientFromCatalogItem(entry, "zh", quantity);
+      return next;
+    });
+  }
+
+  function moveSpecialIngredient(index: number, direction: -1 | 1) {
     updateDraft((current) => ({
       ...current,
-      specialIngredientSlots: {
-        ...current.specialIngredientSlots,
-        [targetLocale]: current.specialIngredientSlots[targetLocale].map((slot, currentSlotIndex) =>
-          currentSlotIndex === slotIndex
-            ? {
-                ...slot,
-                options: slot.options.map((option, currentOptionIndex) =>
-                  currentOptionIndex === optionIndex ? { ...option, [field]: value } : option
-                ),
-              }
-            : slot
-        ),
+      specialIngredients: {
+        en: swapItems(current.specialIngredients.en, index, direction),
+        zh: swapItems(current.specialIngredients.zh, index, direction),
       },
+    }));
+  }
+
+  function removeSpecialIngredient(index: number) {
+    updateDraft((current) => ({
+      ...current,
+      specialIngredients: {
+        en: current.specialIngredients.en.filter((_, rowIndex) => rowIndex !== index),
+        zh: current.specialIngredients.zh.filter((_, rowIndex) => rowIndex !== index),
+      },
+    }));
+  }
+
+  function updateVariantRuleMatch(ruleIndex: number, ingredientKey: string, checked: boolean) {
+    updateDraft((current) => ({
+      ...current,
+      variantIconRules: current.variantIconRules.map((rule, currentIndex) => {
+        if (currentIndex !== ruleIndex) {
+          return rule;
+        }
+
+        const nextMatch = checked
+          ? [...rule.match, ingredientKey]
+          : rule.match.filter((key) => key !== ingredientKey);
+
+        return {
+          ...rule,
+          match: Array.from(new Set(nextMatch)).sort((left, right) => left.localeCompare(right)),
+        };
+      }),
     }));
   }
 
@@ -409,15 +553,36 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
   }
 
-  function updateIngredientCatalogPrice(index: number, rawValue: string) {
+  function updateIngredientCatalogPrice(ingredientKey: string, rawValue: string) {
     const parsedValue = Number.parseInt(rawValue, 10);
     setIngredientCatalogDraft((current) =>
-      current.map((ingredient, currentIndex) =>
-        currentIndex === index
+      current.map((ingredient) =>
+        ingredient.key === ingredientKey
           ? {
               ...ingredient,
               costCoins:
                 Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : ingredient.costCoins,
+            }
+          : ingredient
+      )
+    );
+    setIngredientNotice(null);
+  }
+
+  function updateIngredientCatalogLabel(
+    ingredientKey: string,
+    targetLocale: ShopLocale,
+    value: string
+  ) {
+    setIngredientCatalogDraft((current) =>
+      current.map((ingredient) =>
+        ingredient.key === ingredientKey
+          ? {
+              ...ingredient,
+              label: {
+                ...ingredient.label,
+                [targetLocale]: value,
+              },
             }
           : ingredient
       )
@@ -443,6 +608,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           ingredients: ingredientCatalogDraft.map((ingredient) => ({
             key: ingredient.key,
             costCoins: ingredient.costCoins,
+            label: ingredient.label,
           })),
         }),
       });
@@ -651,9 +817,9 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             <div className="mt-5 space-y-4">
               {draft.baseIngredients.en.map((englishIngredient, ingredientIndex) => {
                 const chineseIngredient = draft.baseIngredients.zh[ingredientIndex];
-                const selectedIngredientCatalogEntry = getShopIngredientCatalogEntry(
-                  englishIngredient.ingredientKey
-                );
+                const selectedIngredientCatalogEntry =
+                  ingredientCatalogItemByKey.get(englishIngredient.ingredientKey ?? "") ??
+                  getShopIngredientCatalogEntry(englishIngredient.ingredientKey);
                 return (
                   <div key={`${selectedRecipe.id}-${ingredientIndex}`} className="rounded-xl border border-[#e4dac7] bg-white p-4">
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_150px]">
@@ -667,7 +833,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                           className={INPUT}
                         >
                           <option value="">{strings.ingredients.customOption}</option>
-                          {ingredientCatalog.map((catalogEntry) => (
+                          {baseIngredientCatalog.map((catalogEntry) => (
                             <option key={catalogEntry.key} value={catalogEntry.key}>
                               {catalogEntry.label[locale]}
                             </option>
@@ -704,18 +870,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                       </div>
                     </div>
 
-                    {selectedIngredientCatalogEntry ? (
-                      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                        <label className="block">
-                          <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
-                          <div className={READONLY}>{selectedIngredientCatalogEntry.label.en}</div>
-                        </label>
-                        <label className="block">
-                          <span className={LABEL}>{strings.ingredients.nameChinese}</span>
-                          <div className={READONLY}>{selectedIngredientCatalogEntry.label.zh}</div>
-                        </label>
-                      </div>
-                    ) : (
+                    {selectedIngredientCatalogEntry ? null : (
                       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                         <label className="block">
                           <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
@@ -745,58 +900,88 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             </div>
             <p className="mt-2 text-sm leading-7 text-[#627665]">{strings.specialty.helper}</p>
 
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-[#627665]">{strings.specialty.variantAvailable}</div>
+              <button type="button" onClick={addSpecialIngredientRow} className="shop-admin-pill border border-[#d2b15b] bg-[#fff4d9] px-4 py-2 text-sm font-semibold text-[#8b6f2f]">
+                {strings.ingredients.add}
+              </button>
+            </div>
+
             <div className="mt-5 space-y-5">
-              {draft.specialIngredientSlots.en.length === 0 ? (
+              {draft.specialIngredients.en.length === 0 ? (
                 <p className="rounded-xl border border-[#e4dac7] bg-white px-4 py-3 text-sm text-[#627665]">{strings.specialty.noSlots}</p>
               ) : (
-                draft.specialIngredientSlots.en.map((englishSlot, slotIndex) => {
-                  const chineseSlot = draft.specialIngredientSlots.zh[slotIndex];
+                draft.specialIngredients.en.map((englishIngredient, ingredientIndex) => {
+                  const chineseIngredient = draft.specialIngredients.zh[ingredientIndex];
+                  const selectedIngredientCatalogEntry =
+                    ingredientCatalogItemByKey.get(englishIngredient.ingredientKey ?? "") ?? null;
                   return (
-                    <div key={`${selectedRecipe.id}-${englishSlot.slotKey}`} className="rounded-xl border border-[#e4dac7] bg-white p-4">
-                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px]">
+                    <div key={`${selectedRecipe.id}-special-${ingredientIndex}`} className="rounded-xl border border-[#e4dac7] bg-white p-4">
+                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_150px]">
                         <label className="block">
-                          <span className={LABEL}>{strings.specialty.slotLabelEnglish}</span>
-                          <input value={englishSlot.label} onChange={(event) => updateSlotLabel("en", slotIndex, event.target.value)} className={INPUT} maxLength={60} />
+                          <span className={LABEL}>{strings.ingredients.iconIngredient}</span>
+                          <select
+                            value={englishIngredient.ingredientKey ?? ""}
+                            onChange={(event) =>
+                              updateSpecialIngredientCatalogSelection(ingredientIndex, event.target.value)
+                            }
+                            className={INPUT}
+                          >
+                            <option value="">{strings.ingredients.customOption}</option>
+                            {specialIngredientCatalog.map((catalogEntry) => (
+                              <option key={catalogEntry.key} value={catalogEntry.key}>
+                                {catalogEntry.label[locale]}
+                              </option>
+                            ))}
+                          </select>
                         </label>
                         <label className="block">
-                          <span className={LABEL}>{strings.specialty.slotLabelChinese}</span>
-                          <input value={chineseSlot?.label ?? ""} onChange={(event) => updateSlotLabel("zh", slotIndex, event.target.value)} className={INPUT} maxLength={60} />
+                          <span className={LABEL}>{strings.ingredients.quantity}</span>
+                          <input
+                            type="number"
+                            min={SHOP_INGREDIENT_QUANTITY_MIN}
+                            max={SHOP_INGREDIENT_QUANTITY_MAX}
+                            step={1}
+                            value={englishIngredient.quantity}
+                            onChange={(event) =>
+                              updateSpecialIngredientQuantity(ingredientIndex, event.target.value)
+                            }
+                            className={INPUT}
+                          />
                         </label>
-                        <div className={READONLY}>{strings.specialty.maxSelections.replace("{count}", String(englishSlot.maxSelections))}</div>
+                        <div className="block">
+                          <span className={LABEL}>{strings.ingredients.iconPreview}</span>
+                          <div className={`${READONLY} flex min-h-[56px] items-center justify-center`}>
+                            {selectedIngredientCatalogEntry?.iconPath ? (
+                              <img
+                                src={selectedIngredientCatalogEntry.iconPath}
+                                alt={selectedIngredientCatalogEntry.label[locale]}
+                                className="h-12 w-12 object-contain"
+                              />
+                            ) : (
+                              strings.ingredients.noIcon
+                            )}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="mt-4 space-y-3">
-                        {englishSlot.options.map((englishOption, optionIndex) => {
-                          const chineseOption = chineseSlot?.options[optionIndex];
-                          return (
-                            <div key={`${englishSlot.slotKey}-${englishOption.key}`} className="rounded-xl border border-[#ece3d1] bg-[#fffdfa] p-4">
-                              <div className="grid gap-4 md:grid-cols-3">
-                                <label className="block">
-                                  <span className={LABEL}>{strings.specialty.optionKey}</span>
-                                  <div className={READONLY}>{englishOption.key}</div>
-                                </label>
-                                <label className="block">
-                                  <span className={LABEL}>{strings.specialty.optionLabelEnglish}</span>
-                                  <input value={englishOption.label} onChange={(event) => updateOptionField("en", slotIndex, optionIndex, "label", event.target.value)} className={INPUT} maxLength={60} />
-                                </label>
-                                <label className="block">
-                                  <span className={LABEL}>{strings.specialty.optionLabelChinese}</span>
-                                  <input value={chineseOption?.label ?? ""} onChange={(event) => updateOptionField("zh", slotIndex, optionIndex, "label", event.target.value)} className={INPUT} maxLength={60} />
-                                </label>
-                              </div>
-                              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                                <label className="block">
-                                  <span className={LABEL}>{strings.specialty.optionEffectEnglish}</span>
-                                  <textarea value={englishOption.effect} onChange={(event) => updateOptionField("en", slotIndex, optionIndex, "effect", event.target.value)} className={`${INPUT} min-h-[96px] resize-y`} maxLength={120} />
-                                </label>
-                                <label className="block">
-                                  <span className={LABEL}>{strings.specialty.optionEffectChinese}</span>
-                                  <textarea value={chineseOption?.effect ?? ""} onChange={(event) => updateOptionField("zh", slotIndex, optionIndex, "effect", event.target.value)} className={`${INPUT} min-h-[96px] resize-y`} maxLength={120} />
-                                </label>
-                              </div>
-                            </div>
-                          );
-                        })}
+                      {selectedIngredientCatalogEntry ? null : (
+                        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                          <label className="block">
+                            <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
+                            <input value={englishIngredient.name} onChange={(event) => updateSpecialIngredientName("en", ingredientIndex, event.target.value)} className={INPUT} maxLength={60} />
+                          </label>
+                          <label className="block">
+                            <span className={LABEL}>{strings.ingredients.nameChinese}</span>
+                            <input value={chineseIngredient?.name ?? ""} onChange={(event) => updateSpecialIngredientName("zh", ingredientIndex, event.target.value)} className={INPUT} maxLength={60} />
+                          </label>
+                        </div>
+                      )}
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => moveSpecialIngredient(ingredientIndex, -1)} disabled={ingredientIndex === 0} className="shop-admin-pill border border-[#d7c8a5] px-3 py-2 text-xs font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50">{strings.ingredients.moveUp}</button>
+                        <button type="button" onClick={() => moveSpecialIngredient(ingredientIndex, 1)} disabled={ingredientIndex === draft.specialIngredients.en.length - 1} className="shop-admin-pill border border-[#d7c8a5] px-3 py-2 text-xs font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50">{strings.ingredients.moveDown}</button>
+                        <button type="button" onClick={() => removeSpecialIngredient(ingredientIndex)} className="shop-admin-pill border border-[#e7b8b2] bg-[#fff3f1] px-3 py-2 text-xs font-semibold text-[#a04f46]">{strings.ingredients.remove}</button>
                       </div>
                     </div>
                   );
@@ -806,26 +991,95 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
             <div className="mt-6">
               <p className={LABEL}>{strings.form.variantPreview}</p>
+              <p className="mt-2 text-sm leading-7 text-[#627665]">{strings.specialty.variantHelper}</p>
               <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {selectedRecipe.variantIconRules.length === 0 ? (
+                {draft.variantIconRules.length === 0 ? (
                   <p className="rounded-xl border border-[#e4dac7] bg-white px-4 py-3 text-sm text-[#627665]">{strings.specialty.noVariants}</p>
                 ) : (
-                  selectedRecipe.variantIconRules.map((rule) => (
+                  draft.variantIconRules.map((rule, ruleIndex) => {
+                    const isPlainRule = isPlainVariantRuleIcon(rule.iconPath) && rule.match.length === 0;
+                    return (
                     <div key={`${selectedRecipe.id}-${rule.iconPath}`} className="rounded-xl border border-[#e4dac7] bg-white p-4">
                       <div className="flex h-24 items-center justify-center rounded-xl border border-[#efe4c8] bg-[#fffaf0] p-3">
                         <img src={rule.iconPath} alt={rule.iconPath} className="h-full w-full object-contain" />
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {rule.match.length === 0 ? (
+                      <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#8b6f2f]">
+                        {strings.specialty.variantAssigned}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {isPlainRule ? (
                           <span className="rounded-full bg-[#eef3e8] px-3 py-1 text-xs font-semibold text-[#607451]">{strings.specialty.matchAll}</span>
+                        ) : rule.match.length === 0 ? (
+                          <span className="rounded-full bg-[#f8f4ea] px-3 py-1 text-xs font-semibold text-[#7c7464]">{strings.specialty.variantNoMapped}</span>
                         ) : (
-                          rule.match.map((token) => (
-                            <span key={`${rule.iconPath}-${token}`} className="rounded-full bg-[#f4ebd3] px-3 py-1 text-xs font-semibold text-[#8b6f2f]">{token}</span>
-                          ))
+                          rule.match.map((token) => {
+                            const option = variantIngredientOptionByKey.get(token);
+                            const localizedLabel =
+                              ingredientCatalogItemByKey.get(token)?.label[locale] ??
+                              option?.label[locale] ??
+                              token;
+                            return (
+                              <span key={`${rule.iconPath}-${token}`} className="rounded-full bg-[#f4ebd3] px-3 py-1 text-xs font-semibold text-[#8b6f2f]">
+                                {localizedLabel}
+                              </span>
+                            );
+                          })
                         )}
                       </div>
+                      <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-[#8b7c5a]">
+                        {strings.specialty.variantPath}
+                      </p>
+                      <p className="mt-2 break-all text-xs text-[#7c7464]">{rule.iconPath}</p>
+                      {variantIngredientOptions.length === 0 ? (
+                        <p className="mt-4 rounded-xl border border-[#e4dac7] bg-[#fffaf0] px-3 py-2 text-sm text-[#627665]">
+                          {strings.specialty.variantNoOptions}
+                        </p>
+                      ) : isPlainRule ? (
+                        <p className="mt-4 rounded-xl border border-[#e4dac7] bg-[#fffaf0] px-3 py-2 text-sm text-[#627665]">
+                          {strings.specialty.variantReadonly}
+                        </p>
+                      ) : null}
+                      {variantIngredientOptions.length > 0 && !isPlainRule ? (
+                        <div className="mt-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8b7c5a]">
+                            {strings.specialty.variantAvailable}
+                          </p>
+                          {rule.match.length === 0 ? (
+                            <p className="mt-2 text-sm text-[#627665]">{strings.specialty.variantNoMapped}</p>
+                          ) : null}
+                          <div className="mt-3 grid gap-2">
+                            {variantIngredientOptions.map((option) => {
+                              const isChecked = rule.match.includes(option.key);
+                              const localizedLabel =
+                                ingredientCatalogItemByKey.get(option.key)?.label[locale] ??
+                                option.label[locale];
+                              return (
+                                <label key={`${rule.iconPath}-${option.key}`} className="flex items-start gap-3 rounded-xl border border-[#ece3d1] bg-[#fffdfa] px-3 py-3 text-sm text-[#445c4c]">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(event) =>
+                                      updateVariantRuleMatch(ruleIndex, option.key, event.target.checked)
+                                    }
+                                    className="mt-1 h-4 w-4 rounded border-[#c9ae63] text-[#8b6f2f] focus:ring-[#e8d79b]"
+                                  />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block font-semibold text-[#24423a]">
+                                      {localizedLabel}
+                                    </span>
+                                    <span className="mt-1 block text-xs text-[#7c7464]">
+                                      {option.key}
+                                    </span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
-                  ))
+                  );
+                  })
                 )}
               </div>
             </div>
@@ -882,6 +1136,33 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           </div>
         </div>
 
+        <div className="mt-5 flex flex-wrap gap-2">
+          {(
+            [
+              ["all", strings.ingredientPricing.filterAll],
+              ["basic", strings.ingredientPricing.filterBasic],
+              ["special", strings.ingredientPricing.filterSpecial],
+            ] as const
+          ).map(([filterValue, filterLabel]) => {
+            const isActive = ingredientPriceFilter === filterValue;
+            return (
+              <button
+                key={filterValue}
+                type="button"
+                title={filterLabel}
+                onClick={() => setIngredientPriceFilter(filterValue)}
+                className={`shop-admin-pill border px-4 py-2 text-sm font-semibold transition ${
+                  isActive
+                    ? "border-[#d2b15b] bg-[#fff0bf] text-[#8b6f2f] shadow-[0_8px_20px_rgba(210,177,91,0.18)]"
+                    : "border-[#d7c8a5] bg-white text-[#6b6658]"
+                }`}
+              >
+                {filterLabel}
+              </button>
+            );
+          })}
+        </div>
+
         {ingredientNotice ? (
           <p
             className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
@@ -894,47 +1175,76 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           </p>
         ) : null}
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {ingredientCatalogDraft.map((ingredient, index) => (
-            <div
-              key={ingredient.key}
-              className="rounded-xl border border-[#e4dac7] bg-white p-4"
-            >
-              <div className="flex items-start gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-[#eadfc1] bg-[#fffaf0]">
-                  {ingredient.iconPath ? (
-                    <img
-                      src={ingredient.iconPath}
-                      alt={ingredient.label[locale]}
-                      className="h-12 w-12 object-contain"
-                    />
-                  ) : (
-                    <span className="text-xs font-semibold text-[#9a8f79]">
-                      {strings.ingredients.noIcon}
+        {filteredIngredientCatalogDraft.length === 0 ? (
+          <p className="mt-6 rounded-xl border border-[#e4dac7] bg-white px-4 py-3 text-sm text-[#627665]">
+            {strings.ingredientPricing.emptyState}
+          </p>
+        ) : (
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filteredIngredientCatalogDraft.map((ingredient) => (
+              <div
+                key={ingredient.key}
+                className="rounded-xl border border-[#e4dac7] bg-white p-4"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-[#eadfc1] bg-[#fffaf0]">
+                    {ingredient.iconPath ? (
+                      <img
+                        src={ingredient.iconPath}
+                        alt={ingredient.label[locale]}
+                        className="h-12 w-12 object-contain"
+                      />
+                    ) : (
+                      <span className="text-xs font-semibold text-[#9a8f79]">
+                        {strings.ingredients.noIcon}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          ingredient.kind === "basic"
+                            ? "bg-[#eef3e8] text-[#607451]"
+                            : "bg-[#f4ebd3] text-[#8b6f2f]"
+                        }`}
+                      >
+                        {ingredient.kind === "basic"
+                        ? strings.ingredientPricing.basicBadge
+                        : strings.ingredientPricing.specialBadge}
                     </span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-base font-semibold text-[#24423a]">
-                    {ingredient.label[locale]}
-                  </p>
+                  </div>
                   <p className="mt-1 text-xs text-[#7c7464]">{ingredient.key}</p>
                 </div>
               </div>
               <label className="mt-4 block">
-                <span className={LABEL}>{strings.ingredientPricing.cost}</span>
+                <span className={LABEL}>
+                  {locale === "zh" ? strings.ingredients.nameChinese : strings.ingredients.nameEnglish}
+                </span>
                 <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={ingredient.costCoins}
-                  onChange={(event) => updateIngredientCatalogPrice(index, event.target.value)}
+                  value={ingredient.label[locale]}
+                  onChange={(event) =>
+                    updateIngredientCatalogLabel(ingredient.key, locale, event.target.value)
+                  }
                   className={INPUT}
+                  maxLength={60}
                 />
               </label>
-            </div>
-          ))}
-        </div>
+              <label className="mt-4 block">
+                <span className={LABEL}>{strings.ingredientPricing.cost}</span>
+                <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={ingredient.costCoins}
+                    onChange={(event) => updateIngredientCatalogPrice(ingredient.key, event.target.value)}
+                    className={INPUT}
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
