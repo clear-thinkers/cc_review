@@ -6,7 +6,6 @@ import { useSession } from "@/lib/authContext";
 import { useLocale } from "@/app/shared/locale";
 import type {
   ShopIngredient,
-  ShopIngredientPrice,
   ShopRecipe,
   ShopTransaction,
   ShopRecipeUnlock,
@@ -15,7 +14,6 @@ import type {
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
   getOrCreateWallet,
-  listShopIngredientPrices,
   listShopRecipeUnlocks,
   listShopRecipes,
   listShopTransactions,
@@ -23,11 +21,9 @@ import {
 } from "@/lib/supabase-service";
 import {
   SHOP_WALL_SIZE,
-  buildShopIngredientPriceMap,
   canAffordRecipeUnlock,
   getShopRecipeContentForLocale,
   resolvePlainShopRecipeIconPath,
-  resolveShopIngredientCost,
   resolveShopIngredientIconPath,
   resolveShopRecipeIconPath,
 } from "@/lib/shop";
@@ -69,18 +65,7 @@ function formatShopTransactionDateTime(timestamp: number, locale: "en" | "zh"): 
 }
 
 function formatIngredientAmount(ingredient: ShopIngredient): string {
-  return `${ingredient.quantity}${ingredient.unit ? ` ${ingredient.unit}` : ""}`;
-}
-
-function formatIngredientCost(
-  ingredient: ShopIngredient,
-  strings: WordsWorkspaceVM["str"]["shop"],
-  ingredientPriceByKey: ReadonlyMap<string, number>
-): string {
-  const cost = resolveShopIngredientCost(ingredient, ingredientPriceByKey);
-  return cost === null
-    ? strings.modal.ingredientNoCost
-    : `${cost} ${strings.modal.ingredientCostUnit}`;
+  return `x${ingredient.quantity}`;
 }
 
 function buildShopTransactionActionLabel(
@@ -129,13 +114,11 @@ function RecipeModal({
   recipe,
   locale,
   strings,
-  ingredientPriceByKey,
   onClose,
 }: {
   recipe: ShopRecipe;
   locale: "en" | "zh";
   strings: WordsWorkspaceVM["str"]["shop"];
-  ingredientPriceByKey: ReadonlyMap<string, number>;
   onClose: () => void;
 }) {
   const [selectedIngredient, setSelectedIngredient] = useState<ShopIngredient | null>(null);
@@ -208,9 +191,6 @@ function RecipeModal({
                             <div className="text-sm text-gray-600">
                               {formatIngredientAmount(ingredient)}
                             </div>
-                            <div className="mt-1 text-xs font-medium text-[#8b6f2f]">
-                              {formatIngredientCost(ingredient, strings, ingredientPriceByKey)}
-                            </div>
                           </div>
                         </div>
                       ) : (
@@ -218,9 +198,6 @@ function RecipeModal({
                           <div className="font-semibold text-gray-900">{ingredient.name}</div>
                           <div className="mt-1 text-sm text-gray-600">
                             {formatIngredientAmount(ingredient)}
-                          </div>
-                          <div className="mt-1 text-xs font-medium text-[#8b6f2f]">
-                            {formatIngredientCost(ingredient, strings, ingredientPriceByKey)}
                           </div>
                         </div>
                       )}
@@ -308,14 +285,10 @@ function RecipeModal({
                   </div>
                   <div className="rounded-xl border border-[#eadfbe] bg-white px-4 py-3">
                     <div className="text-sm font-semibold text-gray-900">
-                      {strings.modal.ingredientCost}
+                      {strings.modal.ingredientQuantityNeeded}
                     </div>
                     <div className="mt-1 text-lg font-semibold text-[#8b6f2f]">
-                      {formatIngredientCost(
-                        selectedIngredient,
-                        strings,
-                        ingredientPriceByKey
-                      )}
+                      {formatIngredientAmount(selectedIngredient)}
                     </div>
                   </div>
                 </div>
@@ -438,7 +411,6 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
   const locale = useLocale();
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [recipes, setRecipes] = useState<ShopRecipe[]>([]);
-  const [ingredientPrices, setIngredientPrices] = useState<ShopIngredientPrice[]>([]);
   const [walletCoins, setWalletCoins] = useState(0);
   const [unlocks, setUnlocks] = useState<ShopRecipeUnlock[]>([]);
   const [transactions, setTransactions] = useState<ShopTransaction[]>([]);
@@ -460,10 +432,9 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
       setLoadState("loading");
 
       try {
-        const [wallet, ingredientPriceRows, recipeRows, unlockRows, transactionRows] =
+        const [wallet, recipeRows, unlockRows, transactionRows] =
           await Promise.all([
             getOrCreateWallet(),
-            listShopIngredientPrices(),
             listShopRecipes(),
             listShopRecipeUnlocks(),
             listShopTransactions(),
@@ -474,7 +445,6 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
         }
 
         setWalletCoins(wallet.totalCoins);
-        setIngredientPrices(ingredientPriceRows);
         setRecipes(recipeRows);
         setUnlocks(unlockRows);
         setTransactions(transactionRows);
@@ -536,10 +506,6 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
     return map;
   }, [recipes]);
-  const ingredientPriceByKey = useMemo(
-    () => buildShopIngredientPriceMap(ingredientPrices),
-    [ingredientPrices]
-  );
 
   if (vm.page !== "shop") {
     return null;
@@ -798,7 +764,6 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
           recipe={selectedRecipe}
           locale={locale}
           strings={vm.str.shop}
-          ingredientPriceByKey={ingredientPriceByKey}
           onClose={() => setSelectedRecipe(null)}
         />
       ) : null}

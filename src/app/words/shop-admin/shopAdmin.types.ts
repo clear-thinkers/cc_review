@@ -5,12 +5,15 @@ import type {
   ShopSpecialIngredientSlot,
 } from "../shop/shop.types";
 import { getShopIngredientCatalogEntry } from "../shop/shopIngredients";
+import {
+  SHOP_INGREDIENT_QUANTITY_MAX,
+  SHOP_INGREDIENT_QUANTITY_MIN,
+  parseShopIngredientQuantity,
+} from "@/lib/shop";
 
 export const SHOP_RECIPE_TITLE_MAX = 80;
 export const SHOP_RECIPE_INTRO_MAX = 240;
 export const SHOP_RECIPE_INGREDIENT_NAME_MAX = 60;
-export const SHOP_RECIPE_INGREDIENT_QUANTITY_MAX = 20;
-export const SHOP_RECIPE_INGREDIENT_UNIT_MAX = 20;
 export const SHOP_RECIPE_SPECIAL_LABEL_MAX = 60;
 export const SHOP_RECIPE_SPECIAL_EFFECT_MAX = 120;
 
@@ -65,12 +68,10 @@ function normalizeIngredientList(raw: unknown): ShopIngredient[] {
         : {};
     const ingredientKey =
       typeof source.ingredientKey === "string" ? source.ingredientKey.trim() : "";
-    const unit = typeof source.unit === "string" ? source.unit.trim() : "";
     return {
       ...(ingredientKey ? { ingredientKey } : {}),
       name: typeof source.name === "string" ? source.name.trim() : "",
-      quantity: typeof source.quantity === "string" ? source.quantity.trim() : "",
-      ...(unit ? { unit } : {}),
+      quantity: parseShopIngredientQuantity(source.quantity) ?? 0,
     };
   });
 }
@@ -186,9 +187,13 @@ export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): strin
 
     if (!ingredient.quantity) {
       errors.push(`Ingredient ${rowNumber}: quantity is required.`);
-    } else if (ingredient.quantity.length > SHOP_RECIPE_INGREDIENT_QUANTITY_MAX) {
+    } else if (
+      !Number.isInteger(ingredient.quantity) ||
+      ingredient.quantity < SHOP_INGREDIENT_QUANTITY_MIN ||
+      ingredient.quantity > SHOP_INGREDIENT_QUANTITY_MAX
+    ) {
       errors.push(
-        `Ingredient ${rowNumber}: quantity must be ${SHOP_RECIPE_INGREDIENT_QUANTITY_MAX} characters or fewer.`
+        `Ingredient ${rowNumber}: quantity must be a whole number from ${SHOP_INGREDIENT_QUANTITY_MIN} to ${SHOP_INGREDIENT_QUANTITY_MAX}.`
       );
     }
 
@@ -212,17 +217,6 @@ export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): strin
     } else if (zhIngredient.name.length > SHOP_RECIPE_INGREDIENT_NAME_MAX) {
       errors.push(
         `ZH ingredient ${rowNumber}: name must be ${SHOP_RECIPE_INGREDIENT_NAME_MAX} characters or fewer.`
-      );
-    }
-
-    if (ingredient.unit && ingredient.unit.length > SHOP_RECIPE_INGREDIENT_UNIT_MAX) {
-      errors.push(
-        `EN ingredient ${rowNumber}: unit must be ${SHOP_RECIPE_INGREDIENT_UNIT_MAX} characters or fewer.`
-      );
-    }
-    if (zhIngredient?.unit && zhIngredient.unit.length > SHOP_RECIPE_INGREDIENT_UNIT_MAX) {
-      errors.push(
-        `ZH ingredient ${rowNumber}: unit must be ${SHOP_RECIPE_INGREDIENT_UNIT_MAX} characters or fewer.`
       );
     }
   });
@@ -413,27 +407,17 @@ export function mergeReadonlyShopLocalizedIngredientRows(params: {
       return {
         ...(catalogEntry ? { ingredientKey: catalogEntry.key } : {}),
         name: catalogEntry ? catalogEntry.label.en : enIngredient.name.trim(),
-        quantity: enIngredient.quantity.trim(),
-        ...(catalogEntry
-          ? catalogEntry.defaultUnit.en
-            ? { unit: catalogEntry.defaultUnit.en }
-            : {}
-          : enIngredient.unit?.trim()
-            ? { unit: enIngredient.unit.trim() }
-            : {}),
+        quantity:
+          parseShopIngredientQuantity(enIngredient.quantity) ?? SHOP_INGREDIENT_QUANTITY_MIN,
       };
     }),
     zh: normalizedRows.map(({ catalogEntry, enIngredient, zhIngredient }) => ({
       ...(catalogEntry ? { ingredientKey: catalogEntry.key } : {}),
       name: catalogEntry ? catalogEntry.label.zh : zhIngredient.name.trim(),
-      quantity: zhIngredient.quantity.trim() || enIngredient.quantity.trim() || "",
-      ...(catalogEntry
-        ? catalogEntry.defaultUnit.zh
-          ? { unit: catalogEntry.defaultUnit.zh }
-          : {}
-        : zhIngredient.unit?.trim()
-          ? { unit: zhIngredient.unit.trim() }
-          : {}),
+      quantity:
+        parseShopIngredientQuantity(zhIngredient.quantity) ??
+        parseShopIngredientQuantity(enIngredient.quantity) ??
+        SHOP_INGREDIENT_QUANTITY_MIN,
     })),
   };
 }

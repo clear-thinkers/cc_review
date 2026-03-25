@@ -15,8 +15,9 @@ import {
 } from "@/app/words/shop/shopIngredients";
 
 export const SHOP_WALL_SIZE = 9;
+export const SHOP_INGREDIENT_QUANTITY_MIN = 1;
+export const SHOP_INGREDIENT_QUANTITY_MAX = 99;
 const SHOP_PLAIN_ICON_TOKEN = "plain";
-const SHOP_LOCALES: ShopLocale[] = ["en", "zh"];
 
 function normalizeMatchKeys(keys: string[]): string[] {
   return Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean))).sort();
@@ -64,7 +65,33 @@ function isPlainShopIconPath(iconPath: string): boolean {
   return fileName.includes(SHOP_PLAIN_ICON_TOKEN);
 }
 
-function normalizeShopIngredientList(
+export function parseShopIngredientQuantity(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isInteger(raw)) {
+    return raw >= SHOP_INGREDIENT_QUANTITY_MIN && raw <= SHOP_INGREDIENT_QUANTITY_MAX
+      ? raw
+      : null;
+  }
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    return parsed >= SHOP_INGREDIENT_QUANTITY_MIN && parsed <= SHOP_INGREDIENT_QUANTITY_MAX
+      ? parsed
+      : null;
+  }
+
+  return null;
+}
+
+function normalizeShopIngredientQuantity(raw: unknown, fallback = SHOP_INGREDIENT_QUANTITY_MIN): number {
+  return parseShopIngredientQuantity(raw) ?? fallback;
+}
+
+export function normalizeShopIngredientList(
   raw: unknown,
   fallback: ShopIngredient[]
 ): ShopIngredient[] {
@@ -72,7 +99,7 @@ function normalizeShopIngredientList(
     return fallback;
   }
 
-  return raw.map((ingredient) => {
+  return raw.map((ingredient, index) => {
     const source =
       ingredient && typeof ingredient === "object"
         ? (ingredient as Record<string, unknown>)
@@ -83,12 +110,13 @@ function normalizeShopIngredientList(
       typeof source.costCoins === "number" && Number.isFinite(source.costCoins)
         ? source.costCoins
         : undefined;
-    const unit = typeof source.unit === "string" ? source.unit.trim() : "";
     return {
       ...(ingredientKey ? { ingredientKey } : {}),
       name: typeof source.name === "string" ? source.name.trim() : "",
-      quantity: typeof source.quantity === "string" ? source.quantity.trim() : "",
-      ...(unit ? { unit } : {}),
+      quantity: normalizeShopIngredientQuantity(
+        source.quantity,
+        fallback[index]?.quantity ?? SHOP_INGREDIENT_QUANTITY_MIN
+      ),
       ...(typeof costCoins === "number" ? { costCoins } : {}),
     };
   });

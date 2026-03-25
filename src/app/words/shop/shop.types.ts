@@ -8,8 +8,7 @@ export type ShopLocalizedValue<T> = {
 export type ShopIngredient = {
   ingredientKey?: string;
   name: string;
-  quantity: string;
-  unit?: string;
+  quantity: number;
   costCoins?: number;
 };
 

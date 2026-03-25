@@ -9,6 +9,7 @@ import {
   type ShopRecipeAdminDraft,
 } from "@/app/words/shop-admin/shopAdmin.types";
 import {
+  normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedIntro,
   normalizeShopLocalizedSpecialIngredientSlots,
@@ -34,9 +35,7 @@ interface SupabaseShopRecipeRow {
 }
 
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
-  const baseIngredients = Array.isArray(row.base_ingredients)
-    ? (row.base_ingredients as ShopRecipe["baseIngredients"])
-    : [];
+  const baseIngredients = normalizeShopIngredientList(row.base_ingredients, []);
   const specialIngredientSlots = Array.isArray(row.special_ingredient_slots)
     ? (row.special_ingredient_slots as ShopRecipe["specialIngredientSlots"])
     : [];

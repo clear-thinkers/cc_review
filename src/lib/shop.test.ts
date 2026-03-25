@@ -3,6 +3,7 @@ import {
   buildShopIngredientPriceMap,
   canAffordRecipeUnlock,
   getShopRecipeContentForLocale,
+  normalizeShopIngredientList,
   normalizeUnlockShopRecipeResult,
   resolvePlainShopRecipeIconPath,
   resolveShopIngredientCost,
@@ -74,8 +75,7 @@ describe("resolveShopIngredientIconPath", () => {
       resolveShopIngredientIconPath({
         ingredientKey: "milk",
         name: "Milk",
-        quantity: "1",
-        unit: "cup",
+        quantity: 1,
       })
     ).toBe("/ingredients/milk_base.png");
   });
@@ -84,8 +84,7 @@ describe("resolveShopIngredientIconPath", () => {
     expect(
       resolveShopIngredientIconPath({
         name: "Black Tea",
-        quantity: "1",
-        unit: "cup",
+        quantity: 1,
       })
     ).toBeNull();
   });
@@ -98,8 +97,7 @@ describe("resolveShopIngredientCost", () => {
         {
           ingredientKey: "milk",
           name: "Milk",
-          quantity: "1",
-          unit: "cup",
+          quantity: 1,
         },
         buildShopIngredientPriceMap([{ ingredientKey: "milk", costCoins: 9, updatedAt: 0 }])
       )
@@ -111,8 +109,7 @@ describe("resolveShopIngredientCost", () => {
       resolveShopIngredientCost({
         ingredientKey: "milk",
         name: "Milk",
-        quantity: "1",
-        unit: "cup",
+        quantity: 1,
       })
     ).toBe(4);
   });
@@ -121,11 +118,27 @@ describe("resolveShopIngredientCost", () => {
     expect(
       resolveShopIngredientCost({
         name: "Custom Sauce",
-        quantity: "1",
-        unit: "cup",
+        quantity: 1,
         costCoins: 7,
       })
     ).toBe(7);
+  });
+});
+
+describe("normalizeShopIngredientList", () => {
+  it("parses legacy string quantities and drops old unit fields", () => {
+    expect(
+      normalizeShopIngredientList(
+        [{ ingredientKey: "milk", name: " Milk ", quantity: " 2 ", unit: "cup" }],
+        []
+      )
+    ).toEqual([{ ingredientKey: "milk", name: "Milk", quantity: 2 }]);
+  });
+
+  it("falls back to the prior quantity when a new payload is invalid", () => {
+    expect(
+      normalizeShopIngredientList([{ name: "Milk", quantity: "0" }], [{ name: "Milk", quantity: 3 }])
+    ).toEqual([{ name: "Milk", quantity: 3 }]);
   });
 });
 
@@ -194,10 +207,10 @@ describe("getShopRecipeContentForLocale", () => {
           intro: "Milk tea",
           introI18n: { en: "Milk tea", zh: "奶茶" },
           unlockCostCoins: 25,
-          baseIngredients: [{ name: "Milk", quantity: "1", unit: "cup" }],
+          baseIngredients: [{ name: "Milk", quantity: 1 }],
           baseIngredientsI18n: {
-            en: [{ name: "Milk", quantity: "1", unit: "cup" }],
-            zh: [{ name: "牛奶", quantity: "1", unit: "杯" }],
+            en: [{ name: "Milk", quantity: 1 }],
+            zh: [{ name: "牛奶", quantity: 1 }],
           },
           specialIngredientSlots: [
             {
@@ -232,7 +245,7 @@ describe("getShopRecipeContentForLocale", () => {
     ).toEqual({
       title: "珍珠奶茶",
       intro: "奶茶",
-      baseIngredients: [{ name: "牛奶", quantity: "1", unit: "杯" }],
+      baseIngredients: [{ name: "牛奶", quantity: 1 }],
       specialIngredientSlots: [
         {
           slotKey: "specialty",
@@ -257,9 +270,9 @@ describe("getShopRecipeContentForLocale", () => {
           intro: "Soft cake",
           introI18n: { en: "Soft cake", zh: "" },
           unlockCostCoins: 25,
-          baseIngredients: [{ name: "Flour", quantity: "1", unit: "cup" }],
+          baseIngredients: [{ name: "Flour", quantity: 1 }],
           baseIngredientsI18n: {
-            en: [{ name: "Flour", quantity: "1", unit: "cup" }],
+            en: [{ name: "Flour", quantity: 1 }],
             zh: [],
           },
           specialIngredientSlots: [],
@@ -271,7 +284,7 @@ describe("getShopRecipeContentForLocale", () => {
     ).toEqual({
       title: "Cake",
       intro: "Soft cake",
-      baseIngredients: [{ name: "Flour", quantity: "1", unit: "cup" }],
+      baseIngredients: [{ name: "Flour", quantity: 1 }],
       specialIngredientSlots: [],
     });
   });

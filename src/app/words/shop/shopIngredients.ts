@@ -8,7 +8,6 @@ import type {
 export type ShopIngredientCatalogEntry = {
   key: string;
   label: ShopLocalizedValue<string>;
-  defaultUnit: ShopLocalizedValue<string>;
   defaultCostCoins: number;
   iconPath: string | null;
   aliases?: string[];
@@ -26,15 +25,13 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "butter",
     label: { en: "Butter", zh: "黄油" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 5,
-    iconPath: "/ingredients/butter, base.png",
+    iconPath: "/ingredients/butter_base.png",
     aliases: ["butter"],
   },
   {
     key: "egg",
     label: { en: "Egg", zh: "鸡蛋" },
-    defaultUnit: { en: "", zh: "" },
     defaultCostCoins: 3,
     iconPath: "/ingredients/egg_base.png",
     aliases: ["egg", "eggs"],
@@ -42,7 +39,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "flour",
     label: { en: "Flour", zh: "面粉" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 3,
     iconPath: "/ingredients/flour_base.png",
     aliases: ["flour"],
@@ -50,7 +46,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "milk",
     label: { en: "Milk", zh: "牛奶" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 4,
     iconPath: "/ingredients/milk_base.png",
     aliases: ["milk"],
@@ -58,7 +53,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "strawberry",
     label: { en: "Strawberry", zh: "草莓" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 6,
     iconPath: "/ingredients/strawberry_base.png",
     aliases: ["strawberry", "strawberries"],
@@ -66,7 +60,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "sugar",
     label: { en: "Sugar", zh: "糖" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 2,
     iconPath: "/ingredients/sugar_base.png",
     aliases: ["sugar"],
@@ -74,7 +67,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "sugar-sprinkles",
     label: { en: "Sugar Sprinkles", zh: "糖针" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 4,
     iconPath: "/ingredients/sugar-sprinkles_base.png",
     aliases: ["sugar sprinkles", "sprinkles"],
@@ -82,7 +74,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "black-tea",
     label: { en: "Black Tea", zh: "红茶" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 3,
     iconPath: null,
     aliases: ["black tea", "tea"],
@@ -90,7 +81,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "tapioca-pearls",
     label: { en: "Tapioca Pearls", zh: "珍珠" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 5,
     iconPath: null,
     aliases: ["tapioca pearls", "pearls"],
@@ -98,7 +88,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "yeast",
     label: { en: "Yeast", zh: "酵母" },
-    defaultUnit: { en: "packet", zh: "包" },
     defaultCostCoins: 2,
     iconPath: null,
     aliases: ["yeast"],
@@ -106,7 +95,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "warm-water",
     label: { en: "Warm Water", zh: "温水" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 1,
     iconPath: null,
     aliases: ["warm water"],
@@ -114,7 +102,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "ice-cream",
     label: { en: "Ice Cream", zh: "冰淇淋" },
-    defaultUnit: { en: "scoop", zh: "勺" },
     defaultCostCoins: 4,
     iconPath: null,
     aliases: ["ice cream"],
@@ -122,7 +109,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "noodles",
     label: { en: "Noodles", zh: "面条" },
-    defaultUnit: { en: "bundle", zh: "把" },
     defaultCostCoins: 4,
     iconPath: null,
     aliases: ["noodles"],
@@ -130,7 +116,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "broth",
     label: { en: "Broth", zh: "高汤" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 3,
     iconPath: null,
     aliases: ["broth"],
@@ -138,7 +123,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "cooked-rice",
     label: { en: "Cooked Rice", zh: "米饭" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 2,
     iconPath: null,
     aliases: ["cooked rice"],
@@ -146,7 +130,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "seaweed",
     label: { en: "Seaweed", zh: "海苔" },
-    defaultUnit: { en: "sheet", zh: "张" },
     defaultCostCoins: 2,
     iconPath: null,
     aliases: ["seaweed"],
@@ -154,7 +137,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "salt",
     label: { en: "Salt", zh: "盐" },
-    defaultUnit: { en: "pinch", zh: "撮" },
     defaultCostCoins: 1,
     iconPath: null,
     aliases: ["salt"],
@@ -162,7 +144,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "glutinous-rice-flour",
     label: { en: "Glutinous Rice Flour", zh: "糯米粉" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 4,
     iconPath: null,
     aliases: ["glutinous rice flour"],
@@ -170,7 +151,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "water",
     label: { en: "Water", zh: "水" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 1,
     iconPath: null,
     aliases: ["water"],
@@ -178,7 +158,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "sesame-filling",
     label: { en: "Sesame Filling", zh: "芝麻馅" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 5,
     iconPath: null,
     aliases: ["sesame filling"],
@@ -186,7 +165,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "sticky-rice",
     label: { en: "Sticky Rice", zh: "糯米" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 3,
     iconPath: null,
     aliases: ["sticky rice"],
@@ -194,7 +172,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "bamboo-leaves",
     label: { en: "Bamboo Leaves", zh: "粽叶" },
-    defaultUnit: { en: "", zh: "" },
     defaultCostCoins: 2,
     iconPath: null,
     aliases: ["bamboo leaves"],
@@ -202,7 +179,6 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
   {
     key: "red-bean-filling",
     label: { en: "Red Bean Filling", zh: "红豆馅" },
-    defaultUnit: { en: "cup", zh: "杯" },
     defaultCostCoins: 5,
     iconPath: null,
     aliases: ["red bean filling"],
@@ -255,13 +231,12 @@ export function findShopIngredientCatalogEntryByAlias(
 export function buildShopIngredientFromCatalog(
   entry: ShopIngredientCatalogEntry,
   locale: ShopLocale,
-  quantity: string
+  quantity: number
 ): ShopIngredient {
   return {
     ingredientKey: entry.key,
     name: entry.label[locale],
     quantity,
-    ...(entry.defaultUnit[locale] ? { unit: entry.defaultUnit[locale] } : {}),
   };
 }
 

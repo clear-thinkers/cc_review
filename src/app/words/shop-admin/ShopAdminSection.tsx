@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/app/shared/locale";
 import { useSession } from "@/lib/authContext";
-import { getShopRecipeContentForLocale, resolvePlainShopRecipeIconPath } from "@/lib/shop";
+import {
+  SHOP_INGREDIENT_QUANTITY_MAX,
+  SHOP_INGREDIENT_QUANTITY_MIN,
+  getShopRecipeContentForLocale,
+  parseShopIngredientQuantity,
+  resolvePlainShopRecipeIconPath,
+} from "@/lib/shop";
 import type { ShopIngredient, ShopLocale, ShopRecipe } from "../shop/shop.types";
 import {
   type ShopAdminIngredientCatalogItem,
@@ -217,12 +223,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     }));
   }
 
-  function updateIngredient(
-    targetLocale: ShopLocale,
-    index: number,
-    field: keyof ShopIngredient,
-    value: string
-  ) {
+  function updateIngredientName(targetLocale: ShopLocale, index: number, value: string) {
     updateDraft((current) => {
       const next = {
         ...current,
@@ -232,21 +233,32 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         },
       };
 
-      if (field === "quantity") {
-        next.baseIngredients.en[index] = {
-          ...next.baseIngredients.en[index],
-          quantity: value,
-        };
-        next.baseIngredients.zh[index] = {
-          ...next.baseIngredients.zh[index],
-          quantity: value,
-        };
-        return next;
-      }
-
       next.baseIngredients[targetLocale][index] = {
         ...next.baseIngredients[targetLocale][index],
-        [field]: value,
+        name: value,
+      };
+      return next;
+    });
+  }
+
+  function updateIngredientQuantity(index: number, rawValue: string) {
+    updateDraft((current) => {
+      const next = {
+        ...current,
+        baseIngredients: {
+          en: current.baseIngredients.en.map((ingredient) => ({ ...ingredient })),
+          zh: current.baseIngredients.zh.map((ingredient) => ({ ...ingredient })),
+        },
+      };
+      const parsedQuantity =
+        parseShopIngredientQuantity(rawValue) ?? SHOP_INGREDIENT_QUANTITY_MIN;
+      next.baseIngredients.en[index] = {
+        ...next.baseIngredients.en[index],
+        quantity: parsedQuantity,
+      };
+      next.baseIngredients.zh[index] = {
+        ...next.baseIngredients.zh[index],
+        quantity: parsedQuantity,
       };
       return next;
     });
@@ -256,8 +268,14 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     updateDraft((current) => ({
       ...current,
       baseIngredients: {
-        en: [...current.baseIngredients.en, { name: "", quantity: "", unit: "" }],
-        zh: [...current.baseIngredients.zh, { name: "", quantity: "", unit: "" }],
+        en: [
+          ...current.baseIngredients.en,
+          { name: "", quantity: SHOP_INGREDIENT_QUANTITY_MIN },
+        ],
+        zh: [
+          ...current.baseIngredients.zh,
+          { name: "", quantity: SHOP_INGREDIENT_QUANTITY_MIN },
+        ],
       },
     }));
   }
@@ -271,7 +289,8 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           zh: current.baseIngredients.zh.map((ingredient) => ({ ...ingredient })),
         },
       };
-      const quantity = next.baseIngredients.en[index]?.quantity ?? "";
+      const quantity =
+        next.baseIngredients.en[index]?.quantity ?? SHOP_INGREDIENT_QUANTITY_MIN;
 
       if (!ingredientKey) {
         next.baseIngredients.en[index] = clearIngredientKey(next.baseIngredients.en[index]);
@@ -657,7 +676,17 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                       </label>
                       <label className="block">
                         <span className={LABEL}>{strings.ingredients.quantity}</span>
-                        <input value={englishIngredient.quantity} onChange={(event) => updateIngredient("en", ingredientIndex, "quantity", event.target.value)} className={INPUT} maxLength={20} />
+                        <input
+                          type="number"
+                          min={SHOP_INGREDIENT_QUANTITY_MIN}
+                          max={SHOP_INGREDIENT_QUANTITY_MAX}
+                          step={1}
+                          value={englishIngredient.quantity}
+                          onChange={(event) =>
+                            updateIngredientQuantity(ingredientIndex, event.target.value)
+                          }
+                          className={INPUT}
+                        />
                       </label>
                       <div className="block">
                         <span className={LABEL}>{strings.ingredients.iconPreview}</span>
@@ -676,7 +705,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     </div>
 
                     {selectedIngredientCatalogEntry ? (
-                      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                         <label className="block">
                           <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
                           <div className={READONLY}>{selectedIngredientCatalogEntry.label.en}</div>
@@ -685,32 +714,16 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                           <span className={LABEL}>{strings.ingredients.nameChinese}</span>
                           <div className={READONLY}>{selectedIngredientCatalogEntry.label.zh}</div>
                         </label>
-                        <label className="block">
-                          <span className={LABEL}>{strings.ingredients.unitEnglish}</span>
-                          <div className={READONLY}>{selectedIngredientCatalogEntry.defaultUnit.en}</div>
-                        </label>
-                        <label className="block">
-                          <span className={LABEL}>{strings.ingredients.unitChinese}</span>
-                          <div className={READONLY}>{selectedIngredientCatalogEntry.defaultUnit.zh}</div>
-                        </label>
                       </div>
                     ) : (
-                      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                         <label className="block">
                           <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
-                          <input value={englishIngredient.name} onChange={(event) => updateIngredient("en", ingredientIndex, "name", event.target.value)} className={INPUT} maxLength={60} />
+                          <input value={englishIngredient.name} onChange={(event) => updateIngredientName("en", ingredientIndex, event.target.value)} className={INPUT} maxLength={60} />
                         </label>
                         <label className="block">
                           <span className={LABEL}>{strings.ingredients.nameChinese}</span>
-                          <input value={chineseIngredient?.name ?? ""} onChange={(event) => updateIngredient("zh", ingredientIndex, "name", event.target.value)} className={INPUT} maxLength={60} />
-                        </label>
-                        <label className="block">
-                          <span className={LABEL}>{strings.ingredients.unitEnglish}</span>
-                          <input value={englishIngredient.unit ?? ""} onChange={(event) => updateIngredient("en", ingredientIndex, "unit", event.target.value)} className={INPUT} maxLength={20} />
-                        </label>
-                        <label className="block">
-                          <span className={LABEL}>{strings.ingredients.unitChinese}</span>
-                          <input value={chineseIngredient?.unit ?? ""} onChange={(event) => updateIngredient("zh", ingredientIndex, "unit", event.target.value)} className={INPUT} maxLength={20} />
+                          <input value={chineseIngredient?.name ?? ""} onChange={(event) => updateIngredientName("zh", ingredientIndex, event.target.value)} className={INPUT} maxLength={60} />
                         </label>
                       </div>
                     )}
@@ -908,18 +921,6 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                   <p className="mt-1 text-xs text-[#7c7464]">{ingredient.key}</p>
                 </div>
               </div>
-
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className={LABEL}>{strings.ingredientPricing.unitEnglish}</span>
-                  <div className={READONLY}>{ingredient.defaultUnit.en || strings.ingredientPricing.noUnit}</div>
-                </label>
-                <label className="block">
-                  <span className={LABEL}>{strings.ingredientPricing.unitChinese}</span>
-                  <div className={READONLY}>{ingredient.defaultUnit.zh || strings.ingredientPricing.noUnit}</div>
-                </label>
-              </div>
-
               <label className="mt-4 block">
                 <span className={LABEL}>{strings.ingredientPricing.cost}</span>
                 <input
