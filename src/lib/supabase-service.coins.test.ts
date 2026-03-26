@@ -22,7 +22,7 @@ import {
   listShopTransactions,
   recordQuizSession,
 } from "./supabase-service";
-import type { QuizSession } from "@/app/words/results/results.types";
+import type { QuizSession } from "./quiz.types";
 
 function mockSession() {
   getSessionMock.mockResolvedValue({

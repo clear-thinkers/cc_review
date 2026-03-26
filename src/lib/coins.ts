@@ -13,9 +13,8 @@
  * Last updated: 2026-03-04
  */
 
-import type { SessionGradeData } from "@/app/words/results/results.types";
-
-export type Grade = "easy" | "good" | "hard" | "again";
+import type { SessionGradeData } from "./quiz.types";
+import type { Grade } from "./scheduler";
 
 /**
  * Calculates coin value for a single grade.
@@ -48,7 +47,7 @@ export function calculateCoinValue(grade: Grade): number {
  */
 export function calculateSessionCoins(gradeData: SessionGradeData[]): number {
   return gradeData.reduce((total, entry) => {
-    const coinValue = calculateCoinValue(entry.grade as Grade);
+    const coinValue = calculateCoinValue(entry.grade);
     return total + coinValue;
   }, 0);
 }

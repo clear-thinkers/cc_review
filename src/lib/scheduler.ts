@@ -1,6 +1,13 @@
 import type { Word } from "./types";
 
 export type Grade = "again" | "hard" | "good" | "easy";
+export type ReviewSource = "flashcard" | "fillTest";
+export type GradeResult = {
+  grade: Grade;
+  source?: ReviewSource;
+  reason?: string;
+  score?: number;
+};
 
 const R_TARGET = 0.9;
 const S_MIN = 0.5;

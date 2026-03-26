@@ -3,13 +3,13 @@ import {
   buildShopAdminIngredientCatalogItems,
   canonicalizeShopIngredientKey,
   type ShopAdminIngredientPricesResponse,
-} from "@/app/words/shop/shopIngredients";
-import type { ShopRecipe } from "@/app/words/shop/shop.types";
+} from "@/lib/shopIngredients";
+import type { ShopRecipe } from "@/lib/shop.types";
 import {
   SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES,
   removeDeletedIngredientKeysFromLocalizedIngredientRows,
   removeDeletedIngredientKeysFromVariantIconRules,
-} from "@/app/words/shop-admin/shopAdmin.types";
+} from "@/lib/shopAdmin.types";
 import {
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedIngredients,

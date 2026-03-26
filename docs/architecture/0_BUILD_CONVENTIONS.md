@@ -149,7 +149,13 @@ Each feature-scoped type file must have a companion `[feature].types.test.ts` fi
 
 ## 2. Bilingual UI (English & Simplified Chinese)
 
-All user-facing text must support both English and Simplified Chinese. Create a `[feature].strings.ts` file alongside every new feature and consume it via the locale hook — never write string literals directly in JSX.
+All user-facing text must support both English and Simplified Chinese. Every feature must have one clearly documented owner for its copy — either a local strings file or a module-level strings file — and consume it via the locale hook. Never write string literals directly in JSX.
+
+**Default — standalone feature routes:** create a `[feature].strings.ts` file in the feature directory and import it locally.
+
+**Allowed exception — workspace-style modules:** a workspace with a shared coordinator or VM may keep a single module-level `[module].strings.ts` as the source of truth for all workspace-owned sections. New sections added to an existing workspace must add their copy to the existing module-level file, not create a parallel local file.
+
+> **This project's `/words` workspace** uses `words.strings.ts` as the module-level strings file for workspace-owned pages (`home`, `add`, `all`, `admin`, `debug`, `review`, `flashcard`, `fill-test`, `shop`, `shop-admin`). Features that stand alone outside the workspace coordinator — such as `prompts` and `tagging` — own their own local `[feature].strings.ts` files. New sections added to the `/words` workspace must extend `words.strings.ts`, not create a separate local file.
 
 ```typescript
 // src/app/words/prompts/prompts.strings.ts
@@ -240,7 +246,7 @@ src/app/words/[feature]/
   ├── page.tsx                    (Next.js route entry — minimal, no logic)
   ├── [FeatureName]Page.tsx       (main component: layout + orchestration)
   ├── [Component].tsx             (subcomponents as needed)
-  ├── [feature].strings.ts        (all bilingual strings — single source of truth)
+  ├── [feature].strings.ts        (standalone features only — see §2 for workspace exception)
   ├── [feature].types.ts          (TypeScript types for this feature)
   ├── [feature].test.tsx          (tests — see §5)
   └── README.md                   (optional: brief usage notes)
@@ -248,7 +254,7 @@ src/app/words/[feature]/
 
 ### New Feature Checklist
 
-- [ ] `[feature].strings.ts` created with full EN + ZH coverage
+- [ ] Strings owner confirmed: either a local `[feature].strings.ts` or an existing module-level strings file extended with the new section (per §2)
 - [ ] `[feature].types.ts` created if new domain types are introduced
 - [ ] No hardcoded text in JSX — all copy via strings object
 - [ ] Locale hook used consistently
@@ -272,9 +278,19 @@ Every new feature must have tests before it is considered complete.
 |---|---|
 | Domain logic (`src/lib/`) | Unit tests for all exported functions — happy path, edge cases, invalid input |
 | Normalization & safety | Verify malformed/unsafe inputs are dropped, not passed through |
-| UI components | Render test: renders without crash, displays correct strings |
+| UI components | Test at the right seam (see below) |
 | API routes | Integration test: success response and error response |
 | Scheduler logic | Unit test each grade tier (`again`, `hard`, `good`, `easy`) — verify `nextReviewAt` and `interval` |
+
+### UI Testing: Seam-Based Priority
+
+Not all UI coverage belongs at the same layer. Choose the seam closest to the logic, not the outermost component:
+
+1. **Extracted pure helpers first.** If a component contains branching logic (parsing, scoring, filtering, status messages), extract it to a named function and test that function. This is the highest-value, lowest-churn seam.
+2. **Focused subcomponent tests second.** If a subcomponent owns a stable, self-contained behavior (sortable columns, form validation, destructive-action visibility), a targeted render test is appropriate. Prefer this over smoke-testing the parent section.
+3. **Section-level smoke tests last, and only when warranted.** Large orchestration components that compose service calls, portals, role checks, and timers are expensive to render in tests and tend to be brittle. A smoke test ("renders without crash, displays expected string") is acceptable only when no better seam exists. It is not automatically required for every section component.
+
+The repo's existing test for admin logic (`AdminSection.test.ts`) follows this pattern — it tests extracted seams, not a full section mount. New tests should follow the same approach.
 
 ### Mocking Rules
 
@@ -337,6 +353,16 @@ This guardrail exists to keep bilingual content and Chinese character data stabl
 - Use Tailwind utility classes directly on JSX elements.
 - No arbitrary Tailwind values (`w-[347px]`) without a documented reason.
 - Dark mode and responsive breakpoints follow the pattern in `WordsWorkspace` — do not introduce new patterns without discussion.
+
+### CSS Module Exceptions (Documented)
+
+Two CSS module files exist as intentional exceptions to the Tailwind-only rule:
+
+1. **`src/app/words/results/results.module.css`** — The `results/` feature grew with a CSS module before the Tailwind-only convention was established. This file is the styling source of truth for that feature. **Do not add new Tailwind utility classes to `results/` components** — all new styling for that feature must extend the CSS module instead. Do not split styling across both systems further.
+
+2. **`src/app/words/review/fill-test/coins.animation.module.css`** — CSS keyframe animations cannot be expressed in Tailwind. A CSS module is the accepted pattern for animation-only styling. This is the only case where a new CSS module may be introduced: when the need is purely animation keyframes that Tailwind cannot express. Document the reason in a comment at the top of the file.
+
+**No other CSS modules should be created.** If a new feature requires styling that Tailwind cannot express, raise it in the feature spec before building.
 
 ### Per-Character Pinyin (Ruby) Alignment
 

@@ -12,7 +12,7 @@ import type {
   SessionGradeData,
   ResultsSummaryStats,
   SessionDisplayData,
-} from "@/app/words/results/results.types";
+} from "./quiz.types";
 
 /**
  * Calculate the percentage of grades that are "easy" (fully correct).

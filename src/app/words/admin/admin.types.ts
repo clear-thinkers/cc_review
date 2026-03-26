@@ -3,18 +3,15 @@ import type {
   FlashcardMeaningPhrase,
 } from "@/lib/flashcardLlm";
 
+// HiddenAdminTarget is owned by the lib/service layer; re-exported here for UI callers.
+export type { HiddenAdminTarget } from "@/lib/admin.types";
+
 /**
  * Admin Content Curation Types
  * Used in AdminSection and AdminPage
  */
 
 export type AdminTarget = {
-  character: string;
-  pronunciation: string;
-  key: string;
-};
-
-export type HiddenAdminTarget = {
   character: string;
   pronunciation: string;
   key: string;

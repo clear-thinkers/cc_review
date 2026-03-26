@@ -3,12 +3,12 @@ import path from "node:path";
 import type {
   DebugShopIngredientIconAuditItem,
   DebugShopIngredientIconAuditResponse,
-} from "@/app/words/debug/debug.types";
+} from "./debug.types";
 import {
   listShopIngredientCatalog,
   type ShopAdminIngredientCatalogItem,
   type ShopIngredientCatalogEntry,
-} from "@/app/words/shop/shopIngredients";
+} from "./shopIngredients";
 
 type ShopIngredientIconExists = (filePath: string) => Promise<boolean>;
 type ShopIngredientIconAuditSourceItem = Pick<

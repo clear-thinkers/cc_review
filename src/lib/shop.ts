@@ -6,13 +6,13 @@ import type {
   ShopRecipe,
   ShopVariantIconRule,
   UnlockShopRecipeResult,
-} from "@/app/words/shop/shop.types";
+} from "./shop.types";
 import {
   canonicalizeShopIngredientKey,
   findShopIngredientCatalogEntryByAlias,
   getShopIngredientCatalogEntry,
   type ShopIngredientCatalogEntry,
-} from "@/app/words/shop/shopIngredients";
+} from "./shopIngredients";
 
 export const SHOP_WALL_SIZE = 9;
 export const SHOP_INGREDIENT_QUANTITY_MIN = 1;

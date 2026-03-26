@@ -1,12 +1,12 @@
 import { access, readdir } from "node:fs/promises";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
-import type { DebugShopIngredientIconAuditResponse } from "@/app/words/debug/debug.types";
+import type { DebugShopIngredientIconAuditResponse } from "@/lib/debug.types";
 import {
   buildShopAdminIngredientCatalogItems,
   canonicalizeShopIngredientKey,
-} from "@/app/words/shop/shopIngredients";
-import type { ShopRecipe } from "@/app/words/shop/shop.types";
+} from "@/lib/shopIngredients";
+import type { ShopRecipe } from "@/lib/shop.types";
 import {
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedSpecialIngredients,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { ShopRecipe } from "@/app/words/shop/shop.types";
+import type { ShopRecipe } from "@/lib/shop.types";
 import {
   mergeReadonlyVariantIconRules,
   mergeShopLocalizedSpecialIngredientRows,
@@ -8,8 +8,8 @@ import {
   validateShopRecipeAdminDraft,
   type ShopAdminRecipesResponse,
   type ShopRecipeAdminDraft,
-} from "@/app/words/shop-admin/shopAdmin.types";
-import { canonicalizeShopIngredientKey } from "@/app/words/shop/shopIngredients";
+} from "@/lib/shopAdmin.types";
+import { canonicalizeShopIngredientKey } from "@/lib/shopIngredients";
 import {
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,

@@ -3,8 +3,8 @@ import type {
   DebugShopRewardRecipeOption,
   DebugShopRewardIconAuditUnusedItem,
   DebugShopRewardIconAuditResponse,
-} from "@/app/words/debug/debug.types";
-import type { ShopLocalizedValue, ShopVariantIconRule } from "@/app/words/shop/shop.types";
+} from "./debug.types";
+import type { ShopLocalizedValue, ShopVariantIconRule } from "./shop.types";
 import { resolvePublicAssetFilePath } from "./shopIngredientIconAudit";
 
 type ShopRewardIconExists = (filePath: string) => Promise<boolean>;

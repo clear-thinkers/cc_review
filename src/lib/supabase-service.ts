@@ -11,19 +11,18 @@
 import { supabase } from "./supabaseClient";
 import type { Word } from "./types";
 import type { FlashcardLlmResponse } from "./flashcardLlm";
-import type { QuizSession } from "@/app/words/results/results.types";
-import type { Wallet } from "@/app/words/shared/coins.types";
+import type { QuizSession } from "./quiz.types";
+import type { Wallet } from "./wallet.types";
 import type {
   ShopIngredientPrice,
   ShopRecipe,
   ShopTransaction,
   ShopRecipeUnlock,
   UnlockShopRecipeResult,
-} from "@/app/words/shop/shop.types";
+} from "./shop.types";
 import { calculateNextState, isDue } from "./scheduler";
-import type { Grade } from "./scheduler";
-import type { GradeResult } from "./review";
-import { canonicalizeShopIngredientKey } from "@/app/words/shop/shopIngredients";
+import type { Grade, GradeResult } from "./scheduler";
+import { canonicalizeShopIngredientKey } from "./shopIngredients";
 import { normalizeUnlockShopRecipeResult } from "./shop";
 import {
   normalizeShopIngredientList,
@@ -39,12 +38,12 @@ import type {
   LessonTag,
   WordLessonTagsMap,
   ResolvedLessonTag,
-} from "@/app/words/shared/tagging.types";
-import type { HiddenAdminTarget } from "@/app/words/admin/admin.types";
+} from "./tagging.types";
+import type { HiddenAdminTarget } from "./admin.types";
 import type {
   ReviewTestSession,
   ReviewTestSessionTargetDraft,
-} from "@/app/words/review/review.types";
+} from "./reviewTestSession.types";
 
 // ─── Exported types (moved from db.ts) ─────────────────────────────────────
 

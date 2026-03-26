@@ -4,8 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import type {
   DebugShopRewardIconAuditResponse,
   DebugShopRewardRecipeOption,
-} from "@/app/words/debug/debug.types";
-import type { ShopVariantIconRule } from "@/app/words/shop/shop.types";
+} from "@/lib/debug.types";
+import type { ShopVariantIconRule } from "@/lib/shop.types";
 import { normalizeShopLocalizedTitle, normalizeShopVariantIconRules } from "@/lib/shop";
 import { resolvePublicAssetFilePath } from "@/lib/shopIngredientIconAudit";
 import {
