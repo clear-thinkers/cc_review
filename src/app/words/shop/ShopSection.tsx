@@ -170,7 +170,9 @@ function RecipeModal({
             </div>
 
             <div className="space-y-2 rounded-lg border p-4">
-              <h3 className="font-medium">{strings.modal.baseIngredients}</h3>
+              <h3 className="text-lg font-semibold text-[#24423a]">
+                {strings.modal.baseIngredients}
+              </h3>
               <p className="text-xs text-gray-500">{strings.modal.ingredientTapHint}</p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {localizedRecipe.baseIngredients.map((ingredient, index) => {
@@ -183,11 +185,11 @@ function RecipeModal({
                       key={`${recipe.id}-${index}`}
                       type="button"
                       onClick={() => setSelectedIngredient(ingredient)}
-                      className="rounded-xl border border-[#eadfbe] bg-white px-4 py-3 text-sm text-gray-700 shadow-sm transition hover:border-[#d2b15b] hover:shadow-md"
+                      className="rounded-xl border border-[#eadfbe] bg-white px-3 py-3 text-sm text-gray-700 shadow-sm transition hover:border-[#d2b15b] hover:shadow-md"
                     >
                       {ingredientIconPath ? (
-                        <div className="flex h-full flex-col items-center gap-3 text-center">
-                          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-2">
+                        <div className="flex h-full flex-col items-center gap-2 text-center">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-1.5 sm:h-16 sm:w-16">
                             <img
                               src={ingredientIconPath}
                               alt={ingredient.name}
@@ -195,16 +197,20 @@ function RecipeModal({
                             />
                           </div>
                           <div className="min-w-0">
-                            <div className="font-semibold text-gray-900">{ingredient.name}</div>
-                            <div className="text-sm text-gray-600">
+                            <div className="text-[1.45rem] font-bold leading-tight text-gray-900 sm:text-[1.65rem]">
+                              {ingredient.name}
+                            </div>
+                            <div className="mt-0.5 text-base font-medium text-gray-600 sm:text-lg">
                               {formatIngredientAmount(ingredient)}
                             </div>
                           </div>
                         </div>
                       ) : (
                         <div className="flex h-full flex-col justify-center text-center">
-                          <div className="font-semibold text-gray-900">{ingredient.name}</div>
-                          <div className="mt-1 text-sm text-gray-600">
+                          <div className="text-[1.45rem] font-bold leading-tight text-gray-900 sm:text-[1.65rem]">
+                            {ingredient.name}
+                          </div>
+                          <div className="mt-0.5 text-base font-medium text-gray-600 sm:text-lg">
                             {formatIngredientAmount(ingredient)}
                           </div>
                         </div>
@@ -216,7 +222,9 @@ function RecipeModal({
             </div>
 
             <div className="space-y-2 rounded-lg border p-4">
-              <h3 className="font-medium">{strings.modal.specialSlots}</h3>
+              <h3 className="text-lg font-semibold text-[#24423a]">
+                {strings.modal.specialSlots}
+              </h3>
               {localizedRecipe.specialIngredients.length === 0 ? (
                 <p className="text-sm text-gray-600">{strings.modal.noSpecialSlots}</p>
               ) : (
@@ -228,13 +236,13 @@ function RecipeModal({
                     );
                     return (
                       <button
-                        key={`${recipe.id}-special-${ingredient.ingredientKey ?? ingredient.name}-${index}`}
-                        type="button"
-                        onClick={() => setSelectedIngredient(ingredient)}
-                        className="flex min-h-[108px] items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition hover:border-[#dcc38a] hover:shadow-[0_10px_24px_rgba(166,128,42,0.12)]"
-                      >
-                        {ingredientIconPath ? (
-                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-2">
+                      key={`${recipe.id}-special-${ingredient.ingredientKey ?? ingredient.name}-${index}`}
+                      type="button"
+                      onClick={() => setSelectedIngredient(ingredient)}
+                      className="flex min-h-[92px] items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition hover:border-[#dcc38a] hover:shadow-[0_10px_24px_rgba(166,128,42,0.12)]"
+                    >
+                      {ingredientIconPath ? (
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-1.5 sm:h-14 sm:w-14">
                             <img
                               src={ingredientIconPath}
                               alt={ingredient.name}
@@ -243,8 +251,10 @@ function RecipeModal({
                           </div>
                         ) : null}
                         <div className="min-w-0">
-                          <div className="font-semibold text-gray-900">{ingredient.name}</div>
-                          <div className="mt-1 text-sm text-gray-600">
+                          <div className="text-[1.35rem] font-bold leading-tight text-gray-900 sm:text-[1.5rem]">
+                            {ingredient.name}
+                          </div>
+                          <div className="mt-0.5 text-base font-medium text-gray-600 sm:text-lg">
                             {formatIngredientAmount(ingredient)}
                           </div>
                         </div>
@@ -266,13 +276,28 @@ function RecipeModal({
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-[#8b6f2f]">
-                      {strings.modal.ingredientDetailsTitle}
-                    </p>
-                    <h3 className="mt-1 text-xl font-semibold text-gray-900">
-                      {selectedIngredient.name}
-                    </h3>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-[#eadfbe] bg-white p-2">
+                      {selectedIngredientIconPath ? (
+                        <img
+                          src={selectedIngredientIconPath}
+                          alt={selectedIngredient.name}
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs font-semibold text-[#9a8f79]">
+                          {selectedIngredient.name}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[#8b6f2f]">
+                        {strings.modal.ingredientDetailsTitle}
+                      </p>
+                      <h3 className="mt-1 text-[1.75rem] font-bold leading-tight text-gray-900">
+                        {selectedIngredient.name}
+                      </h3>
+                    </div>
                   </div>
                   <button
                     type="button"

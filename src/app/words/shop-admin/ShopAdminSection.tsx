@@ -532,9 +532,10 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   }
 
   function addManagedIngredient(): void {
+    setIngredientUsageFilter("all");
     setIngredientCatalogDraft((current) => [
-      ...current,
       createEmptyShopAdminIngredientDraft(buildDraftId()),
+      ...current,
     ]);
     setIngredientNotice(null);
   }
