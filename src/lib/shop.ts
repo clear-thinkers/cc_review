@@ -8,6 +8,7 @@ import type {
   UnlockShopRecipeResult,
 } from "@/app/words/shop/shop.types";
 import {
+  canonicalizeShopIngredientKey,
   findShopIngredientCatalogEntryByAlias,
   getShopIngredientCatalogEntry,
   type ShopIngredientCatalogEntry,
@@ -19,7 +20,9 @@ export const SHOP_INGREDIENT_QUANTITY_MAX = 99;
 const SHOP_PLAIN_ICON_TOKEN = "plain";
 
 function normalizeMatchKeys(keys: string[]): string[] {
-  return Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean))).sort();
+  return Array.from(
+    new Set(keys.map((key) => canonicalizeShopIngredientKey(key)).filter(Boolean))
+  ).sort();
 }
 
 export function canAffordRecipeUnlock(
@@ -90,6 +93,40 @@ function normalizeShopIngredientQuantity(raw: unknown, fallback = SHOP_INGREDIEN
   return parseShopIngredientQuantity(raw) ?? fallback;
 }
 
+function normalizeShopIngredientRow(
+  raw: unknown,
+  fallback?: ShopIngredient
+): ShopIngredient {
+  const source =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const ingredientKey = canonicalizeShopIngredientKey(
+    typeof source.ingredientKey === "string"
+      ? source.ingredientKey
+      : typeof source.key === "string"
+        ? source.key
+        : ""
+  );
+  const costCoins =
+    typeof source.costCoins === "number" && Number.isFinite(source.costCoins)
+      ? source.costCoins
+      : undefined;
+
+  return {
+    ...(ingredientKey ? { ingredientKey } : {}),
+    name:
+      typeof source.name === "string"
+        ? source.name.trim()
+        : typeof source.label === "string"
+          ? source.label.trim()
+          : fallback?.name ?? "",
+    quantity: normalizeShopIngredientQuantity(
+      source.quantity,
+      fallback?.quantity ?? SHOP_INGREDIENT_QUANTITY_MIN
+    ),
+    ...(typeof costCoins === "number" ? { costCoins } : {}),
+  };
+}
+
 export function normalizeShopIngredientList(
   raw: unknown,
   fallback: ShopIngredient[]
@@ -98,27 +135,69 @@ export function normalizeShopIngredientList(
     return fallback;
   }
 
-  return raw.map((ingredient, index) => {
-    const source =
-      ingredient && typeof ingredient === "object"
-        ? (ingredient as Record<string, unknown>)
-        : {};
-    const ingredientKey =
-      typeof source.ingredientKey === "string" ? source.ingredientKey.trim() : "";
-    const costCoins =
-      typeof source.costCoins === "number" && Number.isFinite(source.costCoins)
-        ? source.costCoins
-        : undefined;
-    return {
-      ...(ingredientKey ? { ingredientKey } : {}),
-      name: typeof source.name === "string" ? source.name.trim() : "",
-      quantity: normalizeShopIngredientQuantity(
-        source.quantity,
-        fallback[index]?.quantity ?? SHOP_INGREDIENT_QUANTITY_MIN
-      ),
-      ...(typeof costCoins === "number" ? { costCoins } : {}),
-    };
-  });
+  return raw.map((ingredient, index) => normalizeShopIngredientRow(ingredient, fallback[index]));
+}
+
+function toShopIngredientLabelFallback(key: string): string {
+  if (!key) {
+    return "";
+  }
+
+  return key
+    .split("-")
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+export function normalizeShopSpecialIngredientList(
+  raw: unknown,
+  fallback: ShopIngredient[]
+): ShopIngredient[] {
+  if (!Array.isArray(raw)) {
+    return fallback;
+  }
+
+  const normalizedRows: ShopIngredient[] = [];
+  let fallbackIndex = 0;
+
+  for (const row of raw) {
+    const source = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+    if (!Array.isArray(source.options)) {
+      normalizedRows.push(normalizeShopIngredientRow(row, fallback[fallbackIndex]));
+      fallbackIndex += 1;
+      continue;
+    }
+
+    for (const option of source.options) {
+      const optionSource =
+        option && typeof option === "object" ? (option as Record<string, unknown>) : {};
+      const ingredientKey = canonicalizeShopIngredientKey(
+        typeof optionSource.ingredientKey === "string"
+          ? optionSource.ingredientKey
+          : typeof optionSource.key === "string"
+            ? optionSource.key
+            : ""
+      );
+      const fallbackIngredient = fallback[fallbackIndex];
+      normalizedRows.push({
+        ...(ingredientKey ? { ingredientKey } : {}),
+        name:
+          typeof optionSource.name === "string"
+            ? optionSource.name.trim()
+            : typeof optionSource.label === "string"
+              ? optionSource.label.trim()
+              : fallbackIngredient?.name ?? toShopIngredientLabelFallback(ingredientKey),
+        quantity: normalizeShopIngredientQuantity(
+          optionSource.quantity,
+          fallbackIngredient?.quantity ?? SHOP_INGREDIENT_QUANTITY_MIN
+        ),
+      });
+      fallbackIndex += 1;
+    }
+  }
+
+  return normalizedRows;
 }
 
 function normalizeShopLocalizedStringValue(
@@ -167,7 +246,16 @@ export function normalizeShopLocalizedSpecialIngredients(
   raw: unknown,
   fallback: ShopIngredient[]
 ): ShopLocalizedValue<ShopIngredient[]> {
-  return normalizeShopLocalizedListValue(raw, fallback, normalizeShopIngredientList);
+  if (Array.isArray(raw)) {
+    const en = normalizeShopSpecialIngredientList(raw, fallback);
+    const zh = normalizeShopSpecialIngredientList(raw, en);
+    return { en, zh };
+  }
+
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const en = normalizeShopSpecialIngredientList(source.en, fallback);
+  const zh = normalizeShopSpecialIngredientList(source.zh, en);
+  return { en, zh };
 }
 
 export function resolveShopLocalizedString(
@@ -237,29 +325,61 @@ export function resolvePlainShopRecipeIconPath(
 }
 
 export function resolveShopIngredientCatalogEntry(
-  ingredient: ShopIngredient
+  ingredient: ShopIngredient,
+  sharedIngredientsByKey?: ReadonlyMap<string, ShopIngredientPrice>
 ): ShopIngredientCatalogEntry | null {
-  return (
-    getShopIngredientCatalogEntry(ingredient.ingredientKey) ??
-    findShopIngredientCatalogEntryByAlias(ingredient.name)
-  );
+  const ingredientKey = canonicalizeShopIngredientKey(ingredient.ingredientKey);
+  const seededEntry = getShopIngredientCatalogEntry(ingredientKey);
+  const sharedEntry = ingredientKey ? sharedIngredientsByKey?.get(ingredientKey) : undefined;
+
+  if (sharedEntry && ingredientKey) {
+    return {
+      key: ingredientKey,
+      label: sharedEntry.labelI18n ??
+        seededEntry?.label ?? {
+          en: ingredient.name,
+          zh: ingredient.name,
+        },
+      defaultCostCoins: sharedEntry.costCoins,
+      iconPath:
+        typeof sharedEntry.iconPath === "string"
+          ? sharedEntry.iconPath.trim() || null
+          : seededEntry?.iconPath ?? null,
+    };
+  }
+
+  return seededEntry ?? findShopIngredientCatalogEntryByAlias(ingredient.name);
 }
 
-export function resolveShopIngredientIconPath(ingredient: ShopIngredient): string | null {
-  return resolveShopIngredientCatalogEntry(ingredient)?.iconPath ?? null;
+export function resolveShopIngredientIconPath(
+  ingredient: ShopIngredient,
+  sharedIngredientsByKey?: ReadonlyMap<string, ShopIngredientPrice>
+): string | null {
+  return resolveShopIngredientCatalogEntry(ingredient, sharedIngredientsByKey)?.iconPath ?? null;
+}
+
+export function buildShopIngredientRecordMap(
+  prices: ShopIngredientPrice[]
+): ReadonlyMap<string, ShopIngredientPrice> {
+  return new Map(
+    prices.map((price) => [canonicalizeShopIngredientKey(price.ingredientKey), price] as const)
+  );
 }
 
 export function buildShopIngredientPriceMap(
   prices: ShopIngredientPrice[]
 ): ReadonlyMap<string, number> {
-  return new Map(prices.map((price) => [price.ingredientKey, price.costCoins] as const));
+  return new Map(
+    prices.map((price) => [canonicalizeShopIngredientKey(price.ingredientKey), price.costCoins] as const)
+  );
 }
 
 export function resolveShopIngredientCost(
   ingredient: ShopIngredient,
-  priceByKey?: ReadonlyMap<string, number>
+  priceByKey?: ReadonlyMap<string, number>,
+  sharedIngredientsByKey?: ReadonlyMap<string, ShopIngredientPrice>
 ): number | null {
-  const catalogEntry = resolveShopIngredientCatalogEntry(ingredient);
+  const catalogEntry = resolveShopIngredientCatalogEntry(ingredient, sharedIngredientsByKey);
   if (catalogEntry) {
     return priceByKey?.get(catalogEntry.key) ?? catalogEntry.defaultCostCoins;
   }

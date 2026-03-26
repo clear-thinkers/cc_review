@@ -9,10 +9,12 @@ import {
   type ShopAdminRecipesResponse,
   type ShopRecipeAdminDraft,
 } from "@/app/words/shop-admin/shopAdmin.types";
+import { canonicalizeShopIngredientKey } from "@/app/words/shop/shopIngredients";
 import {
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedIntro,
+  normalizeShopSpecialIngredientList,
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedTitle,
 } from "@/lib/shop";
@@ -42,7 +44,10 @@ interface SupabaseShopIngredientLabelRow {
 
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
   const baseIngredients = normalizeShopIngredientList(row.base_ingredients, []);
-  const specialIngredients = normalizeShopIngredientList(row.special_ingredient_slots, []);
+  const specialIngredients = normalizeShopSpecialIngredientList(
+    row.special_ingredient_slots,
+    []
+  );
 
   return {
     id: row.id,
@@ -244,7 +249,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         }
         const source = row.label_i18n as { en?: unknown; zh?: unknown };
         return [
-          row.ingredient_key,
+          canonicalizeShopIngredientKey(row.ingredient_key),
           {
             en: typeof source.en === "string" ? source.en.trim() : "",
             zh: typeof source.zh === "string" ? source.zh.trim() : "",

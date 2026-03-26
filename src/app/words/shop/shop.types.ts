@@ -46,6 +46,7 @@ export type ShopIngredientPrice = {
   costCoins: number;
   updatedAt: number;
   labelI18n?: ShopLocalizedValue<string>;
+  iconPath?: string | null;
 };
 
 export type ShopTransactionAction = "unlock_recipe";

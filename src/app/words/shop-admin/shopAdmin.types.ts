@@ -4,7 +4,12 @@ import type {
   ShopRecipe,
   ShopVariantIconRule,
 } from "../shop/shop.types";
-import { getShopIngredientCatalogEntry } from "../shop/shopIngredients";
+import {
+  canonicalizeShopIngredientKey,
+  getShopIngredientCatalogEntry,
+  type ShopAdminIngredientCatalogItem,
+  type ShopAdminIngredientUsage,
+} from "../shop/shopIngredients";
 import {
   SHOP_INGREDIENT_QUANTITY_MAX,
   SHOP_INGREDIENT_QUANTITY_MIN,
@@ -14,6 +19,7 @@ import {
 export const SHOP_RECIPE_TITLE_MAX = 80;
 export const SHOP_RECIPE_INTRO_MAX = 240;
 export const SHOP_RECIPE_INGREDIENT_NAME_MAX = 60;
+export const SHOP_ADMIN_INGREDIENT_PRICE_MAX = 999;
 
 export type ShopRecipeAdminDraft = {
   recipeId: string;
@@ -33,7 +39,166 @@ export type ShopAdminRecipesResponse = {
   recipes: ShopRecipe[];
 };
 
+export type ShopAdminIngredientDraft = {
+  draftId: string;
+  key: string;
+  label: ShopLocalizedValue<string>;
+  iconPath: string;
+  defaultCostCoins: number;
+  costCoins: number;
+  usage: ShopAdminIngredientUsage;
+  isPersisted: boolean;
+};
+
 type ShopIngredientLabelLookup = ReadonlyMap<string, ShopLocalizedValue<string>>;
+
+export function buildShopAdminIngredientDrafts(
+  items: ShopAdminIngredientCatalogItem[]
+): ShopAdminIngredientDraft[] {
+  return items.map((item) => ({
+    draftId: item.key,
+    key: item.key,
+    label: { ...item.label },
+    iconPath: item.iconPath ?? "",
+    defaultCostCoins: item.defaultCostCoins,
+    costCoins: item.costCoins,
+    usage: { ...item.usage },
+    isPersisted: true,
+  }));
+}
+
+export function createEmptyShopAdminIngredientDraft(draftId: string): ShopAdminIngredientDraft {
+  return {
+    draftId,
+    key: "",
+    label: { en: "", zh: "" },
+    iconPath: "",
+    defaultCostCoins: 0,
+    costCoins: 0,
+    usage: {
+      usedInBase: false,
+      usedInSpecial: false,
+    },
+    isPersisted: false,
+  };
+}
+
+function normalizeLocalizedIngredientDraftLabel(raw: unknown): ShopLocalizedValue<string> {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    en: typeof source.en === "string" ? source.en.trim() : "",
+    zh: typeof source.zh === "string" ? source.zh.trim() : "",
+  };
+}
+
+function normalizeShopAdminIngredientUsage(raw: unknown): ShopAdminIngredientUsage {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    usedInBase: source.usedInBase === true,
+    usedInSpecial: source.usedInSpecial === true,
+  };
+}
+
+export function normalizeShopAdminIngredientDraft(raw: unknown): ShopAdminIngredientDraft {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    draftId: typeof source.draftId === "string" ? source.draftId.trim() : "",
+    key: typeof source.key === "string" ? source.key.trim() : "",
+    label: normalizeLocalizedIngredientDraftLabel(source.label),
+    iconPath: typeof source.iconPath === "string" ? source.iconPath.trim() : "",
+    defaultCostCoins:
+      typeof source.defaultCostCoins === "number" && Number.isFinite(source.defaultCostCoins)
+        ? source.defaultCostCoins
+        : 0,
+    costCoins:
+      typeof source.costCoins === "number" && Number.isFinite(source.costCoins)
+        ? source.costCoins
+        : 0,
+    usage: normalizeShopAdminIngredientUsage(source.usage),
+    isPersisted: source.isPersisted === true,
+  };
+}
+
+export function normalizeShopAdminIngredientDrafts(raw: unknown): ShopAdminIngredientDraft[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return list.map((item) => normalizeShopAdminIngredientDraft(item));
+}
+
+export function validateShopAdminIngredientDrafts(
+  drafts: ShopAdminIngredientDraft[]
+): string[] {
+  const normalizedDrafts = normalizeShopAdminIngredientDrafts(drafts);
+  const errors: string[] = [];
+  const seenKeys = new Set<string>();
+
+  normalizedDrafts.forEach((draft, index) => {
+    const rowNumber = index + 1;
+    const canonicalKey = canonicalizeShopIngredientKey(draft.key);
+    if (!canonicalKey) {
+      errors.push(`Ingredient ${rowNumber}: key is required.`);
+    } else if (seenKeys.has(canonicalKey)) {
+      errors.push(`Ingredient ${rowNumber}: duplicate ingredient key "${canonicalKey}".`);
+    } else {
+      seenKeys.add(canonicalKey);
+    }
+
+    if (!draft.label.en) {
+      errors.push(`Ingredient ${rowNumber}: English name is required.`);
+    } else if (draft.label.en.length > SHOP_RECIPE_INGREDIENT_NAME_MAX) {
+      errors.push(
+        `Ingredient ${rowNumber}: English name must be ${SHOP_RECIPE_INGREDIENT_NAME_MAX} characters or fewer.`
+      );
+    }
+
+    if (!draft.label.zh) {
+      errors.push(`Ingredient ${rowNumber}: Chinese name is required.`);
+    } else if (draft.label.zh.length > SHOP_RECIPE_INGREDIENT_NAME_MAX) {
+      errors.push(
+        `Ingredient ${rowNumber}: Chinese name must be ${SHOP_RECIPE_INGREDIENT_NAME_MAX} characters or fewer.`
+      );
+    }
+
+    if (!Number.isInteger(draft.costCoins) || draft.costCoins < 0) {
+      errors.push(`Ingredient ${rowNumber}: price must be a whole number from 0 and up.`);
+    } else if (draft.costCoins > SHOP_ADMIN_INGREDIENT_PRICE_MAX) {
+      errors.push(
+        `Ingredient ${rowNumber}: price must be ${SHOP_ADMIN_INGREDIENT_PRICE_MAX} or less.`
+      );
+    }
+
+    if (draft.iconPath && !draft.iconPath.startsWith("/")) {
+      errors.push(`Ingredient ${rowNumber}: icon path must start with "/".`);
+    }
+  });
+
+  return errors;
+}
+
+export function serializeShopAdminIngredientDrafts(
+  drafts: ShopAdminIngredientDraft[]
+): ShopAdminIngredientCatalogItem[] {
+  return normalizeShopAdminIngredientDrafts(drafts).map((draft) => ({
+    key: canonicalizeShopIngredientKey(draft.key),
+    label: {
+      en: draft.label.en.trim(),
+      zh: draft.label.zh.trim(),
+    },
+    defaultCostCoins: draft.defaultCostCoins,
+    iconPath: draft.iconPath.trim() || null,
+    costCoins: draft.costCoins,
+    usage: { ...draft.usage },
+  }));
+}
+
+export function areShopAdminIngredientDraftsEqual(
+  left: ShopAdminIngredientDraft[],
+  right: ShopAdminIngredientDraft[]
+): boolean {
+  return (
+    JSON.stringify(serializeShopAdminIngredientDrafts(left)) ===
+    JSON.stringify(serializeShopAdminIngredientDrafts(right))
+  );
+}
 
 export function buildShopRecipeAdminDraft(recipe: ShopRecipe): ShopRecipeAdminDraft {
   return {
@@ -63,7 +228,9 @@ function normalizeVariantMatchKeys(raw: unknown): string[] {
   return Array.from(
     new Set(
       raw
-        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .map((value) =>
+          typeof value === "string" ? canonicalizeShopIngredientKey(value) : ""
+        )
         .filter(Boolean)
     )
   ).sort((left, right) => left.localeCompare(right));
@@ -84,8 +251,13 @@ function normalizeIngredientList(raw: unknown): ShopIngredient[] {
       ingredient && typeof ingredient === "object"
         ? (ingredient as Record<string, unknown>)
         : {};
-    const ingredientKey =
-      typeof source.ingredientKey === "string" ? source.ingredientKey.trim() : "";
+    const ingredientKey = canonicalizeShopIngredientKey(
+      typeof source.ingredientKey === "string"
+        ? source.ingredientKey
+        : typeof source.key === "string"
+          ? source.key
+          : ""
+    );
     return {
       ...(ingredientKey ? { ingredientKey } : {}),
       name: typeof source.name === "string" ? source.name.trim() : "",
@@ -113,6 +285,134 @@ function normalizeVariantIconRules(raw: unknown): ShopVariantIconRule[] {
   });
 }
 
+function buildDeletedIngredientKeySet(
+  deletedIngredientKeys: readonly string[]
+): ReadonlySet<string> {
+  return new Set(
+    deletedIngredientKeys
+      .map((ingredientKey) => canonicalizeShopIngredientKey(ingredientKey))
+      .filter(Boolean)
+  );
+}
+
+export function removeDeletedIngredientKeysFromLocalizedIngredientRows(
+  rows: ShopLocalizedValue<ShopIngredient[]>,
+  deletedIngredientKeys: readonly string[]
+): ShopLocalizedValue<ShopIngredient[]> {
+  const deletedKeySet = buildDeletedIngredientKeySet(deletedIngredientKeys);
+  if (deletedKeySet.size === 0) {
+    return {
+      en: rows.en.map((ingredient) => ({ ...ingredient })),
+      zh: rows.zh.map((ingredient) => ({ ...ingredient })),
+    };
+  }
+
+  const nextEn: ShopIngredient[] = [];
+  const nextZh: ShopIngredient[] = [];
+
+  rows.en.forEach((englishIngredient, ingredientIndex) => {
+    const chineseIngredient = rows.zh[ingredientIndex];
+    const englishKey = canonicalizeShopIngredientKey(englishIngredient.ingredientKey);
+    const chineseKey = canonicalizeShopIngredientKey(chineseIngredient?.ingredientKey);
+    const resolvedKey = englishKey || chineseKey;
+
+    if (resolvedKey && deletedKeySet.has(resolvedKey)) {
+      return;
+    }
+
+    nextEn.push({ ...englishIngredient });
+    if (chineseIngredient) {
+      nextZh.push({ ...chineseIngredient });
+      return;
+    }
+
+    nextZh.push({
+      ...(englishIngredient.ingredientKey
+        ? { ingredientKey: englishIngredient.ingredientKey }
+        : {}),
+      name: "",
+      quantity: englishIngredient.quantity,
+    });
+  });
+
+  return {
+    en: nextEn,
+    zh: nextZh,
+  };
+}
+
+export function removeDeletedIngredientKeysFromVariantIconRules(
+  rules: ShopVariantIconRule[],
+  deletedIngredientKeys: readonly string[]
+): ShopVariantIconRule[] {
+  const deletedKeySet = buildDeletedIngredientKeySet(deletedIngredientKeys);
+  const seenSignatures = new Set<string>();
+
+  return rules.reduce<ShopVariantIconRule[]>((result, rule) => {
+    const nextMatch = normalizeVariantMatchKeys(rule.match).filter(
+      (ingredientKey) => !deletedKeySet.has(ingredientKey)
+    );
+    const signature = nextMatch.join("|");
+    if (seenSignatures.has(signature)) {
+      return result;
+    }
+
+    seenSignatures.add(signature);
+    result.push({
+      iconPath: rule.iconPath,
+      match: nextMatch,
+    });
+    return result;
+  }, []);
+}
+
+export function removeDeletedIngredientKeysFromRecipe(
+  recipe: ShopRecipe,
+  deletedIngredientKeys: readonly string[]
+): ShopRecipe {
+  const nextBaseIngredientsI18n = removeDeletedIngredientKeysFromLocalizedIngredientRows(
+    recipe.baseIngredientsI18n,
+    deletedIngredientKeys
+  );
+  const nextSpecialIngredientsI18n = removeDeletedIngredientKeysFromLocalizedIngredientRows(
+    recipe.specialIngredientsI18n,
+    deletedIngredientKeys
+  );
+
+  return {
+    ...recipe,
+    baseIngredients: nextBaseIngredientsI18n.en.map((ingredient) => ({ ...ingredient })),
+    baseIngredientsI18n: nextBaseIngredientsI18n,
+    specialIngredients: nextSpecialIngredientsI18n.en.map((ingredient) => ({ ...ingredient })),
+    specialIngredientsI18n: nextSpecialIngredientsI18n,
+    variantIconRules: removeDeletedIngredientKeysFromVariantIconRules(
+      recipe.variantIconRules,
+      deletedIngredientKeys
+    ),
+  };
+}
+
+export function removeDeletedIngredientKeysFromRecipeAdminDraft(
+  draft: ShopRecipeAdminDraft,
+  deletedIngredientKeys: readonly string[]
+): ShopRecipeAdminDraft {
+  return {
+    ...draft,
+    baseIngredients: removeDeletedIngredientKeysFromLocalizedIngredientRows(
+      draft.baseIngredients,
+      deletedIngredientKeys
+    ),
+    specialIngredients: removeDeletedIngredientKeysFromLocalizedIngredientRows(
+      draft.specialIngredients,
+      deletedIngredientKeys
+    ),
+    variantIconRules: removeDeletedIngredientKeysFromVariantIconRules(
+      draft.variantIconRules,
+      deletedIngredientKeys
+    ),
+  };
+}
+
 export function listShopAdminVariantIngredientOptions(
   specialIngredients: ShopLocalizedValue<ShopIngredient[]>
 ): ShopAdminVariantIngredientOption[] {
@@ -120,7 +420,7 @@ export function listShopAdminVariantIngredientOptions(
 
   specialIngredients.en.forEach((englishIngredient, ingredientIndex) => {
     const chineseIngredient = specialIngredients.zh[ingredientIndex];
-    const key = englishIngredient.ingredientKey?.trim() ?? "";
+    const key = canonicalizeShopIngredientKey(englishIngredient.ingredientKey);
     if (!key || optionsByKey.has(key)) {
       return;
     }
@@ -160,7 +460,6 @@ export function normalizeShopRecipeAdminDraft(draft: {
 function validateLocalizedIngredientRows(params: {
   rows: ShopLocalizedValue<ShopIngredient[]>;
   rowLabel: string;
-  requireKnownCatalogKey: boolean;
 }): string[] {
   const errors: string[] = [];
 
@@ -169,13 +468,13 @@ function validateLocalizedIngredientRows(params: {
     return errors;
   }
 
-  const seenSpecialKeys = new Set<string>();
+  const seenKeys = new Set<string>();
 
   params.rows.en.forEach((ingredient, index) => {
     const rowNumber = index + 1;
     const zhIngredient = params.rows.zh[index];
-    const ingredientKey = ingredient.ingredientKey?.trim() ?? "";
-    const zhIngredientKey = zhIngredient?.ingredientKey?.trim() ?? "";
+    const ingredientKey = canonicalizeShopIngredientKey(ingredient.ingredientKey);
+    const zhIngredientKey = canonicalizeShopIngredientKey(zhIngredient?.ingredientKey);
     if (ingredientKey !== zhIngredientKey) {
       errors.push(`${params.rowLabel} ${rowNumber}: ingredient keys must stay aligned.`);
     }
@@ -193,15 +492,10 @@ function validateLocalizedIngredientRows(params: {
     }
 
     if (ingredientKey) {
-      if (params.requireKnownCatalogKey && !getShopIngredientCatalogEntry(ingredientKey)) {
-        errors.push(`${params.rowLabel} ${rowNumber}: unknown ingredient key "${ingredientKey}".`);
-      }
-      if (!params.requireKnownCatalogKey) {
-        if (seenSpecialKeys.has(ingredientKey)) {
-          errors.push(`${params.rowLabel} ${rowNumber}: duplicate ingredient key "${ingredientKey}".`);
-        } else {
-          seenSpecialKeys.add(ingredientKey);
-        }
+      if (seenKeys.has(ingredientKey)) {
+        errors.push(`${params.rowLabel} ${rowNumber}: duplicate ingredient key "${ingredientKey}".`);
+      } else {
+        seenKeys.add(ingredientKey);
       }
       return;
     }
@@ -261,14 +555,12 @@ export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): strin
     ...validateLocalizedIngredientRows({
       rows: normalized.baseIngredients,
       rowLabel: "Ingredient",
-      requireKnownCatalogKey: true,
     })
   );
   errors.push(
     ...validateLocalizedIngredientRows({
       rows: normalized.specialIngredients,
       rowLabel: "Special ingredient",
-      requireKnownCatalogKey: false,
     })
   );
 
@@ -312,7 +604,6 @@ export function areShopRecipeAdminDraftsEqual(
 function mergeLocalizedIngredientRows(params: {
   draftIngredients: ShopLocalizedValue<ShopIngredient[]>;
   labelByKey?: ShopIngredientLabelLookup;
-  requireKnownCatalogKey: boolean;
 }): ShopLocalizedValue<ShopIngredient[]> {
   if (params.draftIngredients.en.length !== params.draftIngredients.zh.length) {
     throw new Error("English and Chinese ingredient rows must stay aligned.");
@@ -320,14 +611,10 @@ function mergeLocalizedIngredientRows(params: {
 
   const normalizedRows = params.draftIngredients.en.map((ingredient, index) => {
     const zhIngredient = params.draftIngredients.zh[index];
-    const ingredientKey = ingredient.ingredientKey?.trim() ?? "";
-    const zhIngredientKey = zhIngredient?.ingredientKey?.trim() ?? "";
+    const ingredientKey = canonicalizeShopIngredientKey(ingredient.ingredientKey);
+    const zhIngredientKey = canonicalizeShopIngredientKey(zhIngredient?.ingredientKey);
     if (ingredientKey !== zhIngredientKey) {
       throw new Error(`Ingredient ${index + 1}: ingredient keys must stay aligned.`);
-    }
-
-    if (params.requireKnownCatalogKey && ingredientKey && !getShopIngredientCatalogEntry(ingredientKey)) {
-      throw new Error(`Ingredient ${index + 1}: unknown ingredient key "${ingredientKey}".`);
     }
 
     return {
@@ -376,7 +663,6 @@ export function mergeReadonlyShopLocalizedIngredientRows(params: {
   return mergeLocalizedIngredientRows({
     draftIngredients: params.draftIngredients,
     labelByKey: params.labelByKey,
-    requireKnownCatalogKey: true,
   });
 }
 
@@ -387,7 +673,6 @@ export function mergeShopLocalizedSpecialIngredientRows(params: {
   return mergeLocalizedIngredientRows({
     draftIngredients: params.draftIngredients,
     labelByKey: params.labelByKey,
-    requireKnownCatalogKey: false,
   });
 }
 

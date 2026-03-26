@@ -23,11 +23,13 @@ import type {
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade } from "./scheduler";
 import type { GradeResult } from "./review";
+import { canonicalizeShopIngredientKey } from "@/app/words/shop/shopIngredients";
 import { normalizeUnlockShopRecipeResult } from "./shop";
 import {
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedIntro,
+  normalizeShopSpecialIngredientList,
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedTitle,
 } from "./shop";
@@ -315,11 +317,15 @@ interface SupabaseShopIngredientPriceRow {
   cost_coins: number;
   updated_at: string;
   label_i18n?: unknown;
+  icon_path?: string | null;
 }
 
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
   const baseIngredients = normalizeShopIngredientList(row.base_ingredients, []);
-  const specialIngredients = normalizeShopIngredientList(row.special_ingredient_slots, []);
+  const specialIngredients = normalizeShopSpecialIngredientList(
+    row.special_ingredient_slots,
+    []
+  );
 
   return {
     id: row.id,
@@ -371,9 +377,12 @@ function toShopTransaction(row: SupabaseShopTransactionRow): ShopTransaction {
 
 function toShopIngredientPrice(row: SupabaseShopIngredientPriceRow): ShopIngredientPrice {
   return {
-    ingredientKey: row.ingredient_key,
+    ingredientKey: canonicalizeShopIngredientKey(row.ingredient_key),
     costCoins: row.cost_coins,
     updatedAt: new Date(row.updated_at).getTime(),
+    ...(typeof row.icon_path === "string"
+      ? { iconPath: row.icon_path.trim() || null }
+      : {}),
     ...(row.label_i18n && typeof row.label_i18n === "object"
       ? {
           labelI18n: {

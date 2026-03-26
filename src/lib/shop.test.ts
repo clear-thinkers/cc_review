@@ -4,6 +4,8 @@ import {
   canAffordRecipeUnlock,
   getShopRecipeContentForLocale,
   normalizeShopIngredientList,
+  normalizeShopLocalizedSpecialIngredients,
+  normalizeShopSpecialIngredientList,
   normalizeUnlockShopRecipeResult,
   resolvePlainShopRecipeIconPath,
   resolveShopIngredientCost,
@@ -45,6 +47,18 @@ describe("resolveShopRecipeIconPath", () => {
         ["spark_pop", "goal_glaze"]
       )
     ).toBe("/rewards/donut_ambitious_1.png");
+  });
+
+  it("treats underscore and kebab-case ingredient keys as the same match", () => {
+    expect(
+      resolveShopRecipeIconPath(
+        [
+          { match: [], iconPath: "/rewards/bubble-tea_plain.png" },
+          { match: ["brown-sugar"], iconPath: "/rewards/bubble-tea_brown-sugar_wink.png" },
+        ],
+        ["brown_sugar"]
+      )
+    ).toBe("/rewards/bubble-tea_brown-sugar_wink.png");
   });
 });
 
@@ -139,6 +153,55 @@ describe("normalizeShopIngredientList", () => {
     expect(
       normalizeShopIngredientList([{ name: "Milk", quantity: "0" }], [{ name: "Milk", quantity: 3 }])
     ).toEqual([{ name: "Milk", quantity: 3 }]);
+  });
+});
+
+describe("normalizeShopSpecialIngredientList", () => {
+  it("flattens legacy slot payloads into ingredient rows", () => {
+    expect(
+      normalizeShopSpecialIngredientList(
+        [
+          {
+            slotKey: "specialty_ingredients",
+            options: [
+              { key: "brown_sugar", label: "Brown Sugar" },
+              { key: "jasmine", label: "Jasmine" },
+            ],
+          },
+        ],
+        []
+      )
+    ).toEqual([
+      { ingredientKey: "brown-sugar", name: "Brown Sugar", quantity: 1 },
+      { ingredientKey: "jasmine", name: "Jasmine", quantity: 1 },
+    ]);
+  });
+});
+
+describe("normalizeShopLocalizedSpecialIngredients", () => {
+  it("flattens localized legacy slot payloads while preserving translated labels", () => {
+    expect(
+      normalizeShopLocalizedSpecialIngredients(
+        {
+          en: [
+            {
+              slotKey: "specialty_ingredients",
+              options: [{ key: "brown_sugar", label: "Brown Sugar" }],
+            },
+          ],
+          zh: [
+            {
+              slotKey: "specialty_ingredients",
+              options: [{ key: "brown_sugar", label: "\u9ed1\u7cd6" }],
+            },
+          ],
+        },
+        []
+      )
+    ).toEqual({
+      en: [{ ingredientKey: "brown-sugar", name: "Brown Sugar", quantity: 1 }],
+      zh: [{ ingredientKey: "brown-sugar", name: "\u9ed1\u7cd6", quantity: 1 }],
+    });
   });
 });
 

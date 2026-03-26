@@ -7,6 +7,7 @@ import { useLocale } from "@/app/shared/locale";
 import { resolveChildProfileTarget } from "@/lib/child-profile-target";
 import type {
   ShopIngredient,
+  ShopIngredientPrice,
   ShopRecipe,
   ShopTransaction,
   ShopRecipeUnlock,
@@ -14,12 +15,14 @@ import type {
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
   getOrCreateWallet,
+  listShopIngredientPrices,
   listShopRecipeUnlocks,
   listShopRecipes,
   listShopTransactions,
   unlockShopRecipe,
 } from "@/lib/supabase-service";
 import {
+  buildShopIngredientRecordMap,
   SHOP_WALL_SIZE,
   canAffordRecipeUnlock,
   getShopRecipeContentForLocale,
@@ -112,11 +115,13 @@ function getTileArtClassName(recipeState: "reserved" | "locked" | "unlocked"): s
 
 function RecipeModal({
   recipe,
+  ingredientRecordsByKey,
   locale,
   strings,
   onClose,
 }: {
   recipe: ShopRecipe;
+  ingredientRecordsByKey: ReadonlyMap<string, ShopIngredientPrice>;
   locale: "en" | "zh";
   strings: WordsWorkspaceVM["str"]["shop"];
   onClose: () => void;
@@ -127,7 +132,7 @@ function RecipeModal({
   }
   const localizedRecipe = getShopRecipeContentForLocale(recipe, locale);
   const selectedIngredientIconPath = selectedIngredient
-    ? resolveShopIngredientIconPath(selectedIngredient)
+    ? resolveShopIngredientIconPath(selectedIngredient, ingredientRecordsByKey)
     : null;
 
   return createPortal(
@@ -169,7 +174,10 @@ function RecipeModal({
               <p className="text-xs text-gray-500">{strings.modal.ingredientTapHint}</p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {localizedRecipe.baseIngredients.map((ingredient, index) => {
-                  const ingredientIconPath = resolveShopIngredientIconPath(ingredient);
+                  const ingredientIconPath = resolveShopIngredientIconPath(
+                    ingredient,
+                    ingredientRecordsByKey
+                  );
                   return (
                     <button
                       key={`${recipe.id}-${index}`}
@@ -213,30 +221,36 @@ function RecipeModal({
                 <p className="text-sm text-gray-600">{strings.modal.noSpecialSlots}</p>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {localizedRecipe.specialIngredients.map((ingredient, index) => (
-                    <button
-                      key={`${recipe.id}-special-${ingredient.ingredientKey ?? ingredient.name}-${index}`}
-                      type="button"
-                      onClick={() => setSelectedIngredient(ingredient)}
-                      className="flex min-h-[108px] items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition hover:border-[#dcc38a] hover:shadow-[0_10px_24px_rgba(166,128,42,0.12)]"
-                    >
-                      {resolveShopIngredientIconPath(ingredient) ? (
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-2">
-                          <img
-                            src={resolveShopIngredientIconPath(ingredient) ?? ""}
-                            alt={ingredient.name}
-                            className="h-full w-full object-contain"
-                          />
+                  {localizedRecipe.specialIngredients.map((ingredient, index) => {
+                    const ingredientIconPath = resolveShopIngredientIconPath(
+                      ingredient,
+                      ingredientRecordsByKey
+                    );
+                    return (
+                      <button
+                        key={`${recipe.id}-special-${ingredient.ingredientKey ?? ingredient.name}-${index}`}
+                        type="button"
+                        onClick={() => setSelectedIngredient(ingredient)}
+                        className="flex min-h-[108px] items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition hover:border-[#dcc38a] hover:shadow-[0_10px_24px_rgba(166,128,42,0.12)]"
+                      >
+                        {ingredientIconPath ? (
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-2">
+                            <img
+                              src={ingredientIconPath}
+                              alt={ingredient.name}
+                              className="h-full w-full object-contain"
+                            />
+                          </div>
+                        ) : null}
+                        <div className="min-w-0">
+                          <div className="font-semibold text-gray-900">{ingredient.name}</div>
+                          <div className="mt-1 text-sm text-gray-600">
+                            {formatIngredientAmount(ingredient)}
+                          </div>
                         </div>
-                      ) : null}
-                      <div className="min-w-0">
-                        <div className="font-semibold text-gray-900">{ingredient.name}</div>
-                        <div className="mt-1 text-sm text-gray-600">
-                          {formatIngredientAmount(ingredient)}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -409,6 +423,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
   const locale = useLocale();
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [recipes, setRecipes] = useState<ShopRecipe[]>([]);
+  const [ingredientRecords, setIngredientRecords] = useState<ShopIngredientPrice[]>([]);
   const [walletCoins, setWalletCoins] = useState(0);
   const [unlocks, setUnlocks] = useState<ShopRecipeUnlock[]>([]);
   const [transactions, setTransactions] = useState<ShopTransaction[]>([]);
@@ -437,9 +452,10 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
       setLoadState("loading");
 
       try {
-        const [wallet, recipeRows, unlockRows, transactionRows] =
+        const [wallet, ingredientPriceRows, recipeRows, unlockRows, transactionRows] =
           await Promise.all([
             getOrCreateWallet(childTarget?.userId),
+            listShopIngredientPrices(),
             listShopRecipes(),
             listShopRecipeUnlocks(childTarget?.userId),
             listShopTransactions(childTarget?.userId),
@@ -450,6 +466,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
         }
 
         setWalletCoins(wallet.totalCoins);
+        setIngredientRecords(ingredientPriceRows);
         setRecipes(recipeRows);
         setUnlocks(unlockRows);
         setTransactions(transactionRows);
@@ -511,6 +528,10 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
     return map;
   }, [recipes]);
+  const ingredientRecordsByKey = useMemo(
+    () => buildShopIngredientRecordMap(ingredientRecords),
+    [ingredientRecords]
+  );
 
   if (vm.page !== "shop") {
     return null;
@@ -778,6 +799,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
       {selectedRecipe ? (
         <RecipeModal
           recipe={selectedRecipe}
+          ingredientRecordsByKey={ingredientRecordsByKey}
           locale={locale}
           strings={vm.str.shop}
           onClose={() => setSelectedRecipe(null)}

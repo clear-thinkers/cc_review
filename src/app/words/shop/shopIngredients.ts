@@ -14,15 +14,18 @@ export type ShopIngredientCatalogEntry = {
   aliases?: string[];
 };
 
-export type ShopAdminIngredientCatalogKind = "basic" | "special";
+export type ShopAdminIngredientUsage = {
+  usedInBase: boolean;
+  usedInSpecial: boolean;
+};
 
 export type ShopAdminIngredientCatalogItem = {
   key: string;
   label: ShopLocalizedValue<string>;
   defaultCostCoins: number;
   iconPath: string | null;
-  kind: ShopAdminIngredientCatalogKind;
   costCoins: number;
+  usage: ShopAdminIngredientUsage;
 };
 
 export type ShopAdminIngredientPricesResponse = {
@@ -214,6 +217,13 @@ function normalizeIngredientAlias(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+export function canonicalizeShopIngredientKey(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+  return normalizeIngredientAlias(value);
+}
+
 export function listShopIngredientCatalog(): ShopIngredientCatalogEntry[] {
   return SHOP_INGREDIENT_CATALOG;
 }
@@ -224,7 +234,7 @@ export function getShopIngredientCatalogEntry(
   if (!ingredientKey) {
     return null;
   }
-  return SHOP_INGREDIENT_CATALOG_BY_KEY.get(ingredientKey.trim()) ?? null;
+  return SHOP_INGREDIENT_CATALOG_BY_KEY.get(canonicalizeShopIngredientKey(ingredientKey)) ?? null;
 }
 
 export function findShopIngredientCatalogEntryByAlias(
@@ -263,7 +273,10 @@ function resolveIngredientLabelOverride(
   fallbackLabel: ShopLocalizedValue<string>,
   prices: ShopIngredientPrice[]
 ): ShopLocalizedValue<string> {
-  const matchingPrice = prices.find((price) => price.ingredientKey === entryKey);
+  const normalizedEntryKey = canonicalizeShopIngredientKey(entryKey);
+  const matchingPrice = prices.find(
+    (price) => canonicalizeShopIngredientKey(price.ingredientKey) === normalizedEntryKey
+  );
   if (!matchingPrice?.labelI18n) {
     return fallbackLabel;
   }
@@ -274,76 +287,126 @@ function resolveIngredientLabelOverride(
   };
 }
 
-function listShopSpecialIngredientCatalogEntries(
-  recipes: Pick<ShopRecipe, "specialIngredientsI18n">[]
-): Array<{
-  key: string;
-  label: ShopLocalizedValue<string>;
-}> {
-  const entriesByKey = new Map<
+function buildLabelFromKey(key: string): ShopLocalizedValue<string> {
+  const fallback = key
+    .split("-")
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+
+  return {
+    en: fallback || key,
+    zh: fallback || key,
+  };
+}
+
+function resolveIngredientIconOverride(
+  entryKey: string,
+  fallbackIconPath: string | null,
+  prices: ShopIngredientPrice[]
+): string | null {
+  const normalizedEntryKey = canonicalizeShopIngredientKey(entryKey);
+  const matchingPrice = prices.find(
+    (price) => canonicalizeShopIngredientKey(price.ingredientKey) === normalizedEntryKey
+  );
+
+  if (typeof matchingPrice?.iconPath === "string") {
+    const trimmed = matchingPrice.iconPath.trim();
+    return trimmed || null;
+  }
+
+  return fallbackIconPath;
+}
+
+function collectRecipeIngredientReferences(
+  recipes: Pick<ShopRecipe, "baseIngredientsI18n" | "specialIngredientsI18n">[]
+): Map<
+  string,
+  {
+    label: ShopLocalizedValue<string>;
+    usage: ShopAdminIngredientUsage;
+  }
+> {
+  const referencesByKey = new Map<
     string,
     {
-      key: string;
       label: ShopLocalizedValue<string>;
+      usage: ShopAdminIngredientUsage;
     }
   >();
 
-  for (const recipe of recipes) {
-    recipe.specialIngredientsI18n.en.forEach((englishIngredient, ingredientIndex) => {
-      const chineseIngredient = recipe.specialIngredientsI18n.zh[ingredientIndex];
-      const key = englishIngredient.ingredientKey?.trim() ?? "";
-        if (!key) {
-          return;
-        }
+  function visitRows(
+    rows: ShopRecipe["baseIngredientsI18n"],
+    usageKey: keyof ShopAdminIngredientUsage
+  ): void {
+    rows.en.forEach((englishIngredient, ingredientIndex) => {
+      const key = canonicalizeShopIngredientKey(englishIngredient.ingredientKey);
+      if (!key) {
+        return;
+      }
 
-        const nextEntry = {
-          key,
-          label: {
-            en: englishIngredient.name.trim() || key,
-            zh: chineseIngredient?.name.trim() || englishIngredient.name.trim() || key,
-          },
-        };
+      const chineseIngredient = rows.zh[ingredientIndex];
+      const nextLabel = {
+        en: englishIngredient.name.trim() || key,
+        zh: chineseIngredient?.name.trim() || englishIngredient.name.trim() || key,
+      };
+      const existingEntry = referencesByKey.get(key);
 
-        const existingEntry = entriesByKey.get(key);
-        if (!existingEntry) {
-          entriesByKey.set(key, nextEntry);
-          return;
-        }
-
-        entriesByKey.set(key, {
-          key,
-          label: mergeLocalizedValue(existingEntry.label, nextEntry.label),
-        });
+      referencesByKey.set(key, {
+        label: existingEntry ? mergeLocalizedValue(existingEntry.label, nextLabel) : nextLabel,
+        usage: {
+          usedInBase:
+            usageKey === "usedInBase" ? true : existingEntry?.usage.usedInBase ?? false,
+          usedInSpecial:
+            usageKey === "usedInSpecial" ? true : existingEntry?.usage.usedInSpecial ?? false,
+        },
+      });
     });
   }
 
-  return [...entriesByKey.values()].sort((left, right) => left.label.en.localeCompare(right.label.en));
+  for (const recipe of recipes) {
+    visitRows(recipe.baseIngredientsI18n, "usedInBase");
+    visitRows(recipe.specialIngredientsI18n, "usedInSpecial");
+  }
+
+  return referencesByKey;
 }
 
 export function buildShopAdminIngredientCatalogItems(
   prices: ShopIngredientPrice[],
-  recipes: Pick<ShopRecipe, "specialIngredientsI18n">[] = []
+  recipes: Pick<ShopRecipe, "baseIngredientsI18n" | "specialIngredientsI18n">[] = []
 ): ShopAdminIngredientCatalogItem[] {
-  const priceByKey = new Map(prices.map((price) => [price.ingredientKey, price.costCoins] as const));
+  const priceByKey = new Map(
+    prices.map((price) => [canonicalizeShopIngredientKey(price.ingredientKey), price] as const)
+  );
+  const recipeReferences = collectRecipeIngredientReferences(recipes);
+  const allKeys = new Set<string>([
+    ...priceByKey.keys(),
+    ...recipeReferences.keys(),
+  ]);
 
-  const basicIngredients = SHOP_INGREDIENT_CATALOG.map((entry) => ({
-    key: entry.key,
-    label: resolveIngredientLabelOverride(entry.key, entry.label, prices),
-    defaultCostCoins: entry.defaultCostCoins,
-    iconPath: entry.iconPath,
-    kind: "basic" as const,
-    costCoins: priceByKey.get(entry.key) ?? entry.defaultCostCoins,
-  }));
-  const specialIngredients = listShopSpecialIngredientCatalogEntries(recipes)
-    .filter((entry) => !SHOP_INGREDIENT_CATALOG_BY_KEY.has(entry.key))
-    .map((entry) => ({
-      key: entry.key,
-      label: resolveIngredientLabelOverride(entry.key, entry.label, prices),
-      defaultCostCoins: 0,
-      iconPath: null,
-      kind: "special" as const,
-      costCoins: priceByKey.get(entry.key) ?? 0,
-    }));
+  return [...allKeys]
+    .sort((left, right) => left.localeCompare(right))
+    .map((key) => {
+      const seededEntry = SHOP_INGREDIENT_CATALOG_BY_KEY.get(key) ?? null;
+      const priceEntry = priceByKey.get(key);
+      const recipeReference = recipeReferences.get(key);
+      const fallbackLabel =
+        recipeReference?.label ??
+        seededEntry?.label ??
+        buildLabelFromKey(key);
 
-  return [...basicIngredients, ...specialIngredients];
+      return {
+        key,
+        label: resolveIngredientLabelOverride(key, fallbackLabel, prices),
+        defaultCostCoins: seededEntry?.defaultCostCoins ?? 0,
+        iconPath: resolveIngredientIconOverride(key, seededEntry?.iconPath ?? null, prices),
+        costCoins: priceEntry?.costCoins ?? seededEntry?.defaultCostCoins ?? 0,
+        usage: recipeReference?.usage ?? {
+          usedInBase: false,
+          usedInSpecial: false,
+        },
+      };
+    })
+    .sort((left, right) => left.label.en.localeCompare(right.label.en));
 }

@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
 import type { ShopRecipe } from "../shop/shop.types";
 import {
+  areShopAdminIngredientDraftsEqual,
   areShopRecipeAdminDraftsEqual,
+  buildShopAdminIngredientDrafts,
   buildShopRecipeAdminDraft,
+  createEmptyShopAdminIngredientDraft,
   listShopAdminVariantIngredientOptions,
   mergeReadonlyShopLocalizedIngredientRows,
   mergeReadonlyVariantIconRules,
   mergeShopLocalizedSpecialIngredientRows,
   normalizeShopRecipeAdminDraft,
+  removeDeletedIngredientKeysFromLocalizedIngredientRows,
+  removeDeletedIngredientKeysFromRecipe,
+  removeDeletedIngredientKeysFromRecipeAdminDraft,
+  removeDeletedIngredientKeysFromVariantIconRules,
+  serializeShopAdminIngredientDrafts,
+  validateShopAdminIngredientDrafts,
   validateShopRecipeAdminDraft,
 } from "./shopAdmin.types";
 
@@ -78,6 +87,20 @@ describe("shopAdmin.types", () => {
       quantity: 1,
     });
     expect(normalized.variantIconRules[1]).toEqual({
+      match: ["brown-sugar", "jasmine"],
+      iconPath: "/rewards/bubble-tea_combo.png",
+    });
+  });
+
+  it("canonicalizes variant match keys in draft normalization", () => {
+    const normalized = normalizeShopRecipeAdminDraft({
+      ...buildShopRecipeAdminDraft(recipeFixture),
+      variantIconRules: [
+        { match: ["brown_sugar", "jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
+      ],
+    });
+
+    expect(normalized.variantIconRules[0]).toEqual({
       match: ["brown-sugar", "jasmine"],
       iconPath: "/rewards/bubble-tea_combo.png",
     });
@@ -254,5 +277,144 @@ describe("shopAdmin.types", () => {
       { match: ["brown-sugar"], iconPath: "/rewards/bubble-tea_plain.png" },
       { match: ["brown-sugar", "jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
     ]);
+  });
+
+  it("removes deleted ingredient keys from aligned bilingual ingredient rows", () => {
+    expect(
+      removeDeletedIngredientKeysFromLocalizedIngredientRows(
+        {
+          en: [
+            { ingredientKey: "milk", name: "Milk", quantity: 1 },
+            { ingredientKey: "brown-sugar", name: "Brown Sugar", quantity: 2 },
+            { name: "Custom", quantity: 3 },
+          ],
+          zh: [
+            { ingredientKey: "milk", name: "\u725b\u5976", quantity: 1 },
+            { ingredientKey: "brown-sugar", name: "\u9ed1\u7cd6", quantity: 2 },
+            { name: "\u81ea\u5b9a\u4e49", quantity: 3 },
+          ],
+        },
+        ["brown_sugar"]
+      )
+    ).toEqual({
+      en: [
+        { ingredientKey: "milk", name: "Milk", quantity: 1 },
+        { name: "Custom", quantity: 3 },
+      ],
+      zh: [
+        { ingredientKey: "milk", name: "\u725b\u5976", quantity: 1 },
+        { name: "\u81ea\u5b9a\u4e49", quantity: 3 },
+      ],
+    });
+  });
+
+  it("deduplicates variant rules after deleted ingredient keys are stripped", () => {
+    expect(
+      removeDeletedIngredientKeysFromVariantIconRules(
+        [
+          { match: [], iconPath: "/rewards/bubble-tea_plain.png" },
+          { match: ["jasmine"], iconPath: "/rewards/bubble-tea_jasmine.png" },
+          { match: ["brown-sugar", "jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
+        ],
+        ["brown-sugar", "jasmine"]
+      )
+    ).toEqual([{ match: [], iconPath: "/rewards/bubble-tea_plain.png" }]);
+  });
+
+  it("removes deleted ingredient keys from recipes and admin drafts", () => {
+    const cleanedRecipe = removeDeletedIngredientKeysFromRecipe(recipeFixture, [
+      "brown-sugar",
+    ]);
+    const cleanedDraft = removeDeletedIngredientKeysFromRecipeAdminDraft(
+      buildShopRecipeAdminDraft(recipeFixture),
+      ["brown-sugar"]
+    );
+
+    expect(cleanedRecipe.specialIngredientsI18n.en).toEqual([
+      { ingredientKey: "jasmine", name: " Jasmine ", quantity: 1 },
+    ]);
+    expect(cleanedRecipe.variantIconRules).toEqual([
+      { match: [], iconPath: "/rewards/bubble-tea_plain.png" },
+      { match: ["jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
+    ]);
+    expect(cleanedDraft.specialIngredients.en).toEqual([
+      { ingredientKey: "jasmine", name: " Jasmine ", quantity: 1 },
+    ]);
+    expect(cleanedDraft.variantIconRules).toEqual([
+      { match: [], iconPath: "/rewards/bubble-tea_plain.png" },
+      { match: ["jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
+    ]);
+  });
+
+  it("normalizes and compares ingredient catalog drafts", () => {
+    const left = buildShopAdminIngredientDrafts([
+      {
+        key: "brown-sugar",
+        label: { en: "Brown Sugar", zh: "\u9ed1\u7cd6" },
+        defaultCostCoins: 0,
+        iconPath: "/ingredients/brown-sugar.png",
+        costCoins: 5,
+        usage: { usedInBase: false, usedInSpecial: true },
+      },
+    ]);
+    const right = [
+      {
+        ...createEmptyShopAdminIngredientDraft("new-1"),
+        draftId: "something-else",
+        isPersisted: true,
+        key: " brown_sugar ",
+        label: { en: " Brown Sugar ", zh: " \u9ed1\u7cd6 " },
+        iconPath: " /ingredients/brown-sugar.png ",
+        costCoins: 5,
+        usage: { usedInBase: false, usedInSpecial: true },
+      },
+    ];
+
+    expect(areShopAdminIngredientDraftsEqual(left, right)).toBe(true);
+    expect(serializeShopAdminIngredientDrafts(right)).toEqual([
+      {
+        key: "brown-sugar",
+        label: { en: "Brown Sugar", zh: "\u9ed1\u7cd6" },
+        defaultCostCoins: 0,
+        iconPath: "/ingredients/brown-sugar.png",
+        costCoins: 5,
+        usage: { usedInBase: false, usedInSpecial: true },
+      },
+    ]);
+  });
+
+  it("validates ingredient catalog draft fields", () => {
+    expect(
+      validateShopAdminIngredientDrafts([
+        {
+          ...createEmptyShopAdminIngredientDraft("draft-1"),
+          key: "",
+          label: { en: "", zh: "" },
+          iconPath: "ingredients/missing-slash.png",
+          costCoins: -1,
+        },
+        {
+          ...createEmptyShopAdminIngredientDraft("draft-2"),
+          key: "brown_sugar",
+          label: { en: "Brown Sugar", zh: "\u9ed1\u7cd6" },
+          costCoins: 3,
+        },
+        {
+          ...createEmptyShopAdminIngredientDraft("draft-3"),
+          key: "brown-sugar",
+          label: { en: "Again", zh: "\u518d\u6b21" },
+          costCoins: 3,
+        },
+      ])
+    ).toEqual(
+      expect.arrayContaining([
+        "Ingredient 1: key is required.",
+        "Ingredient 1: English name is required.",
+        "Ingredient 1: Chinese name is required.",
+        "Ingredient 1: price must be a whole number from 0 and up.",
+        'Ingredient 3: duplicate ingredient key "brown-sugar".',
+        'Ingredient 1: icon path must start with "/".',
+      ])
+    );
   });
 });
