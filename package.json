@@ -13,6 +13,7 @@
     "download-xinhua-data": "npm run download-dictionary-data",
     "generate:shop-reward-sql": "node scripts/generate-shop-reward-sync.mjs",
     "export:shop-metadata-sql": "node scripts/export-shop-metadata-patch.mjs",
+    "export:shop-content-sql": "node scripts/export-shop-content-patch.mjs",
     "check:encoding": "node scripts/check-mojibake.mjs",
     "verify:rls": "tsx scripts/verify-rls.ts",
     "seed:admin": "node scripts/seed-platform-admin.mjs"
