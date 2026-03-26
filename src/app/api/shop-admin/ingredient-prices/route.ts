@@ -13,6 +13,7 @@ import {
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedIngredients,
   normalizeShopIngredientList,
+  normalizeShopVariantIconRules,
   normalizeShopSpecialIngredientList,
 } from "@/lib/shop";
 import { getServerSupabaseClient, supabase } from "@/lib/supabaseClient";
@@ -339,9 +340,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           row.special_ingredient_slots_i18n,
           specialIngredients
         );
-        const currentVariantIconRules = Array.isArray(row.variant_icon_rules)
-          ? (row.variant_icon_rules as ShopRecipe["variantIconRules"])
-          : [];
+        const currentVariantIconRules = normalizeShopVariantIconRules(
+          row.variant_icon_rules
+        );
 
         const nextBaseIngredientsI18n = removeDeletedIngredientKeysFromLocalizedIngredientRows(
           currentBaseIngredientsI18n,

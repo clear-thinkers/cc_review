@@ -6,7 +6,7 @@ import type {
   DebugShopRewardRecipeOption,
 } from "@/app/words/debug/debug.types";
 import type { ShopVariantIconRule } from "@/app/words/shop/shop.types";
-import { normalizeShopLocalizedTitle } from "@/lib/shop";
+import { normalizeShopLocalizedTitle, normalizeShopVariantIconRules } from "@/lib/shop";
 import { resolvePublicAssetFilePath } from "@/lib/shopIngredientIconAudit";
 import {
   auditShopRewardIcons,
@@ -128,9 +128,7 @@ function toShopRewardAuditRecipe(row: ShopRecipeRewardAuditRow): ShopRewardIconA
     id: row.id,
     slug: row.slug,
     title: normalizeShopLocalizedTitle(row.title_i18n, row.title),
-    variantIconRules: Array.isArray(row.variant_icon_rules)
-      ? (row.variant_icon_rules as ShopVariantIconRule[])
-      : [],
+    variantIconRules: normalizeShopVariantIconRules(row.variant_icon_rules),
   };
 }
 
@@ -219,9 +217,7 @@ async function loadRecipeRuleState(params: {
     };
   }
 
-  const currentRules = Array.isArray(data?.variant_icon_rules)
-    ? (data.variant_icon_rules as ShopVariantIconRule[])
-    : [];
+  const currentRules = normalizeShopVariantIconRules(data?.variant_icon_rules);
   if (!data) {
     return {
       currentRules,

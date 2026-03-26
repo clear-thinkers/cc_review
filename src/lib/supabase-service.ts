@@ -29,6 +29,7 @@ import {
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedIntro,
+  normalizeShopVariantIconRules,
   normalizeShopSpecialIngredientList,
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedTitle,
@@ -347,9 +348,7 @@ function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
       row.special_ingredient_slots_i18n,
       specialIngredients
     ),
-    variantIconRules: Array.isArray(row.variant_icon_rules)
-      ? (row.variant_icon_rules as ShopRecipe["variantIconRules"])
-      : [],
+    variantIconRules: normalizeShopVariantIconRules(row.variant_icon_rules),
   };
 }
 

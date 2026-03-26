@@ -13,6 +13,7 @@ import {
 import {
   SHOP_INGREDIENT_QUANTITY_MAX,
   SHOP_INGREDIENT_QUANTITY_MIN,
+  normalizeShopVariantMatchKeys,
   parseShopIngredientQuantity,
 } from "@/lib/shop";
 
@@ -221,19 +222,7 @@ export function buildShopRecipeAdminDraft(recipe: ShopRecipe): ShopRecipeAdminDr
 }
 
 function normalizeVariantMatchKeys(raw: unknown): string[] {
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-
-  return Array.from(
-    new Set(
-      raw
-        .map((value) =>
-          typeof value === "string" ? canonicalizeShopIngredientKey(value) : ""
-        )
-        .filter(Boolean)
-    )
-  ).sort((left, right) => left.localeCompare(right));
+  return normalizeShopVariantMatchKeys(raw);
 }
 
 function normalizeLocalizedStringValue(raw: unknown): ShopLocalizedValue<string> {

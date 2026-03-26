@@ -19,10 +19,44 @@ export const SHOP_INGREDIENT_QUANTITY_MIN = 1;
 export const SHOP_INGREDIENT_QUANTITY_MAX = 99;
 const SHOP_PLAIN_ICON_TOKEN = "plain";
 
-function normalizeMatchKeys(keys: string[]): string[] {
+export function normalizeShopVariantMatchKeys(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
   return Array.from(
-    new Set(keys.map((key) => canonicalizeShopIngredientKey(key)).filter(Boolean))
+    new Set(
+      raw
+        .map((key) => (typeof key === "string" ? canonicalizeShopIngredientKey(key) : ""))
+        .filter(Boolean)
+    )
   ).sort();
+}
+
+export function normalizeShopVariantIconRules(raw: unknown): ShopVariantIconRule[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw.reduce<ShopVariantIconRule[]>((result, rule) => {
+    const source = rule && typeof rule === "object" ? (rule as Record<string, unknown>) : null;
+    const iconPath =
+      typeof source?.iconPath === "string"
+        ? source.iconPath.trim()
+        : typeof source?.path === "string"
+          ? source.path.trim()
+          : "";
+
+    if (!iconPath) {
+      return result;
+    }
+
+    result.push({
+      iconPath,
+      match: normalizeShopVariantMatchKeys(source?.match),
+    });
+    return result;
+  }, []);
 }
 
 export function canAffordRecipeUnlock(
@@ -36,21 +70,18 @@ export function resolveShopRecipeIconPath(
   variantIconRules: ShopVariantIconRule[],
   activeSpecialIngredientKeys: string[]
 ): string | null {
-  const activeKeys = normalizeMatchKeys(activeSpecialIngredientKeys);
+  const activeKeys = normalizeShopVariantMatchKeys(activeSpecialIngredientKeys);
   let bestRule: ShopVariantIconRule | null = null;
 
-  for (const rule of variantIconRules) {
-    const normalizedMatch = normalizeMatchKeys(rule.match);
+  for (const rule of normalizeShopVariantIconRules(variantIconRules)) {
+    const normalizedMatch = rule.match;
     const isSubsetMatch = normalizedMatch.every((key) => activeKeys.includes(key));
     if (!isSubsetMatch) {
       continue;
     }
 
-    if (!bestRule || normalizedMatch.length > normalizeMatchKeys(bestRule.match).length) {
-      bestRule = {
-        ...rule,
-        match: normalizedMatch,
-      };
+    if (!bestRule || normalizedMatch.length > bestRule.match.length) {
+      bestRule = rule;
     }
   }
 
@@ -317,9 +348,9 @@ export function getShopRecipeContentForLocale(
 export function resolvePlainShopRecipeIconPath(
   variantIconRules: ShopVariantIconRule[]
 ): string | null {
-  const plainRules = variantIconRules
+  const plainRules = normalizeShopVariantIconRules(variantIconRules)
     .filter((rule) => isPlainShopIconPath(rule.iconPath))
-    .sort((left, right) => normalizeMatchKeys(left.match).length - normalizeMatchKeys(right.match).length);
+    .sort((left, right) => left.match.length - right.match.length);
 
   return plainRules[0]?.iconPath ?? null;
 }

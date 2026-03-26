@@ -1412,7 +1412,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                           isPlainVariantRuleIcon(rule.iconPath) && rule.match.length === 0;
                         return (
                           <div
-                            key={`${selectedRecipe.id}-${rule.iconPath}`}
+                            key={`${selectedRecipe.id}-${ruleIndex}-${rule.iconPath}`}
                             className="rounded-xl border border-[#e4dac7] bg-white p-4"
                           >
                             <div className="flex h-24 items-center justify-center rounded-xl border border-[#efe4c8] bg-[#fffaf0] p-3">

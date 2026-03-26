@@ -6,6 +6,7 @@ import {
   normalizeShopIngredientList,
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopSpecialIngredientList,
+  normalizeShopVariantIconRules,
   normalizeUnlockShopRecipeResult,
   resolvePlainShopRecipeIconPath,
   resolveShopIngredientCost,
@@ -59,6 +60,44 @@ describe("resolveShopRecipeIconPath", () => {
         ["brown_sugar"]
       )
     ).toBe("/rewards/bubble-tea_brown-sugar_wink.png");
+  });
+
+  it("ignores invalid variant rows and normalizes messy combo rules", () => {
+    expect(
+      resolveShopRecipeIconPath(
+        normalizeShopVariantIconRules([
+          { match: [], iconPath: " /rewards/donut_plain.png " },
+          { match: ["strawberry", "sprinkles", "strawberry"], iconPath: " " },
+          {
+            match: ["strawberry", "sprinkles", "strawberry"],
+            iconPath: " /rewards/donut_strawberry-sprinkles.png ",
+          },
+        ]),
+        ["sprinkles", "strawberry"]
+      )
+    ).toBe("/rewards/donut_strawberry-sprinkles.png");
+  });
+});
+
+describe("normalizeShopVariantIconRules", () => {
+  it("trims icon paths and canonicalizes combo match keys", () => {
+    expect(
+      normalizeShopVariantIconRules([
+        {
+          match: ["sprinkles", "strawberry", "strawberry", 12],
+          iconPath: " /rewards/donut_combo.png ",
+        },
+        {
+          match: ["ignored"],
+          iconPath: " ",
+        },
+      ])
+    ).toEqual([
+      {
+        match: ["sprinkles", "strawberry"],
+        iconPath: "/rewards/donut_combo.png",
+      },
+    ]);
   });
 });
 
