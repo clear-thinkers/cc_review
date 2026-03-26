@@ -1,6 +1,6 @@
 ﻿# 0_PRODUCT_ROADMAP.md
 
-_Last updated: 2026-03-21_ (Review Test Sessions shipped)
+_Last updated: 2026-03-26_ (Recipe Shop shipped)
 
 ---
 
@@ -42,9 +42,9 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | 2 | **Grading Logic Audit** | Review and document the full grading model — ease adjustment, interval curve, failure penalty, early review behavior. Add edge case tests. Ensure no silent regression. | `docs/architecture/2026-03-03-grading-logic-model.md` | ✅ Done | 2026-03-03 |
 | 3 | **Flashcard UI Redesign** | Larger hanzi, progressive reveal (tap to show), clear separation of character / meaning / phrase / example, single focus per screen, large touch targets. Per-character pinyin ruby alignment, phrase-example pairing, pinyin toggle. | `docs/feature-specs/2026-03-03-flashcard-ui-redesign.md` | ✅ Done | 2026-03-04 |
 | 4 | **Multi-Tenant Auth & User Model** | Replace localStorage PIN with Supabase Auth. Parent registers with email + password. Parent creates child profiles with PIN. Role model: parent / child / platform_admin. Family-scoped data isolation via Row Level Security. | `docs/feature-specs/2026-03-05-auth-and-user-model.md` | ✅ Done | 2026-03-09 |
-| 5 | **Supabase Schema & RLS Policies** | Retire IndexedDB entirely. Migrate all data (words, review_history, quiz_sessions, wallet, inventory) to Supabase Postgres. Define tables, foreign keys, and RLS policies enforcing family_id scoping. Platform admin bypasses RLS. | `docs/feature-specs/2026-03-05-supabase-schema-rls.md` | ✅ Done | 2026-03-05 |
+| 5 | **Supabase Schema & RLS Policies** | Retire IndexedDB entirely. Migrate all data (words, review history, quiz sessions, wallets, and shop tables) to Supabase Postgres. Define tables, foreign keys, and RLS policies enforcing family_id scoping. Platform admin bypasses RLS. | `docs/feature-specs/2026-03-05-supabase-schema-rls.md` | ✅ Done | 2026-03-05 |
 | 6 | **Role-Based Routing** | RouteGuard enforces permission matrix by session role. Blocked routes invisible in nav (not 403). Child: no add/edit/admin, has fill-test. Parent: no fill-test. Platform admin: full access. | `docs/feature-specs/2026-03-05-role-based-routing.md` | ✅ Done | 2026-03-05 |
-| 8 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, coins earned. New `quizSessions` IndexedDB table. | [`docs/feature-specs/2026-03-04-quiz-results-summary.md`](../feature-specs/2026-03-04-quiz-results-summary.md) | ✅ Done | 2026-03-04 |
+| 8 | **Quiz Results Summary** | New page `/words/results` — session history with date, type, accuracy, words reviewed, words failed, and coins earned. Backed by the Supabase `quiz_sessions` table. | [`docs/feature-specs/2026-03-04-quiz-results-summary.md`](../feature-specs/2026-03-04-quiz-results-summary.md) | ✅ Done | 2026-03-04 |
 | 9 | **Fill-Test UI Improvements** | Optional pinyin toggle (default OFF, UI-only — no grading impact). Larger font, cleaner spacing, single blank per question in Tier 1. | `docs/feature-specs/` | ✅ Done | 2026-03-05 |
 | 11 | **Rewards System — Coins** | Coins earned per quiz session (accuracy + completion based). `wallet` table. Persistent, cumulative balance across sessions. Track coin history and milestones. | `docs/feature-specs/2026-03-04-coin-rewards-system.md` | ✅ Done | 2026-03-05 |
 | 12 | **Service Layer Migration** | Replace all IndexedDB (Dexie) reads/writes with Supabase client calls via `src/lib/supabase-service.ts`. Delete `db.ts`, `auth.ts`, `debugUtilities.ts`. Remove `dexie` dependency. camelCase ↔ snake_case conversion in service layer. | `docs/feature-specs/2026-03-05-service-layer-migration.md` | ✅ Done | 2026-03-06 |
@@ -56,14 +56,10 @@ Features now include a “Last touched” timestamp and a broader set of status 
 | 1 | **Admin-Configurable LLM Prompts** | New page `/words/prompts` — view, edit, save, version, and reset AI prompt templates. Stored in Supabase. Separated by generation type (full / phrase / example / pinyin). | `docs/architecture/2026-03-09-admin-configurable-llm-prompts.md` | ✅ Done | 2026-03-09 |
 | 7 | **Character Level Tagging** | 4-level cascade tag system (Textbook → Grade → Unit → Lesson). New tables: `textbooks`, `lesson_tags`, `word_lesson_tags`. Tag assignment on `/words/add`; Lessons column + filter bar on `/words/all`; filter bar on `/words/admin`. Review scope filter deferred. | `docs/architecture/2026-03-09-character-level-tagging.md` | ✅ Done | 2026-03-09 |
 | 13 | **Review Test Sessions** | Parents package multiple Content Admin targets into a named session. Due Review lists active sessions for both roles; only children can start them. Runtime bundles multiple pronunciations back to character-level review first, then fill-test, and hides the session after completion. | `docs/feature-specs/2026-03-21-review-test-sessions.md` | ✅ Done | 2026-03-21 |
-| 10 | **Bakery Shop** | Virtual bakery shop: purchase furniture, display items, decorations with earned coins. `inventory` and `shopState` tables. Spend coins to customize player environment. No real money, no scheduler impact. | [`docs/feature-specs/2026-03-04-coin-rewards-system.md`](../../feature-specs/2026-03-04-coin-rewards-system.md) | 📋 Planned | — |
+| 10 | **Recipe Shop & Shop Admin** | Child-facing recipe unlock shop backed by quiz-earned coins, with ingredient views and spend history. Platform admin can manage shared recipe metadata, ingredient pricing, icon paths, and variant mappings. Uses `shop_recipes`, `shop_recipe_unlocks`, `shop_coin_transactions`, and `shop_ingredient_prices`. No real money, no scheduler impact. | [`docs/feature-specs/2026-03-23-shop-recipe-unlocks.md`](../feature-specs/2026-03-23-shop-recipe-unlocks.md) | ✅ Done | 2026-03-26 |
 
 ## Fixed to be done
-2. The history table of quiz results is not displaying correctly in browser when user uses the app in phone (I tested using iphone)
-
-## Minor UI updates
-3. Update app name， add app logo
----
+1. The history table of quiz results is not displaying correctly in browser when user uses the app in phone (I tested using iphone)
 
 ## 3. Deferred — Do Not Build Yet
 
@@ -109,13 +105,13 @@ Tier 1 is complete when **all** of the following are true:
 
 **Motivation loop exists**
 - Coins are earned from review completion and accuracy
-- Virtual bakery shop is functional with purchasable items
+- Recipe shop is functional with recipe unlocks, ingredient views, and spend history
 - Reward system does not affect scheduler or grading logic
 
 **Architecture remains modular**
 - All new features respect layer boundaries (UI / Domain / Service / AI)
 - No live AI during review execution
-- All new IndexedDB tables normalized before write
+- All persisted structured content is normalized before write
 
 Only after all criteria above are met should Tier 2 begin.
 
@@ -164,89 +160,21 @@ If any answer undermines Tier 1 stability, the feature is deferred.
 
 ---
 
-## 8. Next Implementation Sequence
+## 8. Current Focus
 
-### Blocker Analysis (as of 2026-03-05)
+### Shipped foundation (as of 2026-03-26)
 
-**Feature 5 ✅ Done:**
-- Supabase schema + RLS policies deployed
-- Service layer refactor deferred until Feature 6 completes
+- Family auth, Supabase service layer, role-based routing, AI prompts, tagging, review test sessions, and the recipe shop loop are all shipped.
+- The motivation layer now includes quiz-earned coins, child-facing recipe unlocks, spend history, and platform-admin shop content management.
 
-**Feature 4 ✅ Done (2026-03-05):**
-- `/register` → 3-step wizard → POST `/api/auth/register` (atomic; Auth account cleaned up on DB failure)
-- `/login` → Supabase `signInWithPassword()` → Layer 1 complete
-- `/profile-select` → renders family profiles from `useAuth().familyProfiles`
-- `/pin-entry` → on-screen PIN pad → POST `/api/auth/pin-verify` (scrypt + timingSafeEqual, server-side lockout at 5 attempts)
-- `SessionGuard` rewritten to use `useAuth()` — no localStorage reads
-- `AuthProvider` added to root layout
-- `WordsShell` reads avatar + logout from `useSession()` / `clearSession()`
-- Old `src/app/login/` folder (5 files) deleted
+### Remaining Tier 1 features
 
-**Feature 6 ✅ Done (2026-03-05):**
-- Permission matrix enforced: child cannot access add/admin; parent cannot access fill-test
-- RouteGuard component redirects blocked routes to `/words/review`
-- Navigation items filtered by role (blocked routes hidden from nav)
-- Fill-test buttons conditionally rendered (visible for children, hidden for parents)
-- All role checks use `canAccessRoute()` from `src/lib/permissions.ts`
-
-### Critical Path (Tier 1 Completion)
-
-```
-Feature 4 (Auth & User Model)
-  ├─ Supabase Auth integration
-  ├─ JWT enrichment (family_id, user_id claims)
-  ├─ Child PIN-based login
-  └─ Session persistence + auto-refresh
-         ↓
-Feature 6 (Role-Based Routing)
-  ├─ RouteGuard middleware
-  ├─ Route matrix by role (parent/child/admin)
-  └─ Nav visibility filtering
-         ↓
-Service Layer Refactor
-  ├─ Create src/lib/supabase.ts
-  ├─ Retire src/lib/db.ts (IndexedDB)
-  └─ Migrate all service calls
-         ↓
-Tier 1 Completion + Multi-Family Pilot
-  ├─ End-to-end testing (3 families)
-  ├─ RLS isolation verification
-  └─ Prod Supabase deployment
-```
-
-### Recommended Action Plan
-
-1. **✅ Done (2026-03-05):** Feature 4 (Auth & User Model) shipped on `feat/phase3`.
-
-2. **Immediately (next PR):** Implement Feature 6 (Role-Based Routing)
-   - Create RouteGuard component using `useSession().role` from Feature 4 auth context
-   - Build permission matrix for parent/child/admin roles
-   - Hide blocked routes from nav (don't show 403)
-   - Integration test: verify child cannot navigate to `/words/add` or `/words/admin`
-   - Target: 2026-03-07
-
-3. **After Feature 6 ships:** Service Layer Refactor
-   - Create `src/lib/supabase.ts` with domain-scoped service functions
-   - Translate all `src/lib/db.ts` calls to Supabase equivalents
-   - Convert camelCase (TypeScript) ↔ snake_case (Postgres) in service layer
-   - Retire `src/lib/db.ts` (IndexedDB)
-   - Functional equivalence test: verify same data shape in reads
-   - Target: 2026-03-14
-
-4. **Multi-Family Pilot (final Tier 1 step):**
-   - Create 3 test families in prod Supabase
-   - Verify RLS isolation (Family A user cannot read Family B words)
-   - Parent + child login flow with PIN entry
-   - Admin platform account bypass (can read/write all families)
-
-### Risks & Dependencies
-
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Auth spec incomplete | Blocks Features 4, 6, RLS tests | Confirm auth spec ready before Feature 4 starts |
-| JWT claims not injected | RLS policies cannot evaluate | Feature 4 must implement `/api/auth/enrich-session` |
-| Service layer not updated | App still reads from IndexedDB | Plan refactor immediately after Feature 6 |
-| Pilot families not set up | Cannot test prod RLS isolation | Manual setup via Supabase console or seed script |
+1. Fix the quiz-results history table layout on mobile browsers.
+2. Implement multi-family pilot feedback:
+  - enable a different quiz mode for packaged characters in a session.  allow phrases of different characters to be tested together.  this would help characters that have only 1-2 phrases to be tested.
+  - parent should have ability to set difficulty level for AI generated content. The dafault ones are too advanced for beginners.  Add a 'beginner level' setting for parent users.  Beginner level prompts are configured by Platform Admin.  Consider leveraging the current Prompt page to create different levels that can be shared across all family users.
+  - parent wanted to be able to input phrases, not single characters.  need to think of a workflow that is keyed off of phrases.
+  - parent expressed interest in using AI to generate paragraphs for kids to read/fill rather than just sentences. Although this is technically tier 2, we can try something small at the end of Tier 1.
 
 ---
 

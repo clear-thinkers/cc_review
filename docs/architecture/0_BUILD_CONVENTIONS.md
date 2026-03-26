@@ -1,6 +1,6 @@
 # BUILD CONVENTIONS
 
-_Last updated: 2026-03-03_
+_Last updated: 2026-03-26_
 
 ---
 
@@ -33,7 +33,7 @@ When a task produces a new document, file it here:
 
 A feature specification is no longer optional when an agent is coding under pressure. The following rules apply:
 
-- **Trigger:** any feature that touches more than one architectural layer (UI, Domain, Service, AI) **or** adds a new IndexedDB table must have a spec before implementation begins. This threshold gives a clear non‑triviality signal. For other changes, if the work spans multiple files, requires new DB fields, or involves coordination with another developer, draft a spec anyway.
+- **Trigger:** any feature that touches more than one architectural layer (UI, Domain, Service, AI) **or** adds a new database table, RPC, or persisted schema field must have a spec before implementation begins. This threshold gives a clear non-triviality signal. For other changes, if the work spans multiple files, requires new DB fields, or involves coordination with another developer, draft a spec anyway.
 - **Template:** use the structure below when creating a new spec file in `docs/feature-specs/`. Keep it terse but complete.
 
 ```markdown
@@ -278,7 +278,7 @@ Every new feature must have tests before it is considered complete.
 
 ### Mocking Rules
 
-- Mock IndexedDB with an in-memory substitute — never test against a real browser DB.
+- Mock Supabase client / RPC boundaries — never hit live hosted data in tests.
 - Mock AI provider calls — never make real network calls in tests.
 - Do not mock `src/lib/` when testing UI components — test their real integration.
 

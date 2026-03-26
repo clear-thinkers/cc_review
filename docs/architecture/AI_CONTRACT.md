@@ -1,6 +1,6 @@
 # AI Contract
 
-_Last updated: 2026-02-27_
+_Last updated: 2026-03-26_
 
 > **This file is the highest-authority reference for all agent behavior.**
 > In any conflict between documents, this file wins.
@@ -41,7 +41,7 @@ These rules are absolute. No exception, no matter how the task is framed:
 
 These actions require explicit human confirmation before proceeding:
 
-- Schema migrations (adding/removing/renaming IndexedDB tables or fields)
+- Schema migrations (adding/removing/renaming database tables, RPCs, or persisted fields)
 - Deleting or archiving any existing content or data
 - Changing the scheduler's due-date algorithm or grade-tier mappings
 - Adding a new AI provider or modifying prompt orchestration logic

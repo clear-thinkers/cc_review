@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-03-21_ (Review test sessions documented)
+_Last updated: 2026-03-26_ (Recipe Shop documented)
 
 ---
 
@@ -15,7 +15,7 @@ It does **not** define agent operating rules — those live in `AI_CONTRACT.md`.
 
 ## 1) Product Rules
 
-This project is a **local-first Chinese memory engine** with deterministic review behavior.
+This project is a **Supabase-backed Chinese memory engine** with deterministic review behavior.
 
 Tier 1 rules (active):
 - Review is scheduler-driven and deterministic (`again|hard|good|easy` grade mapping — no stochastic grading).
@@ -24,17 +24,24 @@ Tier 1 rules (active):
 - Flashcard content is keyed by `character|pronunciation` and normalized before persistence.
 - Fill-test eligibility is derived from saved phrase/example rows and `include_in_fill_test` flags.
 - Unsafe content and malformed payloads are dropped during normalization before they can be persisted.
+- Coins are earned from completed quiz sessions and spent only through persisted shop unlocks; neither earning nor spend changes scheduler state.
 
 Primary admin user flow:
 1. Add Hanzi       → `/words/add`     → Supabase `words` table (hanzi ingested, untagged, unreviewed).
-2. Tag characters  → `/words/tag`     → assign textbook / grade / unit / lesson 
-                                         → Supabase `words` table (tag fields) 
-                                         + Supabase `textbooks` table (new textbook created if no match).
+2. Manage tags     → `/words/add`, `/words/all`, `/words/admin`
+                                         → assign textbook / grade / unit / lesson
+                                         → Supabase `word_lesson_tags` + tag tables.
 3. Adjust prompts  → `/words/prompts` → edit/version AI prompt templates → Supabase prompts table.
 4. Curate content  → `/words/admin`   → `/api/flashcard/generate` + manual edits 
                                          → Supabase `flashcard_contents` table.
-5. Review          → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test` 
+5. Package tests   → `/words/admin`   → named review test sessions
+                                         → Supabase `review_test_sessions*` tables.
+6. Review & quiz   → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test`
                                          → reads persisted data only.
+7. Reward loop     → `/words/results`, `/words/shop`
+                                         → Supabase `quiz_sessions`, `wallets`, and shop tables.
+8. Manage shop     → `/words/shop-admin`, `/words/debug`
+                                         → shared recipe metadata, ingredient catalog, and icon audits.
 
 
 ### Ingestion Rules
@@ -199,6 +206,43 @@ These rules govern the results/history view for session data reporting:
    - Table and summary cards clear immediately upon successful deletion
 8. **Empty state:** When no sessions exist, display a placeholder message directing users to start a review session; hide all table and summary UI elements.
 
+### Recipe Shop Rules (`/words/shop`)
+
+These rules govern the child-facing reward shop:
+
+1. `/words/shop` is accessible to child profiles and platform admin only. Parent profiles are route-blocked.
+2. The shop reads persisted data only from `wallets`, `shop_recipes`, `shop_ingredient_prices`, `shop_recipe_unlocks`, and `shop_coin_transactions`.
+3. Recipe unlocks are persisted through the `unlock_shop_recipe` RPC only. UI code must not manually write unlock rows, wallet deductions, or transaction rows.
+4. `unlock_shop_recipe` is atomic: it ensures a wallet row exists, rejects forbidden / unavailable / already-unlocked / insufficient-coin states, inserts the unlock row, decrements the wallet, and appends a spend-history row in one transaction boundary.
+5. Recipe catalog content is shared/global. Unlock state and spend history are per-user.
+6. Unlocking a recipe or opening ingredient/history modals must not modify `words`, `flashcard_contents`, scheduler fields, or quiz history.
+7. Only active recipes are unlockable. Empty wall slots render as reserved content, not ad-hoc generated recipes.
+8. Shop history is read-only and sourced from `shop_coin_transactions`.
+
+### Shop Admin Rules (`/words/shop-admin`)
+
+These rules govern the platform-admin recipe metadata editor:
+
+1. `/words/shop-admin` is platform-admin only. Parents and children are route-blocked.
+2. Shop Admin edits shared/global shop content, not family-scoped learning content.
+3. Recipe saves may update localized title/intro copy, localized base-ingredient rows, localized special-ingredient rows, and variant icon match mappings.
+4. Ingredient catalog saves may update shared ingredient key, localized labels, price, and optional icon path in `shop_ingredient_prices`.
+5. Recipe drafts must keep English and Chinese ingredient rows aligned by index. Variant mappings may reference only known special-ingredient keys.
+6. Each recipe must retain at least one base ingredient row after validation.
+7. Removing an ingredient from the shared catalog must also remove that key from recipe ingredient rows and variant mappings before persistence.
+8. Shop Admin must never award or spend coins, and must never modify scheduler, quiz, or flashcard content state.
+9. If the database schema lacks `shop_ingredient_prices.icon_path`, icon-path saves must fail with an explicit admin-facing error rather than silently dropping the field.
+
+### Debug Tools Rules (`/words/debug`)
+
+These rules govern the platform-admin maintenance page:
+
+1. `/words/debug` is platform-admin only.
+2. Shop ingredient-icon audits compare persisted ingredient icon paths against files under `public/ingredients`.
+3. Shop reward-icon audits compare persisted recipe reward icon rules against files under `public/rewards`.
+4. Ingredient-audit actions may edit or clear broken ingredient icon paths. Reward-audit actions may edit, create, or delete reward icon rules.
+5. Debug maintenance actions must not modify scheduler state, words, flashcard content, or quiz results.
+
 ### Login & Avatar Protection Rules (`/login`)
 
 These rules govern the two-layer authentication and session protection system:
@@ -274,6 +318,8 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | `/words/admin` | ❌ | ✅ | ✅ |
 | `/words/prompts` | ❌ | ✅ | ✅ |
 | `/words/results` | ✅ | ✅ | ✅ |
+| `/words/shop` | ✅ | ❌ | ✅ |
+| `/words/shop-admin` | ❌ | ❌ | ✅ |
 | `/words/review` | ✅ | ✅ | ✅ |
 | `/words/review/flashcard` | ✅ | ✅ | ✅ |
 | `/words/review/fill-test` | ✅ | ❌ | ✅ |
@@ -437,6 +483,66 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `last_updated_at` | timestamptz | Server timestamp of last wallet update |
 | `version` | integer | Schema version for future upgrades (currently 1) |
 
+**`shop_recipes` table** — shared recipe catalog for the reward layer
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `slug` | text | Unique stable recipe key |
+| `title` | text | Fallback / legacy title |
+| `title_i18n` | jsonb | Localized recipe titles `{ en, zh }` |
+| `display_order` | integer | Unique wall ordering |
+| `is_active` | boolean | Controls whether the recipe is visible and unlockable |
+| `intro` | text | Fallback / legacy intro copy |
+| `intro_i18n` | jsonb | Localized intro copy `{ en, zh }` |
+| `unlock_cost_coins` | integer | Unlock cost; must be non-negative |
+| `base_ingredients` | jsonb | Legacy/base ingredient rows |
+| `base_ingredients_i18n` | jsonb | Localized base-ingredient rows aligned by index |
+| `special_ingredient_slots` | jsonb | Persisted special-ingredient rows |
+| `special_ingredient_slots_i18n` | jsonb | Localized special-ingredient rows aligned by index |
+| `variant_icon_rules` | jsonb | Variant icon rules keyed by ingredient-match combinations |
+| `created_at` | timestamptz | Server timestamp |
+| `updated_at` | timestamptz | Server timestamp |
+| **Scope** | | Shared/global content; authenticated read, platform-admin write |
+
+**`shop_recipe_unlocks` table** — per-user recipe unlock records
+
+| Field | Type | Notes |
+|---|---|---|
+| `user_id` | uuid | Foreign key → `users.id`; part of primary key |
+| `family_id` | uuid | Foreign key → `families.id` |
+| `recipe_id` | uuid | Foreign key → `shop_recipes.id`; part of primary key |
+| `coins_spent` | integer | Coins spent for this unlock; must be non-negative |
+| `unlocked_at` | timestamptz | Server timestamp |
+| **Primary key** | | `(user_id, recipe_id)` |
+
+**`shop_coin_transactions` table** — immutable shop spend history per user
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | Foreign key → `users.id` |
+| `family_id` | uuid | Foreign key → `families.id` |
+| `recipe_id` | uuid (nullable) | Foreign key → `shop_recipes.id`; null if source row is later deleted |
+| `action_type` | text | Currently `unlock_recipe` |
+| `coins_spent` | integer | Non-negative spend amount |
+| `beginning_balance` | integer | Balance before the shop action |
+| `ending_balance` | integer | Balance after the shop action |
+| `created_at` | timestamptz | Server timestamp |
+| **RLS Guarantee** | | Family-scoped read; insert-only for the acting user except platform admin |
+
+**`shop_ingredient_prices` table** — shared ingredient catalog pricing and icon metadata
+
+| Field | Type | Notes |
+|---|---|---|
+| `ingredient_key` | text | Primary key; stable catalog key |
+| `cost_coins` | integer | Non-negative shared ingredient price |
+| `label_i18n` | jsonb | Localized ingredient labels `{ en, zh }` |
+| `icon_path` | text (nullable) | Optional `/ingredients/...` asset path |
+| `created_at` | timestamptz | Server timestamp |
+| `updated_at` | timestamptz | Server timestamp |
+| **Scope** | | Shared/global catalog; authenticated read, platform-admin write |
+
 **`prompt_templates` table** — configurable LLM prompt templates (Phase 2, Feature #1)
 
 | Field | Type | Notes |
@@ -500,7 +606,8 @@ All tables have RLS enabled. Policies are applied based on JWT claims `family_id
 - `is_platform_admin()` — returns true if current user has `is_platform_admin=true`
 
 **Policy patterns:**
-- **Family-scoped read:** Users can read all rows where `family_id = current_family_id()`, OR if `is_platform_admin() = true`
+- **Family-scoped read:** Most user data tables allow reads where `family_id = current_family_id()`, OR if `is_platform_admin() = true`
+- **Shared catalog read:** Global shop catalog tables (`shop_recipes`, `shop_ingredient_prices`) are readable to authenticated users; platform admin owns writes
 - **User-scoped write:** Users can insert/update only when `family_id = current_family_id()` AND (for wallet/sessions) `user_id = current_user_id()`
 - **Immutable records:** `quiz_sessions` cannot be updated or deleted by non-admins; only platform admin can delete for data management
 - **Platform admin bypass:** When `is_platform_admin() = true`, user can read/write/delete all rows on all tables
@@ -571,8 +678,10 @@ These are the technical behaviors the system upholds. They are the factual basis
    - If no phrases are marked for testing, a placeholder message ("No phrases included for testing") is displayed in place of the phrase-example blocks.
    - Character and meaning remain visible regardless of phrase-test inclusion; phrases are the only conditional element.
    - Parent component (`FlashcardReviewSection`) controls visibility toggle via `showPinyin` state (boolean); when `false`, pinyin spans are removed from DOM entirely (not hidden via CSS).
-4. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists.
-5. **Due review pages wrap `WordsWorkspace` in `<Suspense>`.** Required for correct search-param handling in Next.js.
+6. **Shop recipe unlocks are atomic.** The `unlock_shop_recipe` RPC is the only write path that may create unlock rows, decrement wallets, and append shop spend history.
+7. **Shop writes do not affect learning state.** Shop unlocks, spend history, ingredient catalog edits, and recipe metadata edits never update `words`, `flashcard_contents`, scheduler fields, or quiz-session grading data.
+8. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists.
+9. **Due review pages wrap `WordsWorkspace` in `<Suspense>`.** Required for correct search-param handling in Next.js.
 
 ---
 
@@ -610,8 +719,8 @@ Dated flow documents under `docs/architecture/` (e.g. `2026-02-27-content-admin-
 
 ```
 docs/
-  AI_CONTRACT.md                          ← highest authority; agent rules
   architecture/
+    AI_CONTRACT.md                        ← highest authority; agent rules
     0_ARCHITECTURE.md                     ← system structure (this file)
     0_BUILD_CONVENTIONS.md                ← code and doc conventions
     0_PRODUCT_ROADMAP.md                  ← scope, sprint, deferrals
