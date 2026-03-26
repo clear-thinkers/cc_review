@@ -18,11 +18,13 @@ import {
 } from "../shop/shopIngredients";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
+  SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES,
   areShopAdminIngredientDraftsEqual,
   areShopRecipeAdminDraftsEqual,
   buildShopAdminIngredientDrafts,
   buildShopRecipeAdminDraft,
   createEmptyShopAdminIngredientDraft,
+  isShopAdminIngredientSaveErrorCode,
   listShopAdminVariantIngredientOptions,
   removeDeletedIngredientKeysFromRecipe,
   removeDeletedIngredientKeysFromRecipeAdminDraft,
@@ -30,6 +32,7 @@ import {
   validateShopAdminIngredientDrafts,
   validateShopRecipeAdminDraft,
   type ShopAdminIngredientDraft,
+  type ShopAdminIngredientSaveErrorResponse,
   type ShopAdminRecipesResponse,
   type ShopRecipeAdminDraft,
 } from "./shopAdmin.types";
@@ -40,10 +43,14 @@ type IngredientUsageFilter = "all" | "base" | "special" | "unused";
 
 const PANEL = "rounded-[1.5rem] border border-[#e3dac6] bg-[#fffdf8] p-5 md:p-6";
 const LABEL = "shop-admin-label text-sm font-semibold leading-6 text-[#8b7c5a]";
+const TOGGLE_BUTTON =
+  "shop-admin-pill border border-[#d7c8a5] bg-white px-4 py-2 text-sm font-semibold text-[#6b6658] transition hover:border-[#c9ae63] hover:text-[#8b6f2f]";
 const INPUT =
   "mt-2 w-full rounded-xl border border-[#d8cfba] bg-white px-4 py-3 text-sm text-[#24423a] outline-none transition focus:border-[#c9ae63] focus:ring-1 focus:ring-[#e8d79b]";
 const READONLY =
   "mt-2 rounded-xl border border-[#e5dcc9] bg-[#f8f4ea] px-4 py-3 text-sm text-[#536859]";
+const INGREDIENT_SECTION_CONTENT_ID = "shop-admin-ingredient-pricing-content";
+const RECIPE_SECTION_CONTENT_ID = "shop-admin-recipe-management-content";
 
 function getRecipeIconPath(recipe: ShopRecipe): string | null {
   return (
@@ -133,6 +140,8 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [ingredientNotice, setIngredientNotice] = useState<NoticeState>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingIngredients, setIsSavingIngredients] = useState(false);
+  const [isIngredientSectionCollapsed, setIsIngredientSectionCollapsed] = useState(true);
+  const [isRecipeSectionCollapsed, setIsRecipeSectionCollapsed] = useState(false);
   const [ingredientUsageFilter, setIngredientUsageFilter] =
     useState<IngredientUsageFilter>("all");
 
@@ -607,12 +616,21 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       });
       const json = (await response.json()) as
         | ShopAdminIngredientPricesResponse
-        | { error?: string };
+        | ShopAdminIngredientSaveErrorResponse;
       if (!response.ok || !("ingredients" in json) || !Array.isArray(json.ingredients)) {
+        const saveErrorCode =
+          typeof json === "object" &&
+          json &&
+          "errorCode" in json &&
+          isShopAdminIngredientSaveErrorCode(json.errorCode)
+            ? json.errorCode
+            : null;
         throw new Error(
-          typeof json === "object" && json && "error" in json
-            ? json.error || strings.ingredientPricing.saveError
-            : strings.ingredientPricing.saveError
+          saveErrorCode === SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES.missingIconPathColumn
+            ? strings.ingredientPricing.iconPathColumnMissing
+            : typeof json === "object" && json && "error" in json
+              ? json.error || strings.ingredientPricing.saveError
+              : strings.ingredientPricing.saveError
         );
       }
 
@@ -687,6 +705,22 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
+              title={
+                isIngredientSectionCollapsed
+                  ? strings.collapsible.expand
+                  : strings.collapsible.collapse
+              }
+              aria-controls={INGREDIENT_SECTION_CONTENT_ID}
+              aria-expanded={!isIngredientSectionCollapsed}
+              onClick={() => setIsIngredientSectionCollapsed((current) => !current)}
+              className={TOGGLE_BUTTON}
+            >
+              {isIngredientSectionCollapsed
+                ? strings.collapsible.expand
+                : strings.collapsible.collapse}
+            </button>
+            <button
+              type="button"
               onClick={addManagedIngredient}
               className="shop-admin-pill border border-[#d2b15b] bg-[#fff4d9] px-4 py-2 text-sm font-semibold text-[#8b6f2f]"
             >
@@ -717,6 +751,11 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             </button>
           </div>
         </div>
+
+        <div
+          id={INGREDIENT_SECTION_CONTENT_ID}
+          hidden={isIngredientSectionCollapsed}
+        >
 
         <div className="mt-5 flex flex-wrap gap-2">
           {(
@@ -904,6 +943,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             ))}
           </div>
         )}
+        </div>
       </section>
 
       <section className={`shop-admin-pane ${PANEL}`}>
@@ -917,19 +957,38 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               {strings.recipeManagement.helper}
             </p>
           </div>
-          <div className="rounded-2xl border border-[#e6dbc2] bg-white px-4 py-3 text-sm text-[#627665]">
-            {selectedRecipe ? (
-              <span>
-                {strings.selectedRecipe}:{" "}
-                <span className="font-semibold text-[#24423a]">
-                  {localizedSelectedRecipe?.title ?? selectedRecipe.slug}
+          <div className="flex flex-wrap items-start justify-end gap-3">
+            <button
+              type="button"
+              title={
+                isRecipeSectionCollapsed ? strings.collapsible.expand : strings.collapsible.collapse
+              }
+              aria-controls={RECIPE_SECTION_CONTENT_ID}
+              aria-expanded={!isRecipeSectionCollapsed}
+              onClick={() => setIsRecipeSectionCollapsed((current) => !current)}
+              className={TOGGLE_BUTTON}
+            >
+              {isRecipeSectionCollapsed ? strings.collapsible.expand : strings.collapsible.collapse}
+            </button>
+            <div className="rounded-2xl border border-[#e6dbc2] bg-white px-4 py-3 text-sm text-[#627665]">
+              {selectedRecipe ? (
+                <span>
+                  {strings.selectedRecipe}:{" "}
+                  <span className="font-semibold text-[#24423a]">
+                    {localizedSelectedRecipe?.title ?? selectedRecipe.slug}
+                  </span>
                 </span>
-              </span>
-            ) : (
-              strings.empty
-            )}
+              ) : (
+                strings.empty
+              )}
+            </div>
           </div>
         </div>
+
+        <div
+          id={RECIPE_SECTION_CONTENT_ID}
+          hidden={isRecipeSectionCollapsed}
+        >
 
         {notice ? (
           <p
@@ -1559,6 +1618,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               <p className="text-sm text-[#627665]">{strings.empty}</p>
             </div>
           )}
+        </div>
         </div>
       </section>
     </div>

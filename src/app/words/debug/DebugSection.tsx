@@ -22,6 +22,8 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
     useState<DebugToolMessage | null>(null);
   const [ingredientIconAudit, setIngredientIconAudit] =
     useState<DebugShopIngredientIconAuditResponse | null>(null);
+  const [ingredientIconActionNotice, setIngredientIconActionNotice] =
+    useState<DebugToolMessage | null>(null);
   const [rewardIconAuditResult, setRewardIconAuditResult] =
     useState<DebugToolMessage | null>(null);
   const [rewardIconAudit, setRewardIconAudit] =
@@ -31,6 +33,9 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
   const [runningCleanup, setRunningCleanup] = useState(false);
   const [runningIngredientIconAudit, setRunningIngredientIconAudit] = useState(false);
   const [runningRewardIconAudit, setRunningRewardIconAudit] = useState(false);
+  const [editingIngredientKey, setEditingIngredientKey] = useState<string | null>(null);
+  const [editingIngredientIconPath, setEditingIngredientIconPath] = useState("");
+  const [savingIngredientKey, setSavingIngredientKey] = useState<string | null>(null);
   const [editingRewardRuleKey, setEditingRewardRuleKey] = useState<string | null>(null);
   const [editingRewardIconPath, setEditingRewardIconPath] = useState("");
   const [savingRewardRuleKey, setSavingRewardRuleKey] = useState<string | null>(null);
@@ -56,6 +61,19 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
     }
 
     return item.exists ? s.rewardIconsStatus.present : s.rewardIconsStatus.missing;
+  }
+
+  function buildIngredientAuditSummary(
+    audit: DebugShopIngredientIconAuditResponse
+  ): DebugToolMessage {
+    const iconBackedCount = audit.items.filter((item) => item.iconPath !== null).length;
+    return {
+      tone: audit.missingItems.length === 0 ? "success" : "error",
+      text:
+        audit.missingItems.length === 0
+          ? s.ingredientIconsAllPresent(iconBackedCount)
+          : s.ingredientIconsMissing(audit.missingItems.length, iconBackedCount),
+    };
   }
 
   function getRewardRuleKey(item: DebugShopRewardIconAuditItem): string {
@@ -164,6 +182,9 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
 
     setRunningIngredientIconAudit(true);
     setIngredientIconAuditResult(null);
+    setIngredientIconActionNotice(null);
+    setEditingIngredientKey(null);
+    setEditingIngredientIconPath("");
     try {
       const response = await fetch("/api/debug/shop-ingredient-icons", {
         headers: {
@@ -179,14 +200,8 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
       }
 
       setIngredientIconAudit(json);
-      const iconBackedCount = json.items.filter((item) => item.iconPath !== null).length;
-      setIngredientIconAuditResult({
-        tone: json.missingItems.length === 0 ? "success" : "error",
-        text:
-          json.missingItems.length === 0
-            ? s.ingredientIconsAllPresent(iconBackedCount)
-            : s.ingredientIconsMissing(json.missingItems.length, iconBackedCount),
-      });
+      setIngredientIconAuditResult(buildIngredientAuditSummary(json));
+      setIngredientIconActionNotice(null);
     } catch (error) {
       setIngredientIconAudit(null);
       setIngredientIconAuditResult({
@@ -197,6 +212,68 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
       });
     } finally {
       setRunningIngredientIconAudit(false);
+    }
+  }
+
+  async function handleIngredientIconAction(params: {
+    action: "update_path" | "clear_path";
+    item: DebugShopIngredientIconAuditItem;
+    iconPath?: string;
+  }): Promise<void> {
+    const accessToken = session?.supabaseSession.access_token;
+    if (!accessToken) {
+      setIngredientIconActionNotice({
+        tone: "error",
+        text: s.ingredientIconsAuthRequired,
+      });
+      return;
+    }
+
+    setSavingIngredientKey(params.item.key);
+    setIngredientIconActionNotice(null);
+    try {
+      const response = await fetch("/api/debug/shop-ingredient-icons", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          action: params.action,
+          ingredientKey: params.item.key,
+          ...(params.action === "update_path"
+            ? { iconPath: params.iconPath ?? editingIngredientIconPath }
+            : {}),
+        }),
+      });
+      const json = (await response.json()) as
+        | DebugShopIngredientIconAuditResponse
+        | DebugErrorResponse;
+
+      if (!response.ok || !("items" in json) || !Array.isArray(json.items)) {
+        throw new Error("error" in json ? json.error || str.common.error : str.common.error);
+      }
+
+      setIngredientIconAudit(json);
+      setIngredientIconAuditResult(buildIngredientAuditSummary(json));
+      setIngredientIconActionNotice({
+        tone: "success",
+        text:
+          params.action === "update_path"
+            ? s.ingredientIconsPathSaved
+            : s.ingredientIconsRowDeleted,
+      });
+      setEditingIngredientKey(null);
+      setEditingIngredientIconPath("");
+    } catch (error) {
+      setIngredientIconActionNotice({
+        tone: "error",
+        text: s.ingredientIconsActionError(
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
+    } finally {
+      setSavingIngredientKey(null);
     }
   }
 
@@ -418,6 +495,19 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
             <p className="mt-3 text-sm text-gray-600">{s.ingredientIconsIdle}</p>
           )}
 
+          <p className="mt-2 text-sm text-gray-600">{s.ingredientIconsPickerHint}</p>
+          {ingredientIconActionNotice ? (
+            <p
+              className={`mt-3 text-sm ${
+                ingredientIconActionNotice.tone === "error"
+                  ? "text-red-700"
+                  : "text-blue-700"
+              }`}
+            >
+              {ingredientIconActionNotice.text}
+            </p>
+          ) : null}
+
           {ingredientIconAudit ? (
             <div className="mt-4 overflow-x-auto rounded-md border">
               <table className="min-w-full table-fixed border-collapse text-sm">
@@ -427,13 +517,16 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                       {s.ingredientIconsTable.ingredient}
                     </th>
                     <th className="px-3 py-2 text-left font-medium">
+                      {s.ingredientIconsTable.ingredientKey}
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium">
                       {s.ingredientIconsTable.status}
                     </th>
                     <th className="px-3 py-2 text-left font-medium">
                       {s.ingredientIconsTable.iconPath}
                     </th>
                     <th className="px-3 py-2 text-left font-medium">
-                      {s.ingredientIconsTable.filePath}
+                      {s.ingredientIconsTable.actions}
                     </th>
                   </tr>
                 </thead>
@@ -444,6 +537,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                         <div className="font-medium text-gray-900">{item.label.en}</div>
                         <div className="text-xs text-gray-500">{item.label.zh}</div>
                       </td>
+                      <td className="px-3 py-2 text-xs text-gray-600">{item.key}</td>
                       <td
                         className={`px-3 py-2 ${
                           item.iconPath !== null && item.exists === false
@@ -456,8 +550,91 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                       <td className="px-3 py-2 text-gray-700">
                         {item.iconPath ?? s.ingredientIconsStatus.noIcon}
                       </td>
-                      <td className="px-3 py-2 break-all text-xs text-gray-600">
-                        {item.filePath ?? s.ingredientIconsStatus.noIcon}
+                      <td className="px-3 py-2">
+                        {!item.hasPriceRow ? (
+                          <span className="text-xs text-gray-500">
+                            {s.ingredientIconsNoDirectAction}
+                          </span>
+                        ) : editingIngredientKey === item.key ? (
+                          <div className="space-y-2">
+                            <label className="block">
+                              <span className="text-xs text-gray-500">
+                                {s.ingredientIconsPathLabel}
+                              </span>
+                              <input
+                                value={editingIngredientIconPath}
+                                onChange={(event) =>
+                                  setEditingIngredientIconPath(event.target.value)
+                                }
+                                list="ingredient-icon-path-options"
+                                className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
+                              />
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                title={s.ingredientIconsTooltips.save}
+                                disabled={savingIngredientKey === item.key}
+                                onClick={() =>
+                                  void handleIngredientIconAction({
+                                    action: "update_path",
+                                    item,
+                                  })
+                                }
+                                className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                              >
+                                {savingIngredientKey === item.key
+                                  ? s.ingredientIconsActionSaving
+                                  : s.ingredientIconsActions.save}
+                              </button>
+                              <button
+                                type="button"
+                                title={s.ingredientIconsTooltips.cancel}
+                                disabled={savingIngredientKey === item.key}
+                                onClick={() => {
+                                  setEditingIngredientKey(null);
+                                  setEditingIngredientIconPath("");
+                                }}
+                                className="rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50"
+                              >
+                                {s.ingredientIconsActions.cancel}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              title={s.ingredientIconsTooltips.edit}
+                              onClick={() => {
+                                setEditingIngredientKey(item.key);
+                                setEditingIngredientIconPath(item.iconPath ?? "");
+                                setIngredientIconActionNotice(null);
+                              }}
+                              className="rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-sky-800"
+                            >
+                              {s.ingredientIconsActions.edit}
+                            </button>
+                            {item.iconPath !== null && item.exists === false ? (
+                              <button
+                                type="button"
+                                title={s.ingredientIconsTooltips.delete}
+                                disabled={savingIngredientKey === item.key}
+                                onClick={() =>
+                                  void handleIngredientIconAction({
+                                    action: "clear_path",
+                                    item,
+                                  })
+                                }
+                                className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                              >
+                                {savingIngredientKey === item.key
+                                  ? s.ingredientIconsActionSaving
+                                  : s.ingredientIconsActions.delete}
+                              </button>
+                            ) : null}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -465,6 +642,11 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
               </table>
             </div>
           ) : null}
+          <datalist id="ingredient-icon-path-options">
+            {(ingredientIconAudit?.availableIconPaths ?? []).map((iconPath) => (
+              <option key={iconPath} value={iconPath} />
+            ))}
+          </datalist>
         </div>
 
         <div className="rounded-md border p-3">

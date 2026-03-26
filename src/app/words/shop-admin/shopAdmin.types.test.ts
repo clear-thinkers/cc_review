@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { wordsStrings } from "../words.strings";
 import type { ShopRecipe } from "../shop/shop.types";
 import {
+  SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES,
   areShopAdminIngredientDraftsEqual,
   areShopRecipeAdminDraftsEqual,
   buildShopAdminIngredientDrafts,
   buildShopRecipeAdminDraft,
   createEmptyShopAdminIngredientDraft,
+  isShopAdminIngredientSaveErrorCode,
   listShopAdminVariantIngredientOptions,
   mergeReadonlyShopLocalizedIngredientRows,
   mergeReadonlyVariantIconRules,
@@ -416,5 +419,34 @@ describe("shopAdmin.types", () => {
         'Ingredient 1: icon path must start with "/".',
       ])
     );
+  });
+});
+
+describe("shop admin strings parity", () => {
+  it("keeps collapsible controls in sync across locales", () => {
+    expect(Object.keys(wordsStrings.en.shopAdmin.collapsible).sort()).toEqual(
+      Object.keys(wordsStrings.zh.shopAdmin.collapsible).sort()
+    );
+  });
+
+  it("keeps ingredient pricing keys in sync across locales", () => {
+    expect(Object.keys(wordsStrings.en.shopAdmin.ingredientPricing).sort()).toEqual(
+      Object.keys(wordsStrings.zh.shopAdmin.ingredientPricing).sort()
+    );
+  });
+});
+
+describe("shop admin ingredient save errors", () => {
+  it("recognizes supported save error codes", () => {
+    expect(
+      isShopAdminIngredientSaveErrorCode(
+        SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES.missingIconPathColumn
+      )
+    ).toBe(true);
+  });
+
+  it("rejects unknown save error codes", () => {
+    expect(isShopAdminIngredientSaveErrorCode("something-else")).toBe(false);
+    expect(isShopAdminIngredientSaveErrorCode(null)).toBe(false);
   });
 });

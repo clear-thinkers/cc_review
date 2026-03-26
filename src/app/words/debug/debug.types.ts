@@ -15,12 +15,13 @@ export type DebugShopIngredientIconAuditItem = {
   key: string;
   label: ShopLocalizedValue<string>;
   iconPath: string | null;
-  filePath: string | null;
   exists: boolean | null;
+  hasPriceRow: boolean;
 };
 
 export type DebugShopIngredientIconAuditResponse = {
   checkedAt: number;
+  availableIconPaths: string[];
   items: DebugShopIngredientIconAuditItem[];
   missingItems: DebugShopIngredientIconAuditItem[];
 };

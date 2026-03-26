@@ -21,6 +21,17 @@ export const SHOP_RECIPE_TITLE_MAX = 80;
 export const SHOP_RECIPE_INTRO_MAX = 240;
 export const SHOP_RECIPE_INGREDIENT_NAME_MAX = 60;
 export const SHOP_ADMIN_INGREDIENT_PRICE_MAX = 999;
+export const SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES = {
+  missingIconPathColumn: "missing_icon_path_column",
+} as const;
+
+export type ShopAdminIngredientSaveErrorCode =
+  (typeof SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES)[keyof typeof SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES];
+
+export type ShopAdminIngredientSaveErrorResponse = {
+  error: string;
+  errorCode?: ShopAdminIngredientSaveErrorCode;
+};
 
 export type ShopRecipeAdminDraft = {
   recipeId: string;
@@ -52,6 +63,12 @@ export type ShopAdminIngredientDraft = {
 };
 
 type ShopIngredientLabelLookup = ReadonlyMap<string, ShopLocalizedValue<string>>;
+
+export function isShopAdminIngredientSaveErrorCode(
+  value: unknown
+): value is ShopAdminIngredientSaveErrorCode {
+  return Object.values(SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES).some((code) => code === value);
+}
 
 export function buildShopAdminIngredientDrafts(
   items: ShopAdminIngredientCatalogItem[]

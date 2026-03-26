@@ -6,6 +6,7 @@ import {
 } from "@/app/words/shop/shopIngredients";
 import type { ShopRecipe } from "@/app/words/shop/shop.types";
 import {
+  SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES,
   removeDeletedIngredientKeysFromLocalizedIngredientRows,
   removeDeletedIngredientKeysFromVariantIconRules,
 } from "@/app/words/shop-admin/shopAdmin.types";
@@ -38,6 +39,8 @@ function isMissingIconPathColumnError(error: { message?: string } | null | undef
   const message = error?.message?.toLowerCase() ?? "";
   return message.includes("icon_path") && message.includes("column");
 }
+
+const SHOP_ADMIN_ICON_PATH_MIGRATION = "20260325193000_shop_ingredient_icon_paths.sql";
 
 async function authorizePlatformAdmin(request: NextRequest) {
   const authHeader = request.headers.get("Authorization");
@@ -420,11 +423,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     });
 
     if (isMissingIconPathColumnError(error)) {
-      const fallbackRows = upsertRows.map(({ icon_path: _iconPath, ...row }) => row);
-      const fallbackResult = await auth.adminClient
-        .from("shop_ingredient_prices")
-        .upsert(fallbackRows, { onConflict: "ingredient_key" });
-      error = fallbackResult.error;
+      return NextResponse.json(
+        {
+          error:
+            "Ingredient icon paths cannot be saved until shop_ingredient_prices.icon_path exists. Run migration " +
+            `${SHOP_ADMIN_ICON_PATH_MIGRATION} and try again.`,
+          errorCode: SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES.missingIconPathColumn,
+        },
+        { status: 500 }
+      );
     }
 
     if (error) {

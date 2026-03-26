@@ -388,6 +388,10 @@ export const wordsStrings = {
       unsavedBadge: "Unsaved",
       activeBadge: "Active",
       inactiveBadge: "Inactive",
+      collapsible: {
+        collapse: "Collapse",
+        expand: "Expand",
+      },
       canonicalIcon: "Unlock icon",
       fallbackIcon: "Variant icon",
       generatedFromAssets: "Asset-driven",
@@ -462,6 +466,8 @@ export const wordsStrings = {
         reset: "Reset Prices",
         saveSuccess: "Saved ingredient prices.",
         saveError: "Could not save ingredient prices.",
+        iconPathColumnMissing:
+          "Icon paths cannot be saved yet because the database is missing shop_ingredient_prices.icon_path. Run migration 20260325193000_shop_ingredient_icon_paths.sql and try again.",
         loadError: "Could not load ingredient prices right now.",
         validation: "Fix the ingredient catalog errors before saving.",
       },
@@ -825,7 +831,9 @@ export const wordsStrings = {
       running: "Running...",
       ingredientIconsTitle: "Verify Shop Ingredient Icons",
       ingredientIconsDescription:
-        "Checks every catalog-backed ingredient icon path against the files in public/ingredients and reports missing assets.",
+        "Checks every ingredient icon path, including Shop Admin overrides, against the files in public/ingredients and reports missing assets.",
+      ingredientIconsPickerHint:
+        "The path field suggests current files from public/ingredients. Run the check again after adding new PNGs to refresh the list.",
       ingredientIconsButton: "Check Ingredient Icons",
       ingredientIconsTooltip:
         "Verify that each catalog-backed ingredient icon file exists.",
@@ -837,16 +845,35 @@ export const wordsStrings = {
         `Missing ${missingCount} of ${totalCount} icon-backed ingredient file(s).`,
       ingredientIconsAuthRequired: "Platform admin session required.",
       ingredientIconsError: (msg: string) => `Error checking ingredient icons: ${msg}`,
+      ingredientIconsActionError: (msg: string) => `Ingredient icon action failed: ${msg}`,
+      ingredientIconsActionSaving: "Saving...",
+      ingredientIconsPathLabel: "New Icon Path",
+      ingredientIconsPathSaved: "Ingredient icon path updated.",
+      ingredientIconsRowDeleted: "Broken ingredient icon path cleared.",
+      ingredientIconsNoDirectAction: "Manage this ingredient in Shop Admin first",
       ingredientIconsTable: {
         ingredient: "Ingredient",
+        ingredientKey: "Ingredient Key",
         status: "Status",
         iconPath: "Icon Path",
-        filePath: "File Path",
+        actions: "Actions",
       },
       ingredientIconsStatus: {
         present: "Present",
         missing: "Missing",
         noIcon: "No icon configured",
+      },
+      ingredientIconsActions: {
+        edit: "Edit Path",
+        save: "Save Path",
+        cancel: "Cancel",
+        delete: "Delete Row",
+      },
+      ingredientIconsTooltips: {
+        edit: "Edit this ingredient icon path.",
+        save: "Save the updated ingredient icon path.",
+        cancel: "Cancel ingredient icon editing.",
+        delete: "Clear this broken ingredient icon path.",
       },
       rewardIconsTitle: "Verify Shop Reward Icons",
       rewardIconsDescription:
@@ -1303,6 +1330,10 @@ export const wordsStrings = {
       unsavedBadge: "未保存",
       activeBadge: "启用",
       inactiveBadge: "停用",
+      collapsible: {
+        collapse: "收起",
+        expand: "展开",
+      },
       canonicalIcon: "解锁图标",
       fallbackIcon: "变体图标",
       generatedFromAssets: "素材生成",
@@ -1374,6 +1405,8 @@ export const wordsStrings = {
         reset: "重置价格",
         saveSuccess: "材料价格已保存。",
         saveError: "无法保存材料价格。",
+        iconPathColumnMissing:
+          "现在还不能保存图标路径，因为数据库缺少 shop_ingredient_prices.icon_path。请先运行迁移 20260325193000_shop_ingredient_icon_paths.sql 后再试。",
         loadError: "现在无法加载材料价格。",
         validation: "请先修复材料目录中的错误再保存。",
       },
@@ -1732,7 +1765,9 @@ export const wordsStrings = {
       running: "执行中...",
       ingredientIconsTitle: "检查商店原料图标",
       ingredientIconsDescription:
-        "检查所有目录原料图标路径是否在 public/ingredients 中存在对应文件，并报告缺失资源。",
+        "检查所有原料图标路径（包括食谱管理里保存的覆盖路径）是否在 public/ingredients 中存在对应文件，并报告缺失资源。",
+      ingredientIconsPickerHint:
+        "路径输入框会提示 public/ingredients 下当前存在的文件。新增 PNG 后请重新运行检查以刷新列表。",
       ingredientIconsButton: "检查原料图标",
       ingredientIconsTooltip: "验证每个目录原料图标文件是否存在。",
       ingredientIconsRunning: "检查中...",
@@ -1743,16 +1778,35 @@ export const wordsStrings = {
         `${totalCount} 个带图标的原料中有 ${missingCount} 个文件缺失。`,
       ingredientIconsAuthRequired: "需要平台管理员会话。",
       ingredientIconsError: (msg: string) => `检查原料图标时出错：${msg}`,
+      ingredientIconsActionError: (msg: string) => `原料图标操作失败：${msg}`,
+      ingredientIconsActionSaving: "保存中...",
+      ingredientIconsPathLabel: "新图标路径",
+      ingredientIconsPathSaved: "原料图标路径已更新。",
+      ingredientIconsRowDeleted: "已清除损坏的原料图标路径。",
+      ingredientIconsNoDirectAction: "请先在食谱管理里管理这个原料",
       ingredientIconsTable: {
         ingredient: "原料",
+        ingredientKey: "原料键",
         status: "状态",
         iconPath: "图标路径",
-        filePath: "文件路径",
+        actions: "操作",
       },
       ingredientIconsStatus: {
         present: "存在",
         missing: "缺失",
         noIcon: "未配置图标",
+      },
+      ingredientIconsActions: {
+        edit: "编辑路径",
+        save: "保存路径",
+        cancel: "取消",
+        delete: "删除行",
+      },
+      ingredientIconsTooltips: {
+        edit: "编辑这个原料图标路径。",
+        save: "保存更新后的原料图标路径。",
+        cancel: "取消原料图标编辑。",
+        delete: "清除这个损坏的原料图标路径。",
       },
       rewardIconsTitle: "检查商店食物图标",
       rewardIconsDescription:

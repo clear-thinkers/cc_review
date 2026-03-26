@@ -4,9 +4,19 @@ import type {
   DebugShopIngredientIconAuditItem,
   DebugShopIngredientIconAuditResponse,
 } from "@/app/words/debug/debug.types";
-import { listShopIngredientCatalog } from "@/app/words/shop/shopIngredients";
+import {
+  listShopIngredientCatalog,
+  type ShopAdminIngredientCatalogItem,
+  type ShopIngredientCatalogEntry,
+} from "@/app/words/shop/shopIngredients";
 
 type ShopIngredientIconExists = (filePath: string) => Promise<boolean>;
+type ShopIngredientIconAuditSourceItem = Pick<
+  ShopIngredientCatalogEntry | ShopAdminIngredientCatalogItem,
+  "key" | "label" | "iconPath"
+> & {
+  hasPriceRow?: boolean;
+};
 
 async function defaultShopIngredientIconExists(filePath: string): Promise<boolean> {
   try {
@@ -39,11 +49,29 @@ export function resolveShopIngredientIconFilePath(iconPath: string | null): stri
   return resolvePublicAssetFilePath(iconPath);
 }
 
-export async function auditShopIngredientIcons(
-  iconExists: ShopIngredientIconExists = defaultShopIngredientIconExists
+export function normalizeShopIngredientIconPath(iconPath: string): string {
+  return iconPath.trim();
+}
+
+export function validateShopIngredientIconPath(iconPath: string): string {
+  const normalizedIconPath = normalizeShopIngredientIconPath(iconPath);
+  if (
+    !normalizedIconPath.startsWith("/ingredients/") ||
+    !normalizedIconPath.toLowerCase().endsWith(".png")
+  ) {
+    throw new Error('Ingredient icon path must start with "/ingredients/" and end with ".png".');
+  }
+
+  return normalizedIconPath;
+}
+
+export async function auditShopIngredientCatalogItems(
+  items: ShopIngredientIconAuditSourceItem[],
+  iconExists: ShopIngredientIconExists = defaultShopIngredientIconExists,
+  availableIconPaths: string[] = []
 ): Promise<DebugShopIngredientIconAuditResponse> {
-  const items: DebugShopIngredientIconAuditItem[] = await Promise.all(
-    listShopIngredientCatalog().map(async (entry) => {
+  const auditItems: DebugShopIngredientIconAuditItem[] = await Promise.all(
+    items.map(async (entry) => {
       const filePath = resolvePublicAssetFilePath(entry.iconPath);
       const exists = filePath ? await iconExists(filePath) : null;
 
@@ -51,15 +79,22 @@ export async function auditShopIngredientIcons(
         key: entry.key,
         label: entry.label,
         iconPath: entry.iconPath,
-        filePath,
         exists,
+        hasPriceRow: entry.hasPriceRow ?? true,
       };
     })
   );
 
   return {
     checkedAt: Date.now(),
-    items,
-    missingItems: items.filter((item) => item.iconPath !== null && item.exists === false),
+    availableIconPaths: [...availableIconPaths],
+    items: auditItems,
+    missingItems: auditItems.filter((item) => item.iconPath !== null && item.exists === false),
   };
+}
+
+export async function auditShopIngredientIcons(
+  iconExists: ShopIngredientIconExists = defaultShopIngredientIconExists
+): Promise<DebugShopIngredientIconAuditResponse> {
+  return auditShopIngredientCatalogItems(listShopIngredientCatalog(), iconExists);
 }
