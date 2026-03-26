@@ -4,6 +4,7 @@ import {
   canAffordRecipeUnlock,
   getShopRecipeContentForLocale,
   normalizeShopIngredientList,
+  normalizeShopLocalizedIngredients,
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopSpecialIngredientList,
   normalizeShopVariantIconRules,
@@ -240,6 +241,56 @@ describe("normalizeShopLocalizedSpecialIngredients", () => {
     ).toEqual({
       en: [{ ingredientKey: "brown-sugar", name: "Brown Sugar", quantity: 1 }],
       zh: [{ ingredientKey: "brown-sugar", name: "\u9ed1\u7cd6", quantity: 1 }],
+    });
+  });
+
+  it("realigns stale localized rows to preserve keyed ingredients from the canonical payload", () => {
+    expect(
+      normalizeShopLocalizedSpecialIngredients(
+        {
+          en: [{ ingredientKey: "shrimp", name: "Shrimp", quantity: 2 }],
+          zh: [{ ingredientKey: "shrimp", name: "\u867e\u4ec1", quantity: 2 }],
+        },
+        [
+          { ingredientKey: "shrimp", name: "Shrimp", quantity: 2 },
+          { ingredientKey: "pork-filling", name: "Pork Filling", quantity: 1 },
+        ]
+      )
+    ).toEqual({
+      en: [
+        { ingredientKey: "shrimp", name: "Shrimp", quantity: 2 },
+        { ingredientKey: "pork-filling", name: "Pork Filling", quantity: 1 },
+      ],
+      zh: [
+        { ingredientKey: "shrimp", name: "\u867e\u4ec1", quantity: 2 },
+        { ingredientKey: "pork-filling", name: "Pork Filling", quantity: 1 },
+      ],
+    });
+  });
+});
+
+describe("normalizeShopLocalizedIngredients", () => {
+  it("realigns stale localized base rows to preserve keyed ingredients from the canonical payload", () => {
+    expect(
+      normalizeShopLocalizedIngredients(
+        {
+          en: [{ ingredientKey: "flour", name: "Flour", quantity: 2 }],
+          zh: [{ ingredientKey: "flour", name: "\u9762\u7c89", quantity: 2 }],
+        },
+        [
+          { ingredientKey: "flour", name: "Flour", quantity: 2 },
+          { ingredientKey: "water", name: "Water", quantity: 1 },
+        ]
+      )
+    ).toEqual({
+      en: [
+        { ingredientKey: "flour", name: "Flour", quantity: 2 },
+        { ingredientKey: "water", name: "Water", quantity: 1 },
+      ],
+      zh: [
+        { ingredientKey: "flour", name: "\u9762\u7c89", quantity: 2 },
+        { ingredientKey: "water", name: "Water", quantity: 1 },
+      ],
     });
   });
 });

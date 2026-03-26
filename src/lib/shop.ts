@@ -252,6 +252,44 @@ function normalizeShopLocalizedListValue<T>(
   return { en, zh };
 }
 
+function realignLocalizedIngredientRows(
+  localizedRows: ShopIngredient[],
+  fallbackRows: ShopIngredient[]
+): ShopIngredient[] {
+  if (fallbackRows.length === 0) {
+    return localizedRows;
+  }
+
+  if (localizedRows.length === 0) {
+    return fallbackRows;
+  }
+
+  const rowsByKey = new Map<string, ShopIngredient>();
+  const unkeyedRows: ShopIngredient[] = [];
+
+  localizedRows.forEach((row) => {
+    const ingredientKey = canonicalizeShopIngredientKey(row.ingredientKey);
+    if (ingredientKey && !rowsByKey.has(ingredientKey)) {
+      rowsByKey.set(ingredientKey, row);
+      return;
+    }
+
+    unkeyedRows.push(row);
+  });
+
+  let nextUnkeyedIndex = 0;
+  return fallbackRows.map((fallbackRow) => {
+    const ingredientKey = canonicalizeShopIngredientKey(fallbackRow.ingredientKey);
+    if (ingredientKey) {
+      return rowsByKey.get(ingredientKey) ?? fallbackRow;
+    }
+
+    const localizedRow = unkeyedRows[nextUnkeyedIndex];
+    nextUnkeyedIndex += 1;
+    return localizedRow ?? fallbackRow;
+  });
+}
+
 export function normalizeShopLocalizedTitle(
   raw: unknown,
   fallback: string
@@ -270,7 +308,12 @@ export function normalizeShopLocalizedIngredients(
   raw: unknown,
   fallback: ShopIngredient[]
 ): ShopLocalizedValue<ShopIngredient[]> {
-  return normalizeShopLocalizedListValue(raw, fallback, normalizeShopIngredientList);
+  const localized = normalizeShopLocalizedListValue(raw, fallback, normalizeShopIngredientList);
+  const en = realignLocalizedIngredientRows(localized.en, fallback);
+  return {
+    en,
+    zh: realignLocalizedIngredientRows(localized.zh, en),
+  };
 }
 
 export function normalizeShopLocalizedSpecialIngredients(
@@ -278,14 +321,20 @@ export function normalizeShopLocalizedSpecialIngredients(
   fallback: ShopIngredient[]
 ): ShopLocalizedValue<ShopIngredient[]> {
   if (Array.isArray(raw)) {
-    const en = normalizeShopSpecialIngredientList(raw, fallback);
-    const zh = normalizeShopSpecialIngredientList(raw, en);
+    const en = realignLocalizedIngredientRows(
+      normalizeShopSpecialIngredientList(raw, fallback),
+      fallback
+    );
+    const zh = realignLocalizedIngredientRows(normalizeShopSpecialIngredientList(raw, en), en);
     return { en, zh };
   }
 
   const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const en = normalizeShopSpecialIngredientList(source.en, fallback);
-  const zh = normalizeShopSpecialIngredientList(source.zh, en);
+  const en = realignLocalizedIngredientRows(
+    normalizeShopSpecialIngredientList(source.en, fallback),
+    fallback
+  );
+  const zh = realignLocalizedIngredientRows(normalizeShopSpecialIngredientList(source.zh, en), en);
   return { en, zh };
 }
 
