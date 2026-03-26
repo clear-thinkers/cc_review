@@ -861,14 +861,14 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </div>
 
                 <label className="mt-4 block">
-                  <span className={LABEL}>{strings.ingredientPricing.key}</span>
+                  <span className={`${LABEL} block`}>{strings.ingredientPricing.key}</span>
                   <input
                     value={ingredient.key}
                     onChange={(event) =>
                       updateManagedIngredientKey(ingredient.draftId, event.target.value)
                     }
                     disabled={ingredient.isPersisted}
-                    className={ingredient.isPersisted ? READONLY : INPUT}
+                    className={`${ingredient.isPersisted ? READONLY : INPUT} block`}
                     placeholder={strings.ingredientPricing.keyPlaceholder}
                   />
                 </label>
