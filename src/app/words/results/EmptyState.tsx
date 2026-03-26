@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { ResultsLocaleStrings } from "./results.strings";
+import type { ResultsLocaleStrings } from "./results.strings.types";
 import styles from "./results.module.css";
 
 export interface EmptyStateProps {

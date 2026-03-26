@@ -1,7 +1,7 @@
 "use client";
 
 import type { ResultsSummaryStats } from "./results.types";
-import type { ResultsLocaleStrings } from "./results.strings";
+import type { ResultsLocaleStrings } from "./results.strings.types";
 import { formatTotalDuration } from "@/lib/results";
 import styles from "./results.module.css";
 

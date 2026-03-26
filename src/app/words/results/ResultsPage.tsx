@@ -10,7 +10,7 @@ import { ResultsSummary } from "./ResultsSummary";
 import { SessionHistoryTable } from "./SessionHistoryTable";
 import { ClearHistoryDialog } from "./ClearHistoryDialog";
 import { EmptyState } from "./EmptyState";
-import type { ResultsLocaleStrings } from "./results.strings";
+import type { ResultsLocaleStrings } from "./results.strings.types";
 import styles from "./results.module.css";
 
 export interface ResultsPageProps {

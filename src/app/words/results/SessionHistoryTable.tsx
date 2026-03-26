@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { QuizSession } from "./results.types";
-import type { ResultsLocaleStrings } from "./results.strings";
+import type { ResultsLocaleStrings } from "./results.strings.types";
 import { computeSessionDisplayData } from "@/lib/results";
 import styles from "./results.module.css";
 
