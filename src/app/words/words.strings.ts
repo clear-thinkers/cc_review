@@ -461,9 +461,9 @@ export const wordsStrings = {
         delete: "Delete Ingredient",
         deleteInUseWarning:
           "This ingredient is still linked to one or more recipes. Saving will remove it from those recipe rows and variant mappings.",
-        save: "Save Prices",
+        save: "Save",
         saving: "Saving...",
-        reset: "Reset Prices",
+        reset: "Reset",
         saveSuccess: "Saved ingredient prices.",
         saveError: "Could not save ingredient prices.",
         iconPathColumnMissing:
@@ -1400,9 +1400,9 @@ export const wordsStrings = {
         delete: "删除材料",
         deleteInUseWarning:
           "这个材料仍然被一个或多个食谱使用。保存后会把它从对应的食谱材料行和变体映射中移除。",
-        save: "保存价格",
+        save: "保存",
         saving: "保存中...",
-        reset: "重置价格",
+        reset: "重置",
         saveSuccess: "材料价格已保存。",
         saveError: "无法保存材料价格。",
         iconPathColumnMissing:
