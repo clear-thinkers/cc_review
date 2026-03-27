@@ -12,19 +12,35 @@ This document covers how to write code. Nothing more.
 
 Before writing any code:
 
-1. Confirm the feature is in `0_PRODUCT_ROADMAP.md §1 · Active Work`. If it's in §2 Deferred, stop.
-2. Check `docs/feature-specs/` for an existing spec. If found, read it first.
-3. If no spec exists and the feature touches more than one layer or adds DB fields, draft one before coding (see §1).
-4. Create `[feature].strings.ts` with full EN + ZH coverage before writing any JSX.
-5. Plan the file structure per §5 before writing component code.
-6. Write tests per §6 alongside implementation — not as a follow-up.
-7. Run `npm run check:encoding` before opening a PR.
+1. Check `0_PRODUCT_ROADMAP.md §1 · Active Work`. If the feature is in §2 Deferred or not listed, stop.
+2. Read `0_ARCHITECTURE.md` — layer boundaries, schema, folder map.
+3. Read `0_BUILD_CONVENTIONS.md` — this file.
+4. Check `docs/feature-specs/` for an existing spec. If found, read it. If none exists and the feature touches more than one layer or adds DB fields, draft one before coding (see §1).
+5. Create `[feature].strings.ts` with full EN + ZH coverage before writing any JSX.
+6. Plan file structure per §5 before writing any component code.
+7. Write tests per §6 alongside implementation — not after.
+8. Run `npm run check:encoding` before opening a PR.
+9. Run npm test and confirm all existing tests pass before opening a PR.
+
+**If the feature touches wallet or coin data:** all mutations must go through designated Supabase RPCs. Never write directly to `coin_balance`, `coin_transactions`, or `shop_purchases`. See `AI_CONTRACT.md §1`.
 
 ---
 
 ## 1 · Feature Specs
 
-**When required:** any feature that touches more than one architectural layer (UI, Domain, Service, AI) or adds a new table, RPC, or persisted schema field. When in doubt, draft one — skipping requires explicit human approval.
+**When required:**
+
+| Condition | Spec Required? |
+|---|---|
+| Touches ≥ 2 architectural layers (UI, Domain, Service, AI) | ✅ Yes |
+| Adds a new DB table | ✅ Yes |
+| Adds or modifies an RPC | ✅ Yes |
+| Adds or modifies a persisted schema field | ✅ Yes |
+| Adds a new API route | ✅ Yes |
+| Single-layer UI change (copy, styling, layout) | ❌ No |
+| Bug fix with no schema or API surface changes | ❌ No |
+| Refactor within a single file or module | ❌ No |
+| Anything not listed above | ✅ Yes — default to required |
 
 **File location:** `docs/feature-specs/YYYY-MM-DD-name.md`
 
@@ -53,6 +69,7 @@ Before writing any code:
 - All exported functions must have explicit return type annotations.
 - All React component props must have a named interface or type alias.
 - No `@ts-ignore` or `@ts-expect-error` without a comment explaining why.
+- No `console.log` in production code. Use structured logging or remove before opening a PR.
 
 ---
 
@@ -74,21 +91,35 @@ Types live in feature-scoped `*.types.ts` files, never inline in component files
 
 All user-facing text must support English and Simplified Chinese. Never write string literals directly in JSX.
 
-**Default** (standalone feature routes): create `[feature].strings.ts` in the feature directory.
+---
 
-**Exception** (workspace modules): features inside the `/words` workspace add copy to `words.strings.ts`. Do not create a parallel local file. Features outside the workspace (e.g. `prompts`, `tagging`) own their own local strings file.
+### 4.1 · Which Strings File to Use
 
-**What belongs in strings files:** all static user-visible copy — labels, titles, buttons, errors, placeholders, ARIA labels.
+| Feature Type | Rule |
+|---|---|
+| Workspace module (under `src/app/words/`) | Add copy to shared `words.strings.ts` |
+| Standalone route (e.g. `prompts`, `tagging`) | Create `[feature].strings.ts` in the feature directory |
 
-**What does not:** conditional rendering logic (`isLoading ? <Spinner /> : content`).
+---
 
-**Anti-patterns:**
+### 4.2 · What Belongs
+
+| ✅ Include | ❌ Exclude |
+|---|---|
+| Labels, titles, buttons, errors, placeholders, ARIA labels | Conditional rendering logic, JSX, HTML, template literals |
+
+---
+
+### 4.3 · Anti-Patterns
+
 - ❌ Hardcoded string literal in JSX
 - ❌ Mismatched EN/ZH keys
 - ❌ HTML or formatting inside string values
 - ❌ Template literals in the strings object
 
-**Strings file structure:**
+---
+
+### 4.4 · File Structure
 ```ts
 /**
  * [Feature] Strings — Last updated: YYYY-MM-DD
@@ -112,7 +143,11 @@ export const featureStrings = {
 };
 ```
 
-**CI enforcement:** a lint rule asserts that `en` and `zh` objects have identical key sets across all `*.strings.ts` files. Build fails on mismatch.
+---
+
+### 4.5 · CI Enforcement
+
+`en` and `zh` must have identical key sets across all `*.strings.ts` files. **Build fails on mismatch.**
 
 ---
 
@@ -132,7 +167,7 @@ src/app/words/[feature]/
 - [ ] Strings owner confirmed (local file or workspace file extended)
 - [ ] `[feature].types.ts` created if new domain types introduced
 - [ ] No hardcoded text in JSX
-- [ ] Locale hook used consistently
+- [ ] Locale hook: useLocale() from src/lib/locale/useLocale.ts (or wherever it lives) — confirm path in 0_ARCHITECTURE.md
 - [ ] ARIA labels sourced from strings file
 - [ ] All buttons have bilingual labels, tooltips, and notifications
 - [ ] Tests added per §6
@@ -171,7 +206,7 @@ Every new feature must have tests before it is considered complete.
 
 - Tailwind CSS only. No `style={{}}`. No new CSS modules (see exceptions below).
 - No arbitrary Tailwind values (e.g. `w-[347px]`) without a documented reason.
-- New pages must match the `/words/admin` page as the visual baseline — read `AdminSection.tsx` before writing component JSX.
+- New pages must match the `/words/admin` page as the visual baseline — read `src/app/words/admin/AdminSection.tsx` before writing component JSX.
 
 **CSS module exceptions (do not create new ones):**
 - `results/results.module.css` — predates Tailwind-only rule; all new styling for `results/` must extend this file, not mix with Tailwind.
@@ -179,8 +214,7 @@ Every new feature must have tests before it is considered complete.
 
 **Pinyin (ruby) alignment:** render as per-character units (Hanzi + pinyin token), not a full pinyin line above a full Hanzi line. Map pinyin tokens only to Hanzi code points; skip punctuation and non-Hanzi characters. When token count mismatches, render Hanzi without pinyin — no placeholder. Remove from DOM when pinyin is hidden (not CSS `visibility: hidden`). See `FlashcardCard.tsx` for the reference DOM pattern.
 
-**Button and color palette:** see `docs/architecture/button-style-reference.md` for the full button variant library.
-_(Note: extract the current button table from this file into that reference doc.)_
+**Styling rules:** see `docs/architecture/style-ref.md` for the full styling rules to follow for colors and buttons. If docs/architecture/style-ref.md is not readable, stop and flag before writing any styled components.
 
 ---
 
