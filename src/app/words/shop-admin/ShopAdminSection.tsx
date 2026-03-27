@@ -41,14 +41,22 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 type NoticeState = { kind: "success" | "error"; message: string } | null;
 type IngredientUsageFilter = "all" | "base" | "special" | "unused";
 
-const PANEL = "rounded-[1.5rem] border border-[#e3dac6] bg-[#fffdf8] p-5 md:p-6";
-const LABEL = "shop-admin-label text-sm font-semibold leading-6 text-[#8b7c5a]";
+const PANEL =
+  "rounded-[1.5rem] border bg-[var(--shop-admin-panel-bg)] p-5 md:p-6 [border-color:var(--shop-admin-panel-border)]";
+const LABEL =
+  "shop-admin-label text-sm font-semibold leading-6 text-[var(--shop-admin-label-text)]";
 const TOGGLE_BUTTON =
-  "shop-admin-pill border border-[#d7c8a5] bg-white px-4 py-2 text-sm font-semibold text-[#6b6658] transition hover:border-[#c9ae63] hover:text-[#8b6f2f]";
+  "btn-nav rounded-full border-2 px-4 py-2 text-sm font-semibold transition hover:bg-[#fff1cd]";
 const INPUT =
-  "mt-2 w-full rounded-xl border border-[#d8cfba] bg-white px-4 py-3 text-sm text-[#24423a] outline-none transition focus:border-[#c9ae63] focus:ring-1 focus:ring-[#e8d79b]";
+  "mt-2 w-full rounded-xl border bg-white px-4 py-3 text-sm text-[var(--shop-admin-text-dark)] outline-none transition [border-color:var(--shop-admin-input-border)] focus:[border-color:var(--shop-admin-hover-border)] focus:ring-1 focus:ring-[var(--shop-admin-focus-ring)]";
 const READONLY =
-  "mt-2 rounded-xl border border-[#e5dcc9] bg-[#f8f4ea] px-4 py-3 text-sm text-[#536859]";
+  "mt-2 rounded-xl border bg-[var(--shop-admin-readonly-bg)] px-4 py-3 text-sm text-[var(--shop-admin-readonly-text)] [border-color:var(--shop-admin-readonly-border)]";
+const SHOP_ADMIN_BUTTON_SECONDARY = "btn-secondary rounded-full border-2";
+const SHOP_ADMIN_BUTTON_PRIMARY = "btn-primary rounded-full border-2";
+const SHOP_ADMIN_BUTTON_CAUTION = "btn-caution rounded-full border-2";
+const SHOP_ADMIN_BUTTON_DESTRUCTIVE = "btn-destructive rounded-full border-2";
+const SHOP_ADMIN_FILTER_BUTTON_BASE = "rounded-full border-2 px-4 py-2 text-sm font-semibold transition";
+const SHOP_ADMIN_RECIPE_CARD_BUTTON = "w-full rounded-xl border-2 p-3 text-left transition";
 const INGREDIENT_SECTION_CONTENT_ID = "shop-admin-ingredient-pricing-content";
 const RECIPE_SECTION_CONTENT_ID = "shop-admin-recipe-management-content";
 
@@ -667,7 +675,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   if (!session?.isPlatformAdmin) {
     return (
       <section className={PANEL}>
-        <p className="text-sm text-[#6b6658]">{strings.platformAdminOnly}</p>
+        <p className="text-sm text-[var(--shop-admin-muted-text)]">{strings.platformAdminOnly}</p>
       </section>
     );
   }
@@ -675,7 +683,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   if (loadState === "loading" || loadState === "idle") {
     return (
       <section className={PANEL}>
-        <p className="text-sm text-[#6b6658]">{strings.loading}</p>
+        <p className="text-sm text-[var(--shop-admin-muted-text)]">{strings.loading}</p>
       </section>
     );
   }
@@ -696,10 +704,10 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className={LABEL}>{strings.ingredientPricing.title}</p>
-            <h2 className="mt-2 text-2xl font-semibold text-[#24423a]">
+            <h2 className="mt-2 text-2xl font-semibold text-[var(--shop-admin-text-dark)]">
               {strings.ingredientPricing.heading}
             </h2>
-            <p className="mt-2 max-w-4xl text-sm leading-7 text-[#627665]">
+            <p className="mt-2 max-w-4xl text-sm leading-7 text-[var(--shop-admin-support-text)]">
               {strings.ingredientPricing.helper}
             </p>
           </div>
@@ -723,7 +731,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             <button
               type="button"
               onClick={addManagedIngredient}
-              className="shop-admin-pill border border-[#d2b15b] bg-[#fff4d9] px-4 py-2 text-sm font-semibold text-[#8b6f2f]"
+              className={`${SHOP_ADMIN_BUTTON_SECONDARY} px-4 py-2 text-sm font-semibold`}
             >
               {strings.ingredientPricing.add}
             </button>
@@ -734,7 +742,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 setIngredientNotice(null);
               }}
               disabled={!hasUnsavedIngredientChanges || isSavingIngredients}
-              className="shop-admin-pill border border-[#d7c8a5] px-4 py-2 text-sm font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50"
+              className={`${SHOP_ADMIN_BUTTON_CAUTION} px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {strings.ingredientPricing.reset}
             </button>
@@ -746,7 +754,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 ingredientValidationErrors.length > 0 ||
                 isSavingIngredients
               }
-              className="shop-admin-pill border border-[#d2b15b] bg-[#fff0bf] px-5 py-2 text-sm font-semibold text-[#8b6f2f] shadow-[0_8px_20px_rgba(210,177,91,0.18)] disabled:cursor-not-allowed disabled:opacity-50"
+              className={`${SHOP_ADMIN_BUTTON_PRIMARY} px-5 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {isSavingIngredients ? strings.ingredientPricing.saving : strings.ingredientPricing.save}
             </button>
@@ -774,10 +782,10 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 type="button"
                 title={filterLabel}
                 onClick={() => setIngredientUsageFilter(filterValue)}
-                className={`shop-admin-pill border px-4 py-2 text-sm font-semibold transition ${
+                className={`${SHOP_ADMIN_FILTER_BUTTON_BASE} ${
                   isActive
-                    ? "border-[#d2b15b] bg-[#fff0bf] text-[#8b6f2f] shadow-[0_8px_20px_rgba(210,177,91,0.18)]"
-                    : "border-[#d7c8a5] bg-white text-[#6b6658]"
+                    ? "btn-secondary"
+                    : "btn-nav hover:bg-[#fff1cd]"
                 }`}
               >
                 {filterLabel}
@@ -810,7 +818,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         ) : null}
 
         {filteredIngredientCatalogDraft.length === 0 ? (
-          <p className="mt-6 rounded-xl border border-[#e4dac7] bg-white px-4 py-3 text-sm text-[#627665]">
+          <p className="mt-6 rounded-xl border bg-white px-4 py-3 text-sm text-[var(--shop-admin-support-text)] [border-color:var(--shop-admin-card-border)]">
             {strings.ingredientPricing.emptyState}
           </p>
         ) : (
@@ -818,10 +826,10 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             {filteredIngredientCatalogDraft.map((ingredient) => (
               <div
                 key={ingredient.draftId}
-                className="rounded-xl border border-[#e4dac7] bg-white p-4"
+                className="rounded-xl border bg-white p-4 [border-color:var(--shop-admin-card-border)]"
               >
                 <div className="flex items-start gap-4">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-[#eadfc1] bg-[#fffaf0]">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border bg-[var(--shop-admin-icon-bg)] [border-color:var(--shop-admin-icon-border)]">
                     {ingredient.iconPath ? (
                       <img
                         src={ingredient.iconPath}
@@ -829,7 +837,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                         className="h-12 w-12 object-contain"
                       />
                     ) : (
-                      <span className="text-xs font-semibold text-[#9a8f79]">
+                      <span className="text-xs font-semibold text-[var(--shop-admin-icon-fallback)]">
                         {strings.ingredients.noIcon}
                       </span>
                     )}
@@ -837,22 +845,22 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap gap-2">
                       {ingredient.usage.usedInBase ? (
-                        <span className="rounded-full bg-[#eef3e8] px-2.5 py-1 text-[11px] font-semibold text-[#607451]">
+                        <span className="rounded-full bg-[var(--shop-admin-success-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--shop-admin-success-text)]">
                           {strings.ingredientPricing.baseBadge}
                         </span>
                       ) : null}
                       {ingredient.usage.usedInSpecial ? (
-                        <span className="rounded-full bg-[#f4ebd3] px-2.5 py-1 text-[11px] font-semibold text-[#8b6f2f]">
+                        <span className="rounded-full bg-[var(--shop-admin-badge-warm-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--shop-admin-gold-text)]">
                           {strings.ingredientPricing.specialBadge}
                         </span>
                       ) : null}
                       {!ingredient.usage.usedInBase && !ingredient.usage.usedInSpecial ? (
-                        <span className="rounded-full bg-[#f8f4ea] px-2.5 py-1 text-[11px] font-semibold text-[#7c7464]">
+                        <span className="rounded-full bg-[var(--shop-admin-badge-soft-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--shop-admin-badge-soft-text)]">
                           {strings.ingredientPricing.unusedBadge}
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-2 text-xs text-[#7c7464]">
+                    <p className="mt-2 text-xs text-[var(--shop-admin-badge-soft-text)]">
                       {ingredient.isPersisted
                         ? strings.ingredientPricing.keyReadonly
                         : strings.ingredientPricing.keyEditable}
@@ -924,9 +932,9 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                   />
                 </label>
 
-                <div className="mt-4 border-t border-[#efe4d0] pt-4">
+                <div className="mt-4 border-t pt-4 [border-color:var(--shop-admin-divider)]">
                   {isManagedIngredientInUse(ingredient) ? (
-                    <p className="rounded-xl border border-[#f0d9b6] bg-[#fff7ea] px-3 py-2 text-sm text-[#8b6f2f]">
+                    <p className="rounded-xl border bg-[var(--shop-admin-warning-bg)] px-3 py-2 text-sm text-[var(--shop-admin-gold-text)] [border-color:var(--shop-admin-warning-border)]">
                       {strings.ingredientPricing.deleteInUseWarning}
                     </p>
                   ) : null}
@@ -934,7 +942,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     <button
                       type="button"
                       onClick={() => deleteManagedIngredient(ingredient.draftId)}
-                      className="shop-admin-pill border border-[#e7b8b2] bg-[#fff3f1] px-4 py-2 text-sm font-semibold text-[#a04f46]"
+                      className={`${SHOP_ADMIN_BUTTON_DESTRUCTIVE} px-4 py-2 text-sm font-semibold`}
                     >
                       {strings.ingredientPricing.delete}
                     </button>
@@ -951,10 +959,10 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className={LABEL}>{strings.recipeManagement.title}</p>
-            <h2 className="mt-2 text-2xl font-semibold text-[#24423a]">
+            <h2 className="mt-2 text-2xl font-semibold text-[var(--shop-admin-text-dark)]">
               {strings.recipeManagement.heading}
             </h2>
-            <p className="mt-2 max-w-4xl text-sm leading-7 text-[#627665]">
+            <p className="mt-2 max-w-4xl text-sm leading-7 text-[var(--shop-admin-support-text)]">
               {strings.recipeManagement.helper}
             </p>
           </div>
@@ -971,11 +979,11 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             >
               {isRecipeSectionCollapsed ? strings.collapsible.expand : strings.collapsible.collapse}
             </button>
-            <div className="rounded-2xl border border-[#e6dbc2] bg-white px-4 py-3 text-sm text-[#627665]">
+            <div className="rounded-2xl border bg-white px-4 py-3 text-sm text-[var(--shop-admin-support-text)] [border-color:var(--shop-admin-info-border)]">
               {selectedRecipe ? (
                 <span>
                   {strings.selectedRecipe}:{" "}
-                  <span className="font-semibold text-[#24423a]">
+                  <span className="font-semibold text-[var(--shop-admin-text-dark)]">
                     {localizedSelectedRecipe?.title ?? selectedRecipe.slug}
                   </span>
                 </span>
@@ -1004,14 +1012,14 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         ) : null}
 
         <div className="mt-6 grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="rounded-[1.25rem] border border-[#e4dac7] bg-white p-4">
+          <aside className="rounded-[1.25rem] border bg-white p-4 [border-color:var(--shop-admin-card-border)]">
             <div className="flex items-center justify-between gap-3">
               <p className={LABEL}>{strings.recipeListTitle}</p>
-              <span className="text-xs font-semibold text-[#7c7464]">{recipes.length}</span>
+              <span className="text-xs font-semibold text-[var(--shop-admin-badge-soft-text)]">{recipes.length}</span>
             </div>
 
             {recipes.length === 0 ? (
-              <p className="mt-4 text-sm text-[#627665]">{strings.empty}</p>
+              <p className="mt-4 text-sm text-[var(--shop-admin-support-text)]">{strings.empty}</p>
             ) : (
               <div className="mt-4 space-y-3">
                 {recipes.map((recipe) => {
@@ -1024,14 +1032,12 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                       key={recipe.id}
                       type="button"
                       onClick={() => handleSelectRecipe(recipe.id)}
-                      className={`w-full rounded-xl border p-3 text-left transition ${
-                        isSelected
-                          ? "border-[#d2b15b] bg-[#fff6de] shadow-[0_8px_20px_rgba(210,177,91,0.18)]"
-                          : "border-[#e4dac7] bg-white hover:border-[#d7c8a5]"
+                      className={`${SHOP_ADMIN_RECIPE_CARD_BUTTON} ${
+                        isSelected ? "btn-secondary" : "btn-nav hover:bg-[#fff1cd]"
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#eadfc1] bg-[#fffaf0]">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border bg-[var(--shop-admin-icon-bg)] [border-color:var(--shop-admin-icon-border)]">
                           {iconPath ? (
                             <img
                               src={iconPath}
@@ -1039,30 +1045,30 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                               className="h-10 w-10 object-contain"
                             />
                           ) : (
-                            <span className="text-[#9a8f79]">?</span>
+                            <span className="text-[var(--shop-admin-icon-fallback)]">?</span>
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate font-semibold text-[#24423a]">
+                            <span className="truncate font-semibold text-[var(--shop-admin-text-dark)]">
                               {localizedRecipe.title}
                             </span>
                             <span
                               className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                                 recipe.isActive
-                                  ? "bg-[#eef3e8] text-[#607451]"
-                                  : "bg-[#f8f4ea] text-[#7c7464]"
+                                  ? "bg-[var(--shop-admin-success-bg)] text-[var(--shop-admin-success-text)]"
+                                  : "bg-[var(--shop-admin-badge-soft-bg)] text-[var(--shop-admin-badge-soft-text)]"
                               }`}
                             >
                               {recipe.isActive ? strings.activeBadge : strings.inactiveBadge}
                             </span>
                             {isSelected && hasUnsavedRecipeChanges ? (
-                              <span className="rounded-full bg-[#fff0bf] px-2.5 py-1 text-[11px] font-semibold text-[#8b6f2f]">
+                              <span className="rounded-full bg-[var(--shop-admin-gold-light)] px-2.5 py-1 text-[11px] font-semibold text-[var(--shop-admin-gold-text)]">
                                 {strings.unsavedBadge}
                               </span>
                             ) : null}
                           </div>
-                          <p className="mt-1 truncate text-xs text-[#7c7464]">{recipe.slug}</p>
+                          <p className="mt-1 truncate text-xs text-[var(--shop-admin-badge-soft-text)]">{recipe.slug}</p>
                         </div>
                       </div>
                     </button>
@@ -1074,7 +1080,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
           {draft && selectedRecipe ? (
             <form
-              className="rounded-[1.25rem] border border-[#e4dac7] bg-white p-5"
+              className="rounded-[1.25rem] border bg-white p-5 [border-color:var(--shop-admin-card-border)]"
               onSubmit={(event) => {
                 event.preventDefault();
                 void handleRecipeSave();
@@ -1135,18 +1141,18 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </div>
               </div>
 
-              <div className="mt-8 border-t border-[#eee4d0] pt-8">
+              <div className="mt-8 border-t pt-8 [border-color:var(--shop-admin-divider-strong)]">
                 <div className="flex flex-wrap items-center gap-3">
                   <p className={LABEL}>{strings.form.baseIngredients}</p>
                   <button
                     type="button"
                     onClick={() => addIngredientRow("baseIngredients")}
-                    className="shop-admin-pill border border-[#d2b15b] bg-[#fff4d9] px-4 py-2 text-sm font-semibold text-[#8b6f2f]"
+                    className={`${SHOP_ADMIN_BUTTON_SECONDARY} px-4 py-2 text-sm font-semibold`}
                   >
                     {strings.ingredients.add}
                   </button>
                 </div>
-                <p className="mt-2 text-sm leading-7 text-[#627665]">{strings.ingredients.helper}</p>
+                <p className="mt-2 text-sm leading-7 text-[var(--shop-admin-support-text)]">{strings.ingredients.helper}</p>
 
                 <div className="mt-5 space-y-5">
                   {draft.baseIngredients.en.map((englishIngredient, ingredientIndex) => {
@@ -1159,7 +1165,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     return (
                       <div
                         key={`${selectedRecipe.id}-base-${ingredientIndex}`}
-                        className="rounded-xl border border-[#e4dac7] bg-white p-4"
+                        className="rounded-xl border bg-white p-4 [border-color:var(--shop-admin-card-border)]"
                       >
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_160px]">
                           <label className="block">
@@ -1264,7 +1270,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                             type="button"
                             onClick={() => moveIngredientRow("baseIngredients", ingredientIndex, -1)}
                             disabled={ingredientIndex === 0}
-                            className="shop-admin-pill border border-[#d7c8a5] px-3 py-2 text-xs font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50"
+                            className={`${SHOP_ADMIN_BUTTON_CAUTION} px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50`}
                           >
                             {strings.ingredients.moveUp}
                           </button>
@@ -1272,14 +1278,14 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                             type="button"
                             onClick={() => moveIngredientRow("baseIngredients", ingredientIndex, 1)}
                             disabled={ingredientIndex === draft.baseIngredients.en.length - 1}
-                            className="shop-admin-pill border border-[#d7c8a5] px-3 py-2 text-xs font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50"
+                            className={`${SHOP_ADMIN_BUTTON_CAUTION} px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50`}
                           >
                             {strings.ingredients.moveDown}
                           </button>
                           <button
                             type="button"
                             onClick={() => removeIngredientRow("baseIngredients", ingredientIndex)}
-                            className="shop-admin-pill border border-[#e7b8b2] bg-[#fff3f1] px-3 py-2 text-xs font-semibold text-[#a04f46]"
+                            className={`${SHOP_ADMIN_BUTTON_DESTRUCTIVE} px-3 py-2 text-xs font-semibold`}
                           >
                             {strings.ingredients.remove}
                           </button>
@@ -1290,22 +1296,22 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </div>
               </div>
 
-              <div className="mt-8 border-t border-[#eee4d0] pt-8">
+              <div className="mt-8 border-t pt-8 [border-color:var(--shop-admin-divider-strong)]">
                 <div className="flex flex-wrap items-center gap-3">
                   <p className={LABEL}>{strings.form.specialtyIngredients}</p>
                   <button
                     type="button"
                     onClick={() => addIngredientRow("specialIngredients")}
-                    className="shop-admin-pill border border-[#d2b15b] bg-[#fff4d9] px-4 py-2 text-sm font-semibold text-[#8b6f2f]"
+                    className={`${SHOP_ADMIN_BUTTON_SECONDARY} px-4 py-2 text-sm font-semibold`}
                   >
                     {strings.ingredients.add}
                   </button>
                 </div>
-                <p className="mt-2 text-sm leading-7 text-[#627665]">{strings.specialty.helper}</p>
+                <p className="mt-2 text-sm leading-7 text-[var(--shop-admin-support-text)]">{strings.specialty.helper}</p>
 
                 <div className="mt-5 space-y-5">
                   {draft.specialIngredients.en.length === 0 ? (
-                    <p className="rounded-xl border border-[#e4dac7] bg-white px-4 py-3 text-sm text-[#627665]">
+                    <p className="rounded-xl border bg-white px-4 py-3 text-sm text-[var(--shop-admin-support-text)] [border-color:var(--shop-admin-card-border)]">
                       {strings.specialty.noSlots}
                     </p>
                   ) : (
@@ -1319,7 +1325,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                       return (
                         <div
                           key={`${selectedRecipe.id}-special-${ingredientIndex}`}
-                          className="rounded-xl border border-[#e4dac7] bg-white p-4"
+                          className="rounded-xl border bg-white p-4 [border-color:var(--shop-admin-card-border)]"
                         >
                           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.8fr)_160px]">
                             <label className="block">
@@ -1426,7 +1432,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                                 moveIngredientRow("specialIngredients", ingredientIndex, -1)
                               }
                               disabled={ingredientIndex === 0}
-                              className="shop-admin-pill border border-[#d7c8a5] px-3 py-2 text-xs font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50"
+                            className={`${SHOP_ADMIN_BUTTON_CAUTION} px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50`}
                             >
                               {strings.ingredients.moveUp}
                             </button>
@@ -1436,7 +1442,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                                 moveIngredientRow("specialIngredients", ingredientIndex, 1)
                               }
                               disabled={ingredientIndex === draft.specialIngredients.en.length - 1}
-                              className="shop-admin-pill border border-[#d7c8a5] px-3 py-2 text-xs font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50"
+                            className={`${SHOP_ADMIN_BUTTON_CAUTION} px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50`}
                             >
                               {strings.ingredients.moveDown}
                             </button>
@@ -1445,7 +1451,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                               onClick={() =>
                                 removeIngredientRow("specialIngredients", ingredientIndex)
                               }
-                              className="shop-admin-pill border border-[#e7b8b2] bg-[#fff3f1] px-3 py-2 text-xs font-semibold text-[#a04f46]"
+                            className={`${SHOP_ADMIN_BUTTON_DESTRUCTIVE} px-3 py-2 text-xs font-semibold`}
                             >
                               {strings.ingredients.remove}
                             </button>
@@ -1458,12 +1464,12 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
                 <div className="mt-6">
                   <p className={LABEL}>{strings.form.variantPreview}</p>
-                  <p className="mt-2 text-sm leading-7 text-[#627665]">
+                  <p className="mt-2 text-sm leading-7 text-[var(--shop-admin-support-text)]">
                     {strings.specialty.variantHelper}
                   </p>
                   <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {draft.variantIconRules.length === 0 ? (
-                      <p className="rounded-xl border border-[#e4dac7] bg-white px-4 py-3 text-sm text-[#627665]">
+                      <p className="rounded-xl border bg-white px-4 py-3 text-sm text-[var(--shop-admin-support-text)] [border-color:var(--shop-admin-card-border)]">
                         {strings.specialty.noVariants}
                       </p>
                     ) : (
@@ -1473,25 +1479,25 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                         return (
                           <div
                             key={`${selectedRecipe.id}-${ruleIndex}-${rule.iconPath}`}
-                            className="rounded-xl border border-[#e4dac7] bg-white p-4"
+                            className="rounded-xl border bg-white p-4 [border-color:var(--shop-admin-card-border)]"
                           >
-                            <div className="flex h-24 items-center justify-center rounded-xl border border-[#efe4c8] bg-[#fffaf0] p-3">
+                            <div className="flex h-24 items-center justify-center rounded-xl border bg-[var(--shop-admin-icon-bg)] p-3 [border-color:var(--shop-admin-preview-border)]">
                               <img
                                 src={rule.iconPath}
                                 alt={rule.iconPath}
                                 className="h-full w-full object-contain"
                               />
                             </div>
-                            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#8b6f2f]">
+                            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shop-admin-gold-text)]">
                               {strings.specialty.variantAssigned}
                             </p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {isPlainRule ? (
-                                <span className="rounded-full bg-[#eef3e8] px-3 py-1 text-xs font-semibold text-[#607451]">
+                                <span className="rounded-full bg-[var(--shop-admin-success-bg)] px-3 py-1 text-xs font-semibold text-[var(--shop-admin-success-text)]">
                                   {strings.specialty.matchAll}
                                 </span>
                               ) : rule.match.length === 0 ? (
-                                <span className="rounded-full bg-[#f8f4ea] px-3 py-1 text-xs font-semibold text-[#7c7464]">
+                                <span className="rounded-full bg-[var(--shop-admin-badge-soft-bg)] px-3 py-1 text-xs font-semibold text-[var(--shop-admin-badge-soft-text)]">
                                   {strings.specialty.variantNoMapped}
                                 </span>
                               ) : (
@@ -1504,7 +1510,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                                   return (
                                     <span
                                       key={`${rule.iconPath}-${token}`}
-                                      className="rounded-full bg-[#f4ebd3] px-3 py-1 text-xs font-semibold text-[#8b6f2f]"
+                                      className="rounded-full bg-[var(--shop-admin-badge-warm-bg)] px-3 py-1 text-xs font-semibold text-[var(--shop-admin-gold-text)]"
                                     >
                                       {localizedLabel}
                                     </span>
@@ -1512,28 +1518,28 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                                 })
                               )}
                             </div>
-                            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-[#8b7c5a]">
+                            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shop-admin-label-text)]">
                               {strings.specialty.variantPath}
                             </p>
-                            <p className="mt-2 break-all text-xs text-[#7c7464]">{rule.iconPath}</p>
+                            <p className="mt-2 break-all text-xs text-[var(--shop-admin-badge-soft-text)]">{rule.iconPath}</p>
 
                             {variantIngredientOptions.length === 0 ? (
-                              <p className="mt-4 rounded-xl border border-[#e4dac7] bg-[#fffaf0] px-3 py-2 text-sm text-[#627665]">
+                              <p className="mt-4 rounded-xl border bg-[var(--shop-admin-icon-bg)] px-3 py-2 text-sm text-[var(--shop-admin-support-text)] [border-color:var(--shop-admin-card-border)]">
                                 {strings.specialty.variantNoOptions}
                               </p>
                             ) : isPlainRule ? (
-                              <p className="mt-4 rounded-xl border border-[#e4dac7] bg-[#fffaf0] px-3 py-2 text-sm text-[#627665]">
+                              <p className="mt-4 rounded-xl border bg-[var(--shop-admin-icon-bg)] px-3 py-2 text-sm text-[var(--shop-admin-support-text)] [border-color:var(--shop-admin-card-border)]">
                                 {strings.specialty.variantReadonly}
                               </p>
                             ) : null}
 
                             {variantIngredientOptions.length > 0 && !isPlainRule ? (
                               <div className="mt-4">
-                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8b7c5a]">
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shop-admin-label-text)]">
                                   {strings.specialty.variantAvailable}
                                 </p>
                                 {rule.match.length === 0 ? (
-                                  <p className="mt-2 text-sm text-[#627665]">
+                                  <p className="mt-2 text-sm text-[var(--shop-admin-support-text)]">
                                     {strings.specialty.variantNoMapped}
                                   </p>
                                 ) : null}
@@ -1546,7 +1552,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                                     return (
                                       <label
                                         key={`${rule.iconPath}-${option.key}`}
-                                        className="flex items-start gap-3 rounded-xl border border-[#ece3d1] bg-[#fffdfa] px-3 py-3 text-sm text-[#445c4c]"
+                                        className="flex items-start gap-3 rounded-xl border bg-[var(--shop-admin-panel-bg)] px-3 py-3 text-sm text-[var(--shop-admin-option-text)] [border-color:var(--shop-admin-option-border)]"
                                       >
                                         <input
                                           type="checkbox"
@@ -1558,13 +1564,13 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                                               event.target.checked
                                             )
                                           }
-                                          className="mt-1 h-4 w-4 rounded border-[#c9ae63] text-[#8b6f2f] focus:ring-[#e8d79b]"
+                                          className="mt-1 h-4 w-4 rounded [border-color:var(--shop-admin-hover-border)] text-[var(--shop-admin-gold-text)] focus:ring-[var(--shop-admin-focus-ring)]"
                                         />
                                         <span className="min-w-0 flex-1">
-                                          <span className="block font-semibold text-[#24423a]">
+                                          <span className="block font-semibold text-[var(--shop-admin-text-dark)]">
                                             {localizedLabel}
                                           </span>
-                                          <span className="mt-1 block text-xs text-[#7c7464]">
+                                          <span className="mt-1 block text-xs text-[var(--shop-admin-badge-soft-text)]">
                                             {option.key}
                                           </span>
                                         </span>
@@ -1582,11 +1588,11 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </div>
               </div>
 
-              <div className="mt-8 border-t border-[#eee4d0] bg-[#fffdf8] pt-6">
+              <div className="mt-8 border-t bg-[var(--shop-admin-panel-bg)] pt-6 [border-color:var(--shop-admin-divider-strong)]">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <p className={LABEL}>{strings.form.saveBar}</p>
-                    <p className="mt-2 text-sm text-[#627665]">
+                    <p className="mt-2 text-sm text-[var(--shop-admin-support-text)]">
                       {hasUnsavedRecipeChanges ? strings.saveBar.dirty : strings.saveBar.clean}
                     </p>
                   </div>
@@ -1595,7 +1601,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                       type="button"
                       onClick={() => setDraft(baselineDraft)}
                       disabled={!hasUnsavedRecipeChanges || isSaving}
-                      className="shop-admin-pill border border-[#d7c8a5] px-4 py-2 text-sm font-semibold text-[#6b6658] disabled:cursor-not-allowed disabled:opacity-50"
+                      className={`${SHOP_ADMIN_BUTTON_CAUTION} px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50`}
                     >
                       {strings.saveBar.reset}
                     </button>
@@ -1606,7 +1612,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                         recipeValidationErrors.length > 0 ||
                         isSaving
                       }
-                      className="shop-admin-pill border border-[#d2b15b] bg-[#fff0bf] px-5 py-2 text-sm font-semibold text-[#8b6f2f] shadow-[0_8px_20px_rgba(210,177,91,0.18)] disabled:cursor-not-allowed disabled:opacity-50"
+                      className={`${SHOP_ADMIN_BUTTON_PRIMARY} px-5 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50`}
                     >
                       {isSaving ? strings.saveBar.saving : strings.saveBar.save}
                     </button>
@@ -1615,8 +1621,8 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               </div>
             </form>
           ) : (
-            <div className="rounded-[1.25rem] border border-[#e4dac7] bg-white p-5">
-              <p className="text-sm text-[#627665]">{strings.empty}</p>
+            <div className="rounded-[1.25rem] border bg-white p-5 [border-color:var(--shop-admin-card-border)]">
+              <p className="text-sm text-[var(--shop-admin-support-text)]">{strings.empty}</p>
             </div>
           )}
         </div>

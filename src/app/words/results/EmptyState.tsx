@@ -20,7 +20,10 @@ export function EmptyState({ strings }: EmptyStateProps) {
       <div className={styles.emptyStateIcon}>⌘</div>
       <h2 className={styles.emptyStateHeading}>{strings.emptyState.heading}</h2>
       <p className={styles.emptyStateMessage}>{strings.emptyState.message}</p>
-      <button className={styles.emptyStateAction} onClick={handleGoToReview}>
+      <button
+        className="btn-nav rounded-full border-2 px-6 py-3 text-lg font-bold transition hover:bg-[#fff1cd]"
+        onClick={handleGoToReview}
+      >
         {strings.emptyState.action}
       </button>
     </div>

@@ -23,14 +23,16 @@ export function ClearHistoryDialog({
         <p className={styles.dialogMessage}>{strings.clearHistory.message}</p>
         <div className={styles.dialogActions}>
           <button
-            className={styles.dialogButton + " " + styles.dialogButtonCancel}
+            type="button"
+            className="btn-neutral rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-50"
             onClick={onCancel}
             disabled={isClearing}
           >
             {strings.clearHistory.cancelButton}
           </button>
           <button
-            className={styles.dialogButton + " " + styles.dialogButtonDelete}
+            type="button"
+            className="btn-destructive rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-50"
             onClick={onConfirm}
             disabled={isClearing}
           >

@@ -1,39 +1,165 @@
-/**
- * FlashcardCard Component Test Plan
- *
- * Since the project uses Vitest without @testing-library/react,
- * these tests are designed to be verified manually through the browser.
- *
- * Test Categories:
- * 1. Toggle State - Verified in browser by clicking "Hide Details" / "Show Details" button
- * 2. Content Rendering - Verified by checking character, meaning, and phrase-example pairs display
- * 3. Fill-Test Filtering - Verified by confirming only include_in_fill_test:true phrases appear
- * 4. Pinyin Formatting - Verified by checking pinyin appears above text (not in parentheses)
- * 5. Responsive Design - Verified at 320px, 480px, 960px+ breakpoints
- *
- * Manual Testing Results:
- * ✅ Character displays at 72-120px depending on screen size
- * ✅ Character pinyin (12px, italic, gray) displays above character
- * ✅ Meaning displays as supporting text
- * ✅ Phrase-example blocks grouped with background and border
- * ✅ Phrase pinyin (12px, italic, gray) displays above phrase text
- * ✅ Example pinyin (12px, italic, gray) displays above example text
- * ✅ Only phrases marked include_in_fill_test:true are rendered
- * ✅ Multiple phrase-example pairs separated by 16px gap
- * ✅ Toggle button in top-right corner changes between "Show Details" / "Hide Details"
- * ✅ Clicking toggle hides/shows phrase-example blocks (character and meaning always visible)
- * ✅ Placeholder "No phrases included for testing" shows when no fill-test phrases
- * ✅ Loading state displays when flashcardContent is undefined
- * ✅ Mobile layout optimized for 320px screens
- * ✅ Tablet layout optimized for 480-960px screens
- * ✅ Desktop layout optimized for 960px+ screens
- *
- * Running Manual Tests:
- * 1. Start the dev server: npm run dev
- * 2. Navigate to /words/review/flashcard
- * 3. Add a character if needed, then start a flashcard review
- * 4. Verify each test case by inspecting the rendered card
- */
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import type { FlashcardLlmResponse } from "@/lib/flashcardLlm";
+import type { Word } from "@/lib/types";
+import { wordsStrings } from "../../words.strings";
+import FlashcardCard from "./FlashcardCard";
 
-export {};
+const baseWord: Word = {
+  id: "word-1",
+  hanzi: "你",
+  createdAt: 0,
+  repetitions: 0,
+  intervalDays: 0,
+  ease: 21,
+  nextReviewAt: 0,
+};
 
+function renderCard(
+  flashcardContent: FlashcardLlmResponse | undefined,
+  options?: {
+    pronunciationLabel?: string;
+    showPinyin?: boolean;
+    word?: Word;
+  }
+): string {
+  return renderToStaticMarkup(
+    <FlashcardCard
+      word={options?.word ?? baseWord}
+      flashcardContent={flashcardContent}
+      str={wordsStrings.en}
+      pronunciationLabel={options?.pronunciationLabel ?? "ni3"}
+      showPinyin={options?.showPinyin ?? false}
+    />
+  );
+}
+
+function stripTags(markup: string): string {
+  return markup.replace(/<[^>]+>/g, "");
+}
+
+describe("FlashcardCard", () => {
+  it("renders the loading state when content is missing", () => {
+    const markup = renderCard(undefined);
+
+    expect(markup).toContain(wordsStrings.en.flashcard.loadingContent);
+    expect(markup).toContain("flashcard-loading");
+  });
+
+  it("renders only phrases marked for fill-test", () => {
+    const markup = renderCard({
+      character: "你",
+      pronunciation: "ni3",
+      meanings: [
+        {
+          definition: "you",
+          definition_en: "you",
+          phrases: [
+            {
+              phrase: "你好",
+              pinyin: "ni3 hao3",
+              example: "你好啊",
+              example_pinyin: "ni3 hao3 a",
+              include_in_fill_test: true,
+            },
+            {
+              phrase: "你们",
+              pinyin: "ni3 men",
+              example: "你们好",
+              example_pinyin: "ni3 men hao3",
+              include_in_fill_test: false,
+            },
+          ],
+        },
+      ],
+    });
+
+    const textContent = stripTags(markup);
+
+    expect(textContent).toContain("你好");
+    expect(textContent).toContain("你好啊");
+    expect(markup).toContain("you / you");
+    expect(textContent).not.toContain("你们");
+    expect(textContent).not.toContain("你们好");
+  });
+
+  it("omits ruby pinyin markup when showPinyin is false", () => {
+    const markup = renderCard(
+      {
+        character: "你",
+        pronunciation: "ni3",
+        meanings: [
+          {
+            definition: "you",
+            phrases: [
+              {
+                phrase: "你好",
+                pinyin: "ni3 hao3",
+                example: "你好啊",
+                example_pinyin: "ni3 hao3 a",
+                include_in_fill_test: true,
+              },
+            ],
+          },
+        ],
+      },
+      { showPinyin: false }
+    );
+
+    expect(markup).toContain("hide-pinyin");
+    expect(markup).not.toContain("flashcard-ruby-pinyin");
+    expect(markup).not.toContain("ni3");
+  });
+
+  it("renders lowercase ruby pinyin when showPinyin is true", () => {
+    const markup = renderCard(
+      {
+        character: "你",
+        pronunciation: "NI3",
+        meanings: [
+          {
+            definition: "you",
+            phrases: [
+              {
+                phrase: "你好",
+                pinyin: "NI3 HAO3",
+                example: "你好啊",
+                example_pinyin: "NI3 HAO3 A",
+                include_in_fill_test: true,
+              },
+            ],
+          },
+        ],
+      },
+      { pronunciationLabel: "NI3", showPinyin: true }
+    );
+
+    expect(markup).not.toContain("hide-pinyin");
+    expect(markup).toContain("flashcard-ruby-pinyin");
+    expect(markup).toContain("ni3");
+    expect(markup).toContain("hao3");
+  });
+
+  it("returns no markup when no phrase is eligible for fill-test", () => {
+    const markup = renderCard({
+      character: "你",
+      pronunciation: "ni3",
+      meanings: [
+        {
+          definition: "you",
+          phrases: [
+            {
+              phrase: "你们",
+              pinyin: "ni3 men",
+              example: "你们好",
+              example_pinyin: "ni3 men hao3",
+              include_in_fill_test: false,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(markup).toBe("");
+  });
+});

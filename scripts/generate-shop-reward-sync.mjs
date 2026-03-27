@@ -1,3 +1,11 @@
+// Generates SQL to sync reward PNG assets → variant_icon_rules and special_ingredient_slots
+// in shop_recipes. Run from the repo root whenever files under public/rewards/ change.
+//
+// NOTE: this script only updates `special_ingredient_slots` (the English fallback column).
+// `special_ingredient_slots_i18n` is NOT updated — Chinese labels will fall back to the
+// English toTitleCase() values until manually corrected via Shop Admin.
+// For variant_icon_rules (icon paths), the output is complete and correct.
+
 import fs from "node:fs";
 import path from "node:path";
 

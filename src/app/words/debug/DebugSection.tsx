@@ -451,7 +451,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
             title={s.cleanOrphanedTooltip}
             disabled={runningCleanup}
             onClick={handleCleanOrphanedContent}
-            className="mt-3 rounded-md border-2 border-rose-500 bg-rose-50 px-4 py-2 font-medium text-rose-700 disabled:opacity-50"
+            className="mt-3 rounded-md border-2 px-4 py-2 font-medium btn-destructive disabled:opacity-50"
           >
             {runningCleanup ? s.running : s.runCleanup}
           </button>
@@ -474,7 +474,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
             title={s.ingredientIconsTooltip}
             disabled={runningIngredientIconAudit}
             onClick={() => void handleIngredientIconAudit()}
-            className="mt-3 rounded-md border-2 border-amber-400 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
+            className="mt-3 rounded-md border-2 px-4 py-2 font-medium btn-caution disabled:opacity-50"
           >
             {runningIngredientIconAudit
               ? s.ingredientIconsRunning
@@ -581,7 +581,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                     item,
                                   })
                                 }
-                                className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-primary disabled:opacity-50"
                               >
                                 {savingIngredientKey === item.key
                                   ? s.ingredientIconsActionSaving
@@ -595,7 +595,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                   setEditingIngredientKey(null);
                                   setEditingIngredientIconPath("");
                                 }}
-                                className="rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50"
+                                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
                               >
                                 {s.ingredientIconsActions.cancel}
                               </button>
@@ -611,7 +611,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                 setEditingIngredientIconPath(item.iconPath ?? "");
                                 setIngredientIconActionNotice(null);
                               }}
-                              className="rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-sky-800"
+                              className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary"
                             >
                               {s.ingredientIconsActions.edit}
                             </button>
@@ -626,7 +626,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                     item,
                                   })
                                 }
-                                className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-destructive disabled:opacity-50"
                               >
                                 {savingIngredientKey === item.key
                                   ? s.ingredientIconsActionSaving
@@ -657,7 +657,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
             title={s.rewardIconsTooltip}
             disabled={runningRewardIconAudit}
             onClick={() => void handleRewardIconAudit()}
-            className="mt-3 rounded-md border-2 border-sky-300 bg-sky-50 px-4 py-2 font-medium text-sky-800 disabled:opacity-50"
+            className="mt-3 rounded-md border-2 px-4 py-2 font-medium btn-secondary disabled:opacity-50"
           >
             {runningRewardIconAudit ? s.rewardIconsRunning : s.rewardIconsButton}
           </button>
@@ -768,7 +768,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                     item,
                                   })
                                 }
-                                className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-primary disabled:opacity-50"
                               >
                                 {savingRewardRuleKey === getRewardRuleKey(item)
                                   ? s.rewardIconsActionSaving
@@ -782,7 +782,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                   setEditingRewardRuleKey(null);
                                   setEditingRewardIconPath("");
                                 }}
-                                className="rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50"
+                                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
                               >
                                 {s.rewardIconsActions.cancel}
                               </button>
@@ -798,7 +798,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                 setEditingRewardIconPath(item.iconPath);
                                 setRewardIconActionNotice(null);
                               }}
-                              className="rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-sky-800"
+                              className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary"
                             >
                               {s.rewardIconsActions.edit}
                             </button>
@@ -813,7 +813,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                     item,
                                   })
                                 }
-                                className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-destructive disabled:opacity-50"
                               >
                                 {savingRewardRuleKey === getRewardRuleKey(item)
                                   ? s.rewardIconsActionSaving
@@ -890,7 +890,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                   !creatingRewardRecipeId.trim()
                                 }
                                 onClick={() => void handleCreateRewardRule(item.iconPath)}
-                                className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white disabled:opacity-50"
+                                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-primary disabled:opacity-50"
                               >
                                 {savingRewardRuleKey === item.iconPath
                                   ? s.rewardIconsActionSaving
@@ -901,7 +901,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                                 title={s.rewardIconsTooltips.cancel}
                                 disabled={savingRewardRuleKey === item.iconPath}
                                 onClick={resetRewardCreateState}
-                                className="rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700 disabled:opacity-50"
+                                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
                               >
                                 {s.rewardIconsActions.cancel}
                               </button>
@@ -917,7 +917,7 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                               setCreatingRewardMatchInput("");
                               setRewardIconActionNotice(null);
                             }}
-                            className="rounded border-2 border-emerald-600 bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white"
+                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-primary"
                           >
                             {s.rewardIconsActions.create}
                           </button>

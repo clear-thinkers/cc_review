@@ -108,7 +108,10 @@ export function SessionHistoryTable({
       <div className={styles.tableSectionHeader}>
         <h2 className={styles.tableSectionTitle}>{strings.table.headers.date}</h2>
         {sessions.length > 0 && !hideDestructiveActions && (
-          <button className={styles.clearHistoryButton} onClick={onClearClick}>
+          <button
+            className="btn-destructive rounded border-2 px-3 py-1 text-[11px] font-medium leading-none disabled:opacity-50"
+            onClick={onClearClick}
+          >
             {strings.clearHistory.button}
           </button>
         )}

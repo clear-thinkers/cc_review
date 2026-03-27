@@ -263,7 +263,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                       type="button"
                       onClick={handleCreateNewTextbook}
                       disabled={!textbookInputValue.trim() || textbookCreating}
-                      className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                      className="btn-primary rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
                     >
                       {textbookCreating ? tagStr.creatingTextbook : tagStr.createNewConfirm}
                     </button>
@@ -274,7 +274,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                         setTextbookInputValue("");
                       }}
                       disabled={textbookCreating}
-                      className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                      className="btn-nav rounded-md border-2 px-3 py-2 text-sm hover:bg-[#fff1cd] disabled:opacity-50"
                     >
                       {tagStr.createNewCancel}
                     </button>
@@ -322,7 +322,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                         setGradeInputValue("");
                       }}
                       disabled={!gradeInputValue.trim()}
-                      className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                      className="btn-primary rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
                     >
                       {tagStr.createNewConfirm}
                     </button>
@@ -332,7 +332,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                         setGradeCreateMode(false);
                         setGradeInputValue("");
                       }}
-                      className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                      className="btn-nav rounded-md border-2 px-3 py-2 text-sm hover:bg-[#fff1cd] disabled:opacity-50"
                     >
                       {tagStr.createNewCancel}
                     </button>
@@ -380,7 +380,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                         setUnitInputValue("");
                       }}
                       disabled={!unitInputValue.trim()}
-                      className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                      className="btn-primary rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
                     >
                       {tagStr.createNewConfirm}
                     </button>
@@ -390,7 +390,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                         setUnitCreateMode(false);
                         setUnitInputValue("");
                       }}
-                      className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                      className="btn-nav rounded-md border-2 px-3 py-2 text-sm hover:bg-[#fff1cd] disabled:opacity-50"
                     >
                       {tagStr.createNewCancel}
                     </button>
@@ -438,7 +438,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                         setLessonInputValue("");
                       }}
                       disabled={!lessonInputValue.trim()}
-                      className="rounded-md bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                      className="btn-primary rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
                     >
                       {tagStr.createNewConfirm}
                     </button>
@@ -448,7 +448,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
                         setLessonCreateMode(false);
                         setLessonInputValue("");
                       }}
-                      className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                      className="btn-nav rounded-md border-2 px-3 py-2 text-sm hover:bg-[#fff1cd] disabled:opacity-50"
                     >
                       {tagStr.createNewCancel}
                     </button>
@@ -459,7 +459,7 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
           )}
         </div>
 
-        <button type="submit" className="rounded-md bg-black px-4 py-2 text-white">
+        <button type="submit" className="btn-primary rounded-md border-2 px-4 py-2">
           {str.add.submitButton}
         </button>
       </form>

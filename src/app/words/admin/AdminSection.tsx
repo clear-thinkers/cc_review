@@ -208,8 +208,15 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
   const adminTableButtonBaseClass =
     "inline-flex min-h-5 items-center justify-center rounded border-2 px-1.5 py-px text-[11px] font-medium leading-none disabled:opacity-50";
   const adminTableWideButtonClass = `${adminTableButtonBaseClass} px-2`;
-  const adminTableSkyPillButtonClass =
-    `${adminTableWideButtonClass} border-sky-300 bg-sky-50 text-sky-800`;
+  const adminTablePrimaryButtonClass = `${adminTableButtonBaseClass} btn-primary`;
+  const adminTableSecondaryButtonClass = `${adminTableButtonBaseClass} btn-secondary`;
+  const adminTableCautionButtonClass = `${adminTableButtonBaseClass} btn-caution`;
+  const adminTableNeutralButtonClass = `${adminTableButtonBaseClass} btn-neutral`;
+  const adminTableDestructiveButtonClass = `${adminTableButtonBaseClass} btn-destructive`;
+  const adminTableWidePrimaryButtonClass = `${adminTableWideButtonClass} btn-primary`;
+  const adminTableWideSecondaryButtonClass = `${adminTableWideButtonClass} btn-secondary`;
+  const adminTableWideNeutralButtonClass = `${adminTableWideButtonClass} btn-neutral`;
+  const adminTableWideDestructiveButtonClass = `${adminTableWideButtonClass} btn-destructive`;
 
   return (
     <tr key={row.rowKey} className="border-b align-top">
@@ -239,7 +246,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               <div className="flex flex-wrap gap-1">
                 <button
                   type="button"
-                  className={`${adminTableButtonBaseClass} border-amber-400 bg-amber-100 text-amber-900`}
+                  className={adminTableCautionButtonClass}
                   disabled={busy}
                   onClick={() => onRegenerate(target)}
                   title={str.admin.table.actionTooltips.regenerate}
@@ -248,7 +255,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
-                  className={`${adminTableButtonBaseClass} border-emerald-600 bg-emerald-600 text-white`}
+                  className={adminTablePrimaryButtonClass}
                   disabled={busy || !canSave}
                   onClick={() => onSave(target)}
                   title={str.admin.table.actionTooltips.save}
@@ -257,7 +264,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
-                  className={`${adminTableButtonBaseClass} border-gray-400 bg-gray-100 text-gray-700`}
+                  className={adminTableNeutralButtonClass}
                   disabled={busy}
                   onClick={() => onClearContent(target)}
                   title={str.admin.table.actionTooltips.clearContent}
@@ -266,7 +273,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
-                  className={`${adminTableButtonBaseClass} border-rose-500 bg-rose-50 text-rose-700`}
+                  className={adminTableDestructiveButtonClass}
                   disabled={busy}
                   onClick={() => onDeleteRow(target)}
                   title={str.admin.table.actionTooltips.deleteRow}
@@ -275,7 +282,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
-                  className={adminTableSkyPillButtonClass}
+                  className={adminTableWideSecondaryButtonClass}
                   disabled={busy}
                   onClick={() => onAddMeaningRow(target.key)}
                   title={str.admin.table.actionTooltips.addMeaning}
@@ -304,7 +311,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 <div className="flex flex-wrap gap-1">
                   <button
                     type="button"
-                    className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
+                    className={adminTableWidePrimaryButtonClass}
                     disabled={busy || !row.meaningZh.trim() || !row.phrase.trim() || !row.example.trim()}
                     onClick={() => onSavePendingMeaning(row)}
                     title={str.admin.table.actionTooltips.saveNew}
@@ -313,7 +320,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                   </button>
                   <button
                     type="button"
-                    className={`${adminTableWideButtonClass} border-rose-500 bg-rose-50 text-rose-700`}
+                    className={adminTableWideDestructiveButtonClass}
                     disabled={busy}
                     onClick={() => { if (row.pendingId) onRemovePendingMeaning(row.pendingId); }}
                     title={str.admin.table.actionTooltips.cancelAdd}
@@ -342,7 +349,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                     <div className="flex flex-wrap gap-1">
                       <button
                         type="button"
-                        className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
+                        className={adminTableWidePrimaryButtonClass}
                         disabled={busy || !editingMeaningValue.trim()}
                         onClick={() => onSaveMeaningEdit(row)}
                         title={str.admin.table.actionTooltips.save}
@@ -351,7 +358,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                       </button>
                       <button
                         type="button"
-                        className={`${adminTableWideButtonClass} border-gray-400 bg-gray-100 text-gray-700`}
+                        className={adminTableWideNeutralButtonClass}
                         disabled={busy}
                         onClick={onCancelMeaningEdit}
                         title={str.admin.table.actionButtons.cancel}
@@ -368,7 +375,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                       <div className="mt-2 flex flex-wrap gap-1">
                         <button
                           type="button"
-                          className={adminTableSkyPillButtonClass}
+                          className={adminTableWideSecondaryButtonClass}
                           disabled={busy}
                           onClick={() => onAddPhraseRow(row.targetKey, row.meaningZh, row.meaningEn)}
                           title={str.admin.table.actionTooltips.addPhrase}
@@ -377,7 +384,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                         </button>
                         <button
                           type="button"
-                          className={adminTableSkyPillButtonClass}
+                          className={adminTableWideSecondaryButtonClass}
                           disabled={busy}
                           onClick={() => onEditMeaning(row)}
                           title={str.admin.table.actionTooltips.editMeaning}
@@ -433,7 +440,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
             <div className="flex flex-wrap gap-1">
               <button
                 type="button"
-                className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
+                className={adminTableWidePrimaryButtonClass}
                 disabled={busy || !row.phrase.trim()}
                 onClick={() => onSavePendingPhrase(row)}
                 title={str.admin.table.actionTooltips.saveNew}
@@ -442,7 +449,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               </button>
               <button
                 type="button"
-                className={`${adminTableWideButtonClass} border-rose-500 bg-rose-50 text-rose-700`}
+                className={adminTableWideDestructiveButtonClass}
                 disabled={busy}
                 onClick={() => { if (row.pendingId) onRemovePendingPhrase(row.pendingId); }}
                 title={str.admin.table.actionTooltips.cancelAdd}
@@ -454,7 +461,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
             <div className="flex flex-wrap gap-1">
               <button
                 type="button"
-                className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
+                className={adminTableWidePrimaryButtonClass}
                 disabled={busy || !editingPhraseValue.trim()}
                 onClick={() => onSavePhraseEdit(row)}
                 title={str.admin.table.actionTooltips.save}
@@ -463,7 +470,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               </button>
               <button
                 type="button"
-                className={`${adminTableWideButtonClass} border-gray-400 bg-gray-100 text-gray-700`}
+                className={adminTableWideNeutralButtonClass}
                 disabled={busy}
                 onClick={onCancelPhraseEdit}
                 title={str.admin.table.actionButtons.cancel}
@@ -478,8 +485,8 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                   type="button"
                   className={
                     row.includeInFillTest
-                      ? `${adminTableButtonBaseClass} border-teal-600 bg-teal-50 text-teal-700`
-                      : `${adminTableButtonBaseClass} border-gray-400 bg-gray-100 text-gray-700`
+                      ? `${adminTableButtonBaseClass} btn-toggle-on`
+                      : adminTableNeutralButtonClass
                   }
                   disabled={busy}
                   onClick={() => { void onToggleFillTestInclude(row, !row.includeInFillTest); }}
@@ -496,7 +503,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               ) : null}
               <button
                 type="button"
-                className={`${adminTableButtonBaseClass} border-amber-400 bg-amber-100 text-amber-900`}
+                className={adminTableCautionButtonClass}
                 disabled={busy}
                 onClick={() => onRegeneratePhrase(row)}
                 title={str.admin.table.actionTooltips.regeneratePhrase}
@@ -505,7 +512,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
               <button
                   type="button"
-                  className={adminTableSkyPillButtonClass}
+                  className={adminTableWideSecondaryButtonClass}
                   disabled={busy}
                   onClick={() => onEditPhrase(row)}
                   title={str.admin.table.actionTooltips.editPhrase}
@@ -514,7 +521,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 </button>
                 <button
                   type="button"
-                  className={`${adminTableButtonBaseClass} border-rose-500 bg-rose-50 text-rose-700`}
+                  className={adminTableDestructiveButtonClass}
                   disabled={busy}
                   onClick={() => onDeletePhrase(row)}
                 title={str.admin.table.actionTooltips.deletePhrase}
@@ -565,7 +572,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
             <div className="flex flex-wrap gap-1">
               <button
                 type="button"
-                className={`${adminTableButtonBaseClass} border-amber-400 bg-amber-100 text-amber-900`}
+                className={adminTableCautionButtonClass}
                 disabled={busy}
                 onClick={() => onRegenerateExample(row)}
                 title={str.admin.table.actionTooltips.regenerateExample}
@@ -576,7 +583,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                 <>
                   <button
                     type="button"
-                    className={`${adminTableWideButtonClass} border-emerald-600 bg-emerald-600 text-white`}
+                    className={adminTableWidePrimaryButtonClass}
                     disabled={busy || !editingExampleValue.trim()}
                     onClick={() => onSaveExampleEdit(row)}
                     title={str.admin.table.actionTooltips.save}
@@ -585,7 +592,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
                   </button>
                   <button
                     type="button"
-                    className={`${adminTableWideButtonClass} border-gray-400 bg-gray-100 text-gray-700`}
+                    className={adminTableWideNeutralButtonClass}
                     disabled={busy}
                     onClick={onCancelExampleEdit}
                     title={str.admin.table.actionButtons.cancel}
@@ -596,7 +603,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               ) : (
                 <button
                   type="button"
-                  className={adminTableSkyPillButtonClass}
+                  className={adminTableWideSecondaryButtonClass}
                   disabled={busy}
                   onClick={() => onEditExample(row)}
                   title={str.admin.table.actionTooltips.editExample}
@@ -606,7 +613,7 @@ const AdminTableRowComponent = memo(function AdminTableRowComponent({
               )}
               <button
                 type="button"
-                className={`${adminTableButtonBaseClass} border-rose-500 bg-rose-50 text-rose-700`}
+                className={adminTableDestructiveButtonClass}
                 disabled={busy}
                 onClick={() => onDeleteExample(row)}
                 title={str.admin.table.actionTooltips.deleteExample}
@@ -833,9 +840,12 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     );
   const batchFillTestInclude = !selectedTargetsAllIncluded;
   const batchFillTestButtonClass =
-    "admin-toolbar-button rounded-md border border-teal-600 bg-teal-50 px-3 py-1.5 font-medium leading-none text-teal-700 disabled:opacity-50";
+    "admin-toolbar-button rounded-md border px-3 py-1.5 font-medium leading-none btn-toggle-on disabled:opacity-50";
   const adminToolbarButtonBaseClass =
     "admin-toolbar-button inline-flex items-center gap-1 rounded-md border px-3 py-1.5 font-medium leading-none disabled:opacity-50";
+  const adminToolbarSecondaryButtonClass = `${adminToolbarButtonBaseClass} btn-secondary`;
+  const adminToolbarCautionButtonClass = `${adminToolbarButtonBaseClass} btn-caution`;
+  const adminToolbarNeutralButtonClass = `${adminToolbarButtonBaseClass} btn-neutral`;
   const adminToolbarMenuButtonClass =
     "flex w-full items-start rounded-md px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50";
   const adminToolbarBusy =
@@ -1216,7 +1226,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               <div className="flex min-h-[2.5rem] flex-wrap items-center gap-2 text-xs">
                 <button
                   type="button"
-                  className="admin-toolbar-button rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
+                  className={adminToolbarSecondaryButtonClass}
                   disabled={paginatedAdminTargetKeys.length === 0 || adminPreloading || allVisibleSelected}
                   onClick={handleSelectPage}
                 >
@@ -1224,7 +1234,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className="admin-toolbar-button rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
+                  className={adminToolbarSecondaryButtonClass}
                   disabled={filteredAdminTargetKeys.length === 0 || adminPreloading || allFilteredSelected}
                   onClick={handleSelectFiltered}
                 >
@@ -1235,7 +1245,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className="admin-toolbar-button rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50"
+                  className={adminToolbarNeutralButtonClass}
                   disabled={adminSelectedTargetKeys.length === 0 || adminPreloading}
                   onClick={handleClearSelection}
                 >
@@ -1243,7 +1253,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className={`${adminToolbarButtonBaseClass} border-amber-400 bg-amber-100 text-amber-900`}
+                  className={adminToolbarCautionButtonClass}
                   disabled={adminToolbarBusy || adminTargets.length === 0}
                   onClick={() =>
                     setOpenBatchMenu((previous) => (previous === "content" ? null : "content"))
@@ -1256,7 +1266,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 {adminPreloading ? (
                   <button
                     type="button"
-                    className="admin-toolbar-button rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50"
+                    className={adminToolbarNeutralButtonClass}
                     onClick={cancelAdminPreload}
                     disabled={adminPreloadCancelling}
                   >
@@ -1281,7 +1291,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className="admin-toolbar-button admin-toolbar-button--session inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
+                  className={`${adminToolbarSecondaryButtonClass} admin-toolbar-button--session`}
                   disabled={adminSelectedTargetKeys.length === 0 || adminCreatingReviewTestSession}
                   onClick={() => {
                     setReviewTestSessionName(reviewTestSessions[0]?.name ?? "");
@@ -1306,7 +1316,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     />
                     <button
                       type="submit"
-                      className="admin-toolbar-button admin-toolbar-button--session inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 font-medium leading-none text-sky-800 disabled:opacity-50"
+                      className={`${adminToolbarSecondaryButtonClass} admin-toolbar-button--session`}
                       disabled={adminCreatingReviewTestSession}
                     >
                       <span>{str.admin.reviewTestSession.createButton}</span>
@@ -1314,7 +1324,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     </button>
                     <button
                       type="button"
-                      className="admin-toolbar-button rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 font-medium leading-none text-gray-700 disabled:opacity-50"
+                      className={adminToolbarNeutralButtonClass}
                       disabled={adminCreatingReviewTestSession}
                       onClick={() => {
                         setReviewTestSessionFormOpen(false);
@@ -1449,7 +1459,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             <div className="flex flex-wrap justify-end gap-2">
               <button
                 type="button"
-                className="rounded-md border border-gray-300 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 disabled:opacity-50"
+                className="rounded-md border px-3 py-1.5 text-sm font-medium btn-neutral disabled:opacity-50"
                 disabled={adminToolbarBusy}
                 onClick={() => setBatchWarningKind(null)}
               >
@@ -1459,7 +1469,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               </button>
               <button
                 type="button"
-                className="rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 disabled:opacity-50"
+                className="rounded-md border px-3 py-1.5 text-sm font-medium btn-destructive disabled:opacity-50"
                 disabled={adminToolbarBusy}
                 onClick={handleConfirmBatchWarning}
               >
@@ -1578,7 +1588,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               type="button"
               onClick={() => startPageTransition(() => setCurrentPage(1))}
               disabled={validPage === 1}
-              className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+              className="btn-nav rounded border-2 px-2 py-1 text-xs hover:bg-[#fff1cd] disabled:opacity-50"
             >
               {str.admin.pagination.firstButton}
             </button>
@@ -1586,7 +1596,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               type="button"
               onClick={() => startPageTransition(() => setCurrentPage((p) => Math.max(1, p - 1)))}
               disabled={validPage === 1}
-              className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+              className="btn-nav rounded border-2 px-2 py-1 text-xs hover:bg-[#fff1cd] disabled:opacity-50"
             >
               {str.admin.pagination.previousButton}
             </button>
@@ -1594,7 +1604,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               type="button"
               onClick={() => startPageTransition(() => setCurrentPage((p) => Math.min(totalPages, p + 1)))}
               disabled={validPage === totalPages}
-              className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+              className="btn-nav rounded border-2 px-2 py-1 text-xs hover:bg-[#fff1cd] disabled:opacity-50"
             >
               {str.admin.pagination.nextButton}
             </button>
@@ -1602,7 +1612,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               type="button"
               onClick={() => startPageTransition(() => setCurrentPage(totalPages))}
               disabled={validPage === totalPages}
-              className="rounded px-2 py-1 text-xs border disabled:opacity-50 hover:bg-gray-50"
+              className="btn-nav rounded border-2 px-2 py-1 text-xs hover:bg-[#fff1cd] disabled:opacity-50"
             >
               {str.admin.pagination.lastButton}
             </button>

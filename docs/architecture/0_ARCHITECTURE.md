@@ -1,15 +1,13 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-03-26_ (Recipe Shop documented)
+_Last updated: 2026-03-27_
 
 ---
 
-## Read This Before Every Feature Build
+## About This Document
 
-Read all reference docs before starting any task. See `AI_CONTRACT.md §1` for the required reading order and conflict resolution authority.
-
-This document covers: system structure, layer boundaries, data schema, error handling behavior.
-It does **not** define agent operating rules — those live in `AI_CONTRACT.md`.
+This document covers: system structure, layer boundaries, data schema, error handling behavior, and docs filing rules.
+It does **not** define agent operating rules — those live in `AI_CONTRACT.md`. See `AI_CONTRACT.md §3` for the required reading order before starting any task.
 
 ---
 
@@ -350,20 +348,19 @@ This describes how layers are wired — the actual call and import relationships
   - Service functions handle camelCase (TypeScript) ↔ snake_case (Postgres) conversion.
   - For inserts requiring `family_id`/`user_id`, the service layer reads these from the Supabase session `app_metadata`.
   - API routes import `getServerSupabaseClient()` (service role, for admin operations only)
-  - **No direct IndexedDB/Dexie operations** — IndexedDB is fully retired; `src/lib/db.ts` has been deleted
+  - **No direct IndexedDB/Dexie operations** — IndexedDB is fully retired; `src/lib/db.ts` has been deleted.
 - `src/lib/scheduler.ts` has no dependency on UI or API layers — it is a pure domain module.
 - AI output flows through normalization in `src/lib/flashcardLlm.ts` before reaching Supabase writes.
-- `src/lib/db.ts` (IndexedDB) has been **deleted** — all data access uses `src/lib/supabase-service.ts`
 
-> For the agent rules that enforce these boundaries (what to never do), see `AI_CONTRACT.md §2`.
+> For the agent rules that enforce these boundaries (what to never do), see `AI_CONTRACT.md §1`.
 
 ---
 
 ## 3) Data Schema
 
-### Supabase Postgres Tables (GitHub Copilot Note: IndexedDB fully retired)
+### Supabase Postgres Tables
 
-The application stores all persistent data in Supabase Postgres. Row Level Security (RLS) policies enforce family-scoped data isolation. All tables include RLS enabled.
+The application stores all persistent data in Supabase Postgres. Row Level Security (RLS) policies enforce family-scoped data isolation. All tables include RLS enabled. IndexedDB is fully retired — `src/lib/db.ts` has been deleted.
 
 **`families` table** — one row per tenant (one family = one tenant)
 
@@ -656,13 +653,13 @@ To prevent data quality drift, the system enforces the following invariants when
 - **No nulls or undefineds:** any `null` or `undefined` in a phrase/example object causes that object to be removed.
 - **Key invariants:** `id` for `flashcardContents` is always `character|pronunciation`; the service layer protects this composite key from alteration.
 
-These rules are the authoritative definition of “bad content” referred to elsewhere. They live here so agents implementing normalization know exactly what to enforce.
+These rules are the authoritative definition of "bad content" referred to elsewhere. They live here so agents implementing normalization know exactly what to enforce.
 
 ---
 
 ## 4) System Guarantees
 
-These are the technical behaviors the system upholds. They are the factual basis behind the hard stops in `AI_CONTRACT.md §2` — refer there for agent-facing rules.
+These are the technical behaviors the system upholds. They are the factual basis behind the hard stops in `AI_CONTRACT.md §1` — refer there for agent-facing rules.
 
 1. **Review screens read only from `flashcardContents`.** No path from `/words/review/*` reaches `/api/flashcard/generate`.
 2. **Every value written to `flashcard_contents` has been normalized.** Schema shape is enforced before any Supabase write.
@@ -704,14 +701,15 @@ Required error behaviors for each failure mode. Do not improvise alternatives.
 
 Dated flow documents under `docs/architecture/` (e.g. `2026-02-27-content-admin-curation-flow.md`) are allowed to contain narrative, risks, and examples. However any behavioral rule or implementation guardrail appearing in a companion doc must also be copied verbatim into this `0_` file. Agents are required to perform a quick audit when a companion doc is created or edited and elevate missing rules to maintain a single source of truth.
 
+### Authority Order
 
-### Authority order (highest to lowest)
-1. `AI_CONTRACT.md` — agent rules and authority hierarchy
+The following order is derived from `AI_CONTRACT.md` and reproduced here for local reference. `AI_CONTRACT.md` is the canonical source — if these conflict, AI_CONTRACT wins.
+
+1. `docs/architecture/AI_CONTRACT.md` — agent rules and authority hierarchy
 2. `docs/architecture/0_ARCHITECTURE.md` — system structure (this file)
 3. `docs/architecture/0_BUILD_CONVENTIONS.md` — development conventions
 4. `docs/architecture/0_PRODUCT_ROADMAP.md` — scope and priorities
-5. Other `docs/architecture/*.md` — dated feature/domain behavior docs
-6. `README.md`
+5. `README.md`
 
 ---
 
@@ -766,22 +764,6 @@ docs/
 
 ---
 
-### Archive rule
+### Archive Rule
+
 If archived content conflicts with active docs or current implementation, active docs and implementation win. Archive material is historical context only — it is never justification for a design choice.
-
----
-
-## 7) Development Conventions
-
-All code must follow the conventions in `0_BUILD_CONVENTIONS.md`:
-
-- **Bilingual UI:** All user-facing text in `*.strings.ts` files (see §2)
-- **Strings extraction:** Never hardcode copy in JSX
-- **TypeScript strict mode:** Enabled; no `any` types; proper type annotations required
-- **Type file organization:** Types in feature-scoped `[feature].types.ts` files (see `0_BUILD_CONVENTIONS.md §1a`)
-  - Each feature directory owns its type definitions in an adjacent `*.types.ts` file
-  - Navigation/layout types in `shared/shell.types.ts`
-  - Central `shared/words.shared.types.ts` acts as re-export hub for backward compatibility
-  - Each type file has a companion `*.types.test.ts` for validation
-- **Component file structure:** Feature-scoped route + page + shared-contract structure
-- **Test coverage required:** All new features must include unit and integration tests

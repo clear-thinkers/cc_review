@@ -147,13 +147,13 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
               <p className="text-xs font-medium text-gray-700">{session.userName}</p>
               <button
                 onClick={handleSwitchProfile}
-                className="w-full rounded-md border px-3 py-2 text-xs font-medium hover:bg-[#e8f6e8] hover:border-[#7bc28f]"
+                className="btn-nav w-full rounded-md border-2 px-3 py-2 text-xs font-medium hover:bg-[#fff1cd]"
               >
                 {vm.str.nav.switchProfile}
               </button>
               <button
                 onClick={handleLogout}
-                className="w-full rounded-md border px-3 py-2 text-xs font-medium hover:bg-gray-100"
+                className="btn-nav w-full rounded-md border-2 px-3 py-2 text-xs font-medium hover:bg-[#fff1cd]"
               >
                 {vm.str.nav.logout ?? 'Logout'}
               </button>
@@ -227,14 +227,14 @@ export default function WordsShell({ vm, children }: { vm: WordsWorkspaceVM; chi
                   <button
                     type="button"
                     onClick={vm.closeQuizExitWarning}
-                    className="rounded-full border-2 border-red-200 bg-white px-5 py-2.5 font-semibold text-red-800 transition hover:bg-red-50"
+                    className="rounded-full border-2 px-5 py-2.5 font-semibold transition btn-neutral"
                   >
                     {vm.str.fillTest.warning.stayButton}
                   </button>
                   <button
                     type="button"
                     onClick={() => void vm.confirmQuizExit()}
-                    className="rounded-full border-2 border-red-600 bg-red-600 px-5 py-2.5 font-semibold text-white transition hover:bg-red-700"
+                    className="rounded-full border-2 px-5 py-2.5 font-semibold transition btn-destructive"
                   >
                     {vm.str.fillTest.warning.leaveButton}
                   </button>

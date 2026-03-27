@@ -1,16 +1,18 @@
 #!/usr/bin/env tsx
 /**
- * RLS Verification Script — Feature 4: Auth & User Model (Phase 1)
+ * RLS Verification Script
  *
  * Verifies schema structure, RLS table accessibility, platform admin bypass,
- * and unenriched session isolation against a live Supabase dev project.
+ * unenriched session isolation, cross-family isolation, child write scope,
+ * and quiz session immutability against a live Supabase dev project.
  *
  * RLS acceptance criteria mapped to test sections:
+ *   ✅ Table accessibility           → Section 1 (service role SELECT on all tables)
  *   ✅ Platform admin bypass         → Section 2 (service role CRUD)
  *   ✅ Unenriched session isolation  → Section 3 (anon client sees nothing)
- *   ⏭️ Cross-family isolation        → Section 4 SKIP (requires Phase 3 JWT enrichment)
- *   ⏭️ Child write scope             → Section 4 SKIP (requires Phase 3 JWT enrichment)
- *   ⏭️ Quiz session immutability     → Section 4 SKIP (requires Phase 3 JWT enrichment)
+ *   ✅ Cross-family isolation        → Section 4a (JWT-enriched, Family A cannot read Family B)
+ *   ✅ Child write scope             → Section 4b (child JWT INSERT into words rejected)
+ *   ✅ Quiz session immutability     → Section 4c (UPDATE on quiz_sessions affects 0 rows)
  *
  * Env vars (auto-loaded from .env.local if present):
  *   NEXT_PUBLIC_SUPABASE_URL        — Supabase project URL
@@ -72,7 +74,6 @@ const anon: SupabaseClient = createClient(SUPABASE_URL, ANON_KEY, {
 // ─── result tracking ───────────────────────────────────────────────────────
 let passed = 0;
 let failed = 0;
-let skipped = 0;
 
 function pass(label: string): void {
   console.log(`  ✅ PASS  ${label}`);
@@ -85,11 +86,6 @@ function fail(label: string, detail?: string): void {
   failed++;
 }
 
-function skip(label: string, reason: string): void {
-  console.log(`  ⏭️  SKIP  ${label}`);
-  console.log(`         → ${reason}`);
-  skipped++;
-}
 
 // ─── test data state ───────────────────────────────────────────────────────
 const TEST_TAG = `rls_verify_${Date.now()}`;
@@ -169,8 +165,19 @@ async function section1_tableAccessibility(): Promise<void> {
     'users',
     'words',
     'flashcard_contents',
+    'hidden_admin_targets',
+    'review_test_sessions',
+    'review_test_session_targets',
     'quiz_sessions',
     'wallets',
+    'shop_recipes',
+    'shop_recipe_unlocks',
+    'shop_coin_transactions',
+    'shop_ingredient_prices',
+    'prompt_templates',
+    'textbooks',
+    'lesson_tags',
+    'word_lesson_tags',
   ];
 
   for (const table of tables) {
@@ -522,8 +529,8 @@ async function cleanup(): Promise<void> {
 // ─── Main ──────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   console.log('══════════════════════════════════════════════════════════════');
-  console.log('  RLS Verification — Feature 4: Auth & User Model');
-  console.log('  Phase 1: Schema · Admin Bypass · Unenriched Isolation');
+  console.log('  RLS Verification');
+  console.log('  Schema · Admin Bypass · Isolation · Child Scope · Immutability');
   console.log('══════════════════════════════════════════════════════════════');
   console.log(`  Project: ${SUPABASE_URL}`);
 
@@ -538,15 +545,15 @@ async function main(): Promise<void> {
 
   console.log('\n══════════════════════════════════════════════════════════════');
   console.log(
-    `  Results:  ${passed} passed  ·  ${failed} failed  ·  ${skipped} skipped`
+    `  Results:  ${passed} passed  ·  ${failed} failed`
   );
   console.log('══════════════════════════════════════════════════════════════\n');
 
   if (failed > 0) {
-    console.error('Phase 1 verification FAILED. Fix the errors above before proceeding.\n');
+    console.error('RLS verification FAILED. Fix the errors above before proceeding.\n');
     process.exit(1);
   } else {
-    console.log('Phase 1 verification PASSED. Ready to proceed to Phase 2.\n');
+    console.log('RLS verification PASSED.\n');
   }
 }
 

@@ -91,7 +91,7 @@ export default function HomeFlowSection({ vm }: { vm: WordsWorkspaceVM }) {
             return (
               <article key={step.id} className="relative pl-9 sm:pl-12">
                 <div
-                  className="absolute left-0 top-6 flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#dcc38a] bg-[#fcf8ef] text-sm font-bold text-gray-700 shadow-sm"
+                  className="btn-neutral absolute left-0 top-6 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold shadow-sm"
                 >
                   {stepNumber}
                 </div>
@@ -117,7 +117,7 @@ export default function HomeFlowSection({ vm }: { vm: WordsWorkspaceVM }) {
                     {canOpen ? (
                       <Link
                         href={step.route}
-                        className="inline-flex min-h-10 items-center rounded-full border-2 border-[#dcc38a] bg-[#fcf8ef] px-5 py-2 text-sm font-semibold text-gray-700 transition hover:bg-[#f8f1e3]"
+                        className="btn-nav inline-flex min-h-10 items-center rounded-full border-2 px-5 py-2 text-sm font-semibold transition hover:bg-[#f8f1e3]"
                       >
                         {stepText.cta}
                       </Link>
@@ -125,7 +125,7 @@ export default function HomeFlowSection({ vm }: { vm: WordsWorkspaceVM }) {
                       <button
                         type="button"
                         disabled
-                        className="inline-flex min-h-10 items-center rounded-md border-2 border-gray-300 bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-500"
+                        className="inline-flex min-h-10 items-center rounded-md border-2 px-4 py-2 text-sm font-semibold text-gray-500 btn-neutral"
                       >
                         {home.unavailableCta}
                       </button>

@@ -108,13 +108,13 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
           <div className="flex flex-wrap gap-2">
             <Link
               href="/words/review"
-              className="rounded-md border-2 border-amber-500 bg-amber-100 px-4 py-2 text-sm font-medium text-amber-900"
+              className="rounded-md border-2 px-4 py-2 text-sm font-medium btn-caution"
             >
               {str.fillTest.emptyState.dueReviewButton}
             </Link>
             <Link
               href="/words"
-              className="rounded-md border border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700"
+              className="rounded-md border px-4 py-2 text-sm font-medium btn-neutral"
             >
               {str.fillTest.emptyState.homeButton}
             </Link>
@@ -137,7 +137,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                 </div>
                 <button
                   type="button"
-                  className="rounded-md border-2 border-red-500 bg-red-50 px-3 py-2 text-red-800"
+                  className="rounded-md border-2 px-3 py-2 btn-destructive"
                   onClick={handleStopQuizSession}
                 >
                   {str.fillTest.gameplay.stopButton}
@@ -251,7 +251,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <button
                             type="button"
-                            className="rounded border px-2 py-1 text-xs disabled:opacity-50"
+                            className="btn-nav rounded border-2 px-2 py-1 text-xs hover:bg-[#fff1cd] disabled:opacity-50"
                             disabled={Boolean(quizResult) || selectedPhraseIndex === null}
                             onClick={() => {
                               updateQuizSelection(sentenceIndex, null);
@@ -273,7 +273,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                   <button
                     ref={submitButtonRef}
                     type="button"
-                    className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
+                    className="btn-primary rounded-md border-2 px-4 py-2 disabled:opacity-50"
                     disabled={quizSubmitting}
                     onClick={submitCurrentQuizWord}
                   >
@@ -318,7 +318,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                   </ul>
                   <button
                     type="button"
-                    className="rounded-md border px-4 py-2"
+                    className="btn-nav rounded-md border-2 px-4 py-2 hover:bg-[#fff1cd]"
                     disabled={quizSubmitting}
                     onClick={moveQuizForward}
                   >

@@ -151,7 +151,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                       {isParentView ? (
                         <button
                           type="button"
-                          className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700 disabled:opacity-50"
+                          className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-destructive disabled:opacity-50"
                           disabled={deletingReviewTestSessionId === row.session.id}
                           onClick={() => void handleDeleteSession(row.session.id, row.session.name)}
                         >
@@ -162,7 +162,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                       ) : canAccessFillTest ? (
                         <button
                           type="button"
-                          className="rounded border-2 border-amber-500 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
+                          className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-caution disabled:opacity-50"
                           disabled={row.quizReadyCount === 0 || Boolean(row.runtime?.errorCode)}
                           title={
                             row.quizReadyCount === 0
@@ -174,7 +174,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                           {str.due.reviewTestSessions.start}
                         </button>
                       ) : (
-                        <span className="rounded border-2 border-gray-400 bg-gray-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-gray-700">
+                        <span className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral">
                           {str.due.reviewTestSessions.childOnly}
                         </span>
                       )}
@@ -201,7 +201,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className="rounded-md border-2 border-green-500 bg-green-100 px-4 py-2 font-medium text-green-900 disabled:opacity-50"
+            className="rounded-md border-2 px-4 py-2 font-medium btn-confirm disabled:opacity-50"
             onClick={() => openFlashcardReview()}
           >
             {str.due.startFlashcard}
@@ -209,7 +209,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
           {canAccessFillTest && (
             <button
               type="button"
-              className="rounded-md border-2 border-amber-500 bg-amber-100 px-4 py-2 font-medium text-amber-900 disabled:opacity-50"
+              className="rounded-md border-2 px-4 py-2 font-medium btn-caution disabled:opacity-50"
               disabled={fillTestDueWords.length === 0}
               onClick={() => openFillTestReview()}
             >
@@ -271,7 +271,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        className="rounded border-2 border-green-500 bg-green-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-green-900 disabled:opacity-50"
+                        className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-confirm disabled:opacity-50"
                         onClick={() => openFlashcardReview(word.id)}
                       >
                         {str.due.table.flashcard}
@@ -279,7 +279,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                       {canAccessFillTest && (
                         <button
                           type="button"
-                          className="rounded border-2 border-amber-500 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900 disabled:opacity-50"
+                          className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-caution disabled:opacity-50"
                           disabled={!hasFillTest(word)}
                           onClick={() => openFillTestReview(word.id)}
                         >

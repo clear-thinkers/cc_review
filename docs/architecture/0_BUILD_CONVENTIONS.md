@@ -12,17 +12,15 @@ This document covers how to write code. Nothing more.
 
 Before writing any code:
 
-1. Check `0_PRODUCT_ROADMAP.md §1 · Active Work`. If the feature is in §2 Deferred or not listed, stop.
-2. Read `0_ARCHITECTURE.md` — layer boundaries, schema, folder map.
-3. Read `0_BUILD_CONVENTIONS.md` — this file.
-4. Check `docs/feature-specs/` for an existing spec. If found, read it. If none exists and the feature touches more than one layer or adds DB fields, draft one before coding (see §1).
-5. Create `[feature].strings.ts` with full EN + ZH coverage before writing any JSX.
-6. Plan file structure per §5 before writing any component code.
-7. Write tests per §6 alongside implementation — not after.
-8. Run `npm run check:encoding` before opening a PR.
-9. Run npm test and confirm all existing tests pass before opening a PR.
+1. Complete the pre-task reading protocol in `AI_CONTRACT.md §3` — governance docs must be read before any implementation begins.
+2. Check `docs/feature-specs/` for an existing spec. If found, read it. If none exists and the feature touches more than one layer or adds DB fields, draft one before coding (see §1).
+3. Create `[feature].strings.ts` with full EN + ZH coverage before writing any JSX.
+4. Plan file structure per §5 before writing any component code.
+5. Write tests per §6 alongside implementation — not after.
+6. Run `npm run check:encoding` before opening a PR.
+7. Run npm test and confirm all existing tests pass before opening a PR.
 
-**If the feature touches wallet or coin data:** all mutations must go through designated Supabase RPCs. Never write directly to `coin_balance`, `coin_transactions`, or `shop_purchases`. See `AI_CONTRACT.md §1`.
+**If the feature touches wallet or coin data:** see `AI_CONTRACT.md §1` — the full rule and rationale live there.
 
 ---
 
@@ -89,7 +87,7 @@ Types live in feature-scoped `*.types.ts` files, never inline in component files
 
 ## 4 · Bilingual Strings
 
-All user-facing text must support English and Simplified Chinese. Never write string literals directly in JSX.
+All user-facing text must support English and Simplified Chinese. Never hardcode user-facing strings in JSX.
 
 ---
 

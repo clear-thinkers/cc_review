@@ -649,7 +649,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       />
                       <button
                         type="button"
-                        className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        className="rounded border-2 px-2 py-1 text-xs font-medium btn-primary disabled:opacity-50"
                         onClick={() => void handleCreateNewTextbook()}
                         disabled={!textbookInputValue.trim() || textbookCreating || editorSaving}
                       >
@@ -657,7 +657,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       </button>
                       <button
                         type="button"
-                        className="rounded border-2 border-gray-400 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+                        className="rounded border-2 px-2 py-1 text-xs font-medium btn-neutral disabled:opacity-50"
                         onClick={() => {
                           setTextbookCreateMode(false);
                           setTextbookInputValue("");
@@ -708,7 +708,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       />
                       <button
                         type="button"
-                        className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        className="rounded border-2 px-2 py-1 text-xs font-medium btn-primary disabled:opacity-50"
                         onClick={() => {
                           const customGrade = batchGradeInputValue.trim();
                           setBatchGrade(customGrade || null);
@@ -727,7 +727,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       </button>
                       <button
                         type="button"
-                        className="rounded border-2 border-gray-400 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+                        className="rounded border-2 px-2 py-1 text-xs font-medium btn-neutral disabled:opacity-50"
                         onClick={() => {
                           setBatchGradeCreateMode(false);
                           setBatchGradeInputValue("");
@@ -775,7 +775,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       />
                       <button
                         type="button"
-                        className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        className="rounded border-2 px-2 py-1 text-xs font-medium btn-primary disabled:opacity-50"
                         onClick={() => {
                           const customUnit = batchUnitInputValue.trim();
                           setBatchUnit(customUnit || null);
@@ -791,7 +791,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       </button>
                       <button
                         type="button"
-                        className="rounded border-2 border-gray-400 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+                        className="rounded border-2 px-2 py-1 text-xs font-medium btn-neutral disabled:opacity-50"
                         onClick={() => {
                           setBatchUnitCreateMode(false);
                           setBatchUnitInputValue("");
@@ -836,7 +836,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       />
                       <button
                         type="button"
-                        className="rounded border-2 border-emerald-600 bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                        className="rounded border-2 px-2 py-1 text-xs font-medium btn-primary disabled:opacity-50"
                         onClick={() => {
                           const customLesson = batchLessonInputValue.trim();
                           setBatchLesson(customLesson || null);
@@ -849,7 +849,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       </button>
                       <button
                         type="button"
-                        className="rounded border-2 border-gray-400 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 disabled:opacity-50"
+                        className="rounded border-2 px-2 py-1 text-xs font-medium btn-neutral disabled:opacity-50"
                         onClick={() => {
                           setBatchLessonCreateMode(false);
                           setBatchLessonInputValue("");
@@ -866,7 +866,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  className="rounded-md border-2 border-emerald-600 bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-50"
+                  className="rounded-md border-2 px-4 py-2 font-medium btn-primary disabled:opacity-50"
                   onClick={() => void handleBatchSave()}
                   disabled={editorSaving || tagClearing}
                   title={allEditorStr.tooltips.saveBatch}
@@ -875,7 +875,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className="rounded-md border-2 border-sky-300 bg-sky-50 px-4 py-2 font-medium text-sky-800 disabled:opacity-50"
+                  className="rounded-md border-2 px-4 py-2 font-medium btn-secondary disabled:opacity-50"
                   onClick={() => void handleBatchUpdateTags()}
                   disabled={selectedWordIds.length === 0 || editorSaving || tagClearing}
                   title={allEditorStr.tooltips.updateTags}
@@ -884,7 +884,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className="rounded-md border-2 border-rose-500 bg-rose-50 px-4 py-2 font-medium text-rose-700 disabled:opacity-50"
+                  className="rounded-md border-2 px-4 py-2 font-medium btn-destructive disabled:opacity-50"
                   onClick={() => void handleBatchClearTags()}
                   disabled={tagClearing || selectedWordIds.length === 0 || editorSaving}
                   title={allEditorStr.tooltips.clearTags}
@@ -893,7 +893,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
+                  className="rounded-md border-2 px-4 py-2 font-medium btn-neutral disabled:opacity-50"
                   onClick={() => setSelectedWordIds([])}
                   disabled={selectedWordIds.length === 0 || editorSaving || tagClearing}
                   title={allEditorStr.tooltips.clearSelection}
@@ -940,7 +940,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
               </p>
               <button
                 type="button"
-                className="rounded-full border-2 border-amber-400 bg-amber-100 px-4 py-1 text-sm font-medium text-amber-900 disabled:opacity-50"
+                className="rounded-full border-2 px-4 py-1 text-sm font-medium btn-caution disabled:opacity-50"
                 onClick={() => void handleBatchResetSelected()}
                 disabled={selectedWordIds.length === 0 || batchResetting || editorSaving || tagClearing}
                 title={str.all.table.tooltips.reset}
@@ -1065,7 +1065,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                     <div className="flex flex-wrap items-center gap-1">
                       <button
                         type="button"
-                        className="rounded border-2 border-amber-400 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-900"
+                        className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-caution"
                         onClick={() => resetWord(word)}
                         title={str.all.table.tooltips.reset}
                         aria-label={str.all.table.buttons.reset}
@@ -1074,7 +1074,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       </button>
                       <button
                         type="button"
-                        className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700"
+                        className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-destructive"
                         onClick={() => removeWord(word)}
                         title={str.all.table.tooltips.delete}
                         aria-label={str.all.table.buttons.delete}
@@ -1101,7 +1101,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="rounded border px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+                  className="btn-nav rounded border-2 px-3 py-1 text-sm hover:bg-[#fff1cd] disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => setCurrentPage(1)}
                   disabled={validPage === 1}
                   title={str.all.pagination.firstButton}
@@ -1110,7 +1110,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className="rounded border px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+                  className="btn-nav rounded border-2 px-3 py-1 text-sm hover:bg-[#fff1cd] disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => setCurrentPage(validPage - 1)}
                   disabled={validPage === 1}
                   title={str.all.pagination.previousButton}
@@ -1119,7 +1119,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className="rounded border px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+                  className="btn-nav rounded border-2 px-3 py-1 text-sm hover:bg-[#fff1cd] disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => setCurrentPage(validPage + 1)}
                   disabled={validPage === totalPages}
                   title={str.all.pagination.nextButton}
@@ -1128,7 +1128,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                 </button>
                 <button
                   type="button"
-                  className="rounded border px-3 py-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+                  className="btn-nav rounded border-2 px-3 py-1 text-sm hover:bg-[#fff1cd] disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => setCurrentPage(totalPages)}
                   disabled={validPage === totalPages}
                   title={str.all.pagination.lastButton}

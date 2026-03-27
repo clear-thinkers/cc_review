@@ -185,7 +185,7 @@ export default function PromptsSection({ vm }: { vm: WordsWorkspaceVM }) {
             className={
               activeTab === type
                 ? "rounded-md border-2 border-sky-400 bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-800"
-                : "rounded-md border px-3 py-1 text-sm font-medium hover:bg-gray-50"
+                : "btn-nav rounded-md border-2 px-3 py-1 text-sm font-medium hover:bg-[#fff1cd]"
             }
           >
             {str.tabs[type]}
@@ -239,7 +239,7 @@ export default function PromptsSection({ vm }: { vm: WordsWorkspaceVM }) {
               disabled={atSlotLimit}
               title={atSlotLimit ? str.addNewSlotLimitTooltip : str.addNewSlot}
               onClick={() => openEditForm("new", "", "")}
-              className="rounded-md border-2 border-sky-300 bg-sky-50 px-4 py-2 font-medium text-sky-800 disabled:opacity-50"
+              className="rounded-md border-2 px-4 py-2 font-medium btn-secondary disabled:opacity-50"
             >
               {str.addNewSlot}
             </button>
@@ -260,7 +260,7 @@ export default function PromptsSection({ vm }: { vm: WordsWorkspaceVM }) {
             <button
               type="button"
               onClick={() => setSelectedSlot(null)}
-              className="rounded border px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-200"
+              className="btn-nav rounded border-2 px-2 py-0.5 text-xs hover:bg-[#fff1cd]"
             >
               {str.closeViewer}
             </button>
@@ -328,7 +328,7 @@ export default function PromptsSection({ vm }: { vm: WordsWorkspaceVM }) {
               onClick={() => void handleSave()}
               disabled={saving}
               title={str.saveTooltip}
-              className="rounded-md border-2 border-emerald-600 bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-50"
+              className="rounded-md border-2 px-4 py-2 font-medium btn-primary disabled:opacity-50"
             >
               {str.save}
             </button>
@@ -337,7 +337,7 @@ export default function PromptsSection({ vm }: { vm: WordsWorkspaceVM }) {
               onClick={closeEditForm}
               disabled={saving}
               title={str.cancelTooltip}
-              className="rounded-md border-2 border-gray-400 bg-gray-100 px-4 py-2 font-medium text-gray-700 disabled:opacity-50"
+              className="rounded-md border-2 px-4 py-2 font-medium btn-neutral disabled:opacity-50"
             >
               {str.cancel}
             </button>
@@ -405,7 +405,7 @@ function SlotCard({ slot, isEditing, isSelected, displayAsActive = slot.isActive
                 type="button"
                 onClick={onEdit}
                 title={str.editTooltip}
-                className="rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-sky-800"
+                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary"
               >
                 {str.edit}
               </button>
@@ -425,20 +425,20 @@ function SlotCard({ slot, isEditing, isSelected, displayAsActive = slot.isActive
                 {str.makeActive}
               </button>
             )}
-            <button
-              type="button"
-              onClick={onEdit}
-              title={str.editTooltip}
-              className="rounded border-2 border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-sky-800"
-            >
+              <button
+                type="button"
+                onClick={onEdit}
+                title={str.editTooltip}
+                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary"
+              >
               {str.edit}
             </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              title={str.deleteTooltip}
-              className="rounded border-2 border-rose-500 bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium leading-none text-rose-700"
-            >
+              <button
+                type="button"
+                onClick={onDelete}
+                title={str.deleteTooltip}
+                className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-destructive"
+              >
               {str.deleteSlot}
             </button>
           </>

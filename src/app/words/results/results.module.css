@@ -74,28 +74,6 @@
   color: #1a1a1a;
 }
 
-.clearHistoryButton {
-  border: 2px solid #f43f5e;
-  background-color: #fff1f2;
-  color: #be123c;
-  border-radius: 0.375rem;
-  padding: 0.25rem 0.75rem;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s;
-}
-
-.clearHistoryButton:hover:not(:disabled) {
-  background-color: #fee2e2;
-}
-
-.clearHistoryButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* ============= SESSION TABLE ============= */
 
 .sessionTable {
@@ -218,22 +196,6 @@
   line-height: 1.5;
 }
 
-.emptyStateAction {
-  background: #fff7e6;
-  color: #8a3f00;
-  border: 3px solid #f59e0b;
-  padding: 10px 30px;
-  border-radius: 9999px;
-  font-size: 18px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.emptyStateAction:hover {
-  background: #ffefcc;
-}
-
 /* ============= CONFIRMATION DIALOG ============= */
 
 .dialogOverlay {
@@ -284,39 +246,6 @@
   display: flex;
   gap: 12px;
   justify-content: flex-end;
-}
-
-.dialogButton {
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.dialogButtonCancel {
-  background-color: #f5f5f5;
-  color: #333;
-}
-
-.dialogButtonCancel:hover:not(:disabled) {
-  background-color: #efefef;
-}
-
-.dialogButtonDelete {
-  background-color: #f44336;
-  color: white;
-}
-
-.dialogButtonDelete:hover:not(:disabled) {
-  background-color: #d32f2f;
-}
-
-.dialogButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 /* ============= LOADING STATE ============= */
@@ -438,10 +367,6 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
-  }
-
-  .clearHistoryButton {
-    width: 100%;
   }
 
   .dialog {

@@ -131,27 +131,52 @@ h3 {
   transform: none;
 }
 
-.kids-page button.bg-black {
-  border: 2px solid #7bc28f;
-  background: linear-gradient(135deg, var(--primary), #74c08b);
+.kids-page .btn-primary {
+  border-color: #059669;
+  background-color: #059669;
   color: #fff;
-  box-shadow: 0 9px 18px rgba(66, 126, 87, 0.3);
 }
 
-.kids-page button.bg-black:hover:not(:disabled) {
-  border-color: #6dae80;
-  background: linear-gradient(135deg, var(--primary-strong), var(--primary));
+.kids-page .btn-secondary {
+  border-color: #7dd3fc;
+  background-color: #f0f9ff;
+  color: #075985;
 }
 
-.kids-page button.border:not(.admin-toolbar-button) {
-  border-width: 2px;
-  border-color: #d5b975;
+.kids-page .btn-caution {
+  border-color: #fbbf24;
+  background-color: #fef3c7;
+  color: #78350f;
+}
+
+.kids-page .btn-confirm {
+  border-color: #22c55e;
+  background-color: #dcfce7;
+  color: #14532d;
+}
+
+.kids-page .btn-neutral {
+  border-color: #9ca3af;
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.kids-page .btn-destructive {
+  border-color: #f43f5e;
+  background-color: #fff1f2;
+  color: #be123c;
+}
+
+.kids-page .btn-nav {
+  border-color: #dcc38a;
+  background-color: #fcf8ef;
   color: #6a5530;
-  background: #fff8e7;
 }
 
-.kids-page button.border:not(.admin-toolbar-button):hover:not(:disabled) {
-  background: #fff1cd;
+.kids-page .btn-toggle-on {
+  border-color: #0d9488;
+  background-color: #f0fdfa;
+  color: #0f766e;
 }
 
 .kids-page button:disabled {
@@ -201,6 +226,45 @@ h3 {
 
 .kids-page .shop-admin-root .shop-admin-pane,
 .kids-page section.shop-admin-pane {
+  --shop-admin-panel-border: #e3dac6;
+  --shop-admin-panel-bg: #fffdf8;
+  --shop-admin-label-text: #8b7c5a;
+  --shop-admin-neutral-border: #d7c8a5;
+  --shop-admin-muted-text: #6b6658;
+  --shop-admin-hover-border: #c9ae63;
+  --shop-admin-gold: #d2b15b;
+  --shop-admin-gold-soft: #fff4d9;
+  --shop-admin-gold-light: #fff0bf;
+  --shop-admin-gold-text: #8b6f2f;
+  --shop-admin-gold-shadow: 0 8px 20px rgba(210, 177, 91, 0.18);
+  --shop-admin-input-border: #d8cfba;
+  --shop-admin-text-dark: #24423a;
+  --shop-admin-focus-ring: #e8d79b;
+  --shop-admin-readonly-border: #e5dcc9;
+  --shop-admin-readonly-bg: #f8f4ea;
+  --shop-admin-readonly-text: #536859;
+  --shop-admin-card-border: #e4dac7;
+  --shop-admin-support-text: #627665;
+  --shop-admin-info-border: #e6dbc2;
+  --shop-admin-card-selected-bg: #fff6de;
+  --shop-admin-icon-border: #eadfc1;
+  --shop-admin-icon-bg: #fffaf0;
+  --shop-admin-icon-fallback: #9a8f79;
+  --shop-admin-badge-soft-bg: #f8f4ea;
+  --shop-admin-badge-soft-text: #7c7464;
+  --shop-admin-badge-warm-bg: #f4ebd3;
+  --shop-admin-warning-border: #f0d9b6;
+  --shop-admin-warning-bg: #fff7ea;
+  --shop-admin-danger-border: #e7b8b2;
+  --shop-admin-danger-bg: #fff3f1;
+  --shop-admin-danger-text: #a04f46;
+  --shop-admin-success-bg: #eef3e8;
+  --shop-admin-success-text: #607451;
+  --shop-admin-divider: #efe4d0;
+  --shop-admin-divider-strong: #eee4d0;
+  --shop-admin-preview-border: #efe4c8;
+  --shop-admin-option-border: #ece3d1;
+  --shop-admin-option-text: #445c4c;
   box-shadow: none;
   overflow: visible;
   animation: none;
@@ -227,6 +291,7 @@ h3 {
 
 .kids-page .shop-admin-root .shop-admin-pill {
   border-radius: 9999px;
+  font-weight: 600;
 }
 
 .kids-page .shop-admin-root .shop-admin-label {
