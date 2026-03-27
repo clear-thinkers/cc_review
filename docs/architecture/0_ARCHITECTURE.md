@@ -140,7 +140,7 @@ These rules govern content curation at `/words/admin`:
 
 These rules govern the due queue view at `/words/review`:
 
-1. `/words` redirects to `/words/review`, making due review the operational review entry route.
+1. `/words` is the landing page for the Words area. Due review lives at `/words/review` and remains the operational review entry route.
 2. Due eligibility is sourced from `getDueWords()`:
   - rows with `nextReviewAt <= now` are due
   - missing/zero `nextReviewAt` is treated as due
