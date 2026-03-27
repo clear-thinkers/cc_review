@@ -27,8 +27,8 @@ Tier 1 rules (active):
 - Coins are earned from completed quiz sessions and spent only through persisted shop unlocks; neither earning nor spend changes scheduler state.
 
 Primary admin user flow:
-1. Add Hanzi       → `/words/add`     → Supabase `words` table (hanzi ingested, untagged, unreviewed).
-2. Manage tags     → `/words/add`, `/words/all`, `/words/admin`
+1. Add Hanzi       → `/words/add`     → Supabase `words` table (hanzi ingested, optionally tagged, unreviewed).
+2. Manage tags     → `/words/add`, `/words/all`
                                          → assign textbook / grade / unit / lesson
                                          → Supabase `word_lesson_tags` + tag tables.
 3. Adjust prompts  → `/words/prompts` → edit/version AI prompt templates → Supabase prompts table.
@@ -58,7 +58,7 @@ These rules govern all character ingestion via `/words/add`:
 8. An optional collapsible "Assign to Lesson" section below the Hanzi input allows a 4-level cascade tag (Textbook → Grade → Unit → Lesson) to be applied to all words in the batch.
 9. Tag selection is all-or-nothing: if the section is open, all 4 levels must be filled before submitting. Partial selection blocks submission with an inline error.
 10. If the section is collapsed or untouched, no tag is applied and no validation is performed.
-11. Tag assignment is performed after words are written; skipped (existing) words do not receive a tag assignment.
+11. Tag assignment is performed after word insertion checks complete. When a valid 4-level tag is selected, it is applied to all submitted matching characters in the family collection, including already-existing words that were skipped for insertion.
 12. Children cannot access `/words/add` — the route is blocked; tag UI is not visible to child profiles.
 13. Submitting Hanzi to `/words/add` also clears any matching `hidden_admin_targets` rows for that family, restoring previously deleted Content Admin rows for those characters.
 
@@ -85,19 +85,17 @@ These rules govern the inventory view at `/words/all`:
 13. **Pagination**: The table shows 50 words per page. Navigation uses First, Previous, Next, Last buttons. Page info shows "Page X of Y". Pagination applies after all filters.
 14. The page owns display/sorting behavior only; scheduler logic remains in `scheduler.ts`.
 15. A **Tags column** displays cascade tag pills (`TextbookName · Grade · Unit · Lesson`) for non-child roles. Multiple tags stack vertically; no tags = empty cell.
-16. **Default Filter Bar** (always visible at top): Three filter sections for non-child roles:
+16. **Default Filter Bar** (always available at top): Three filter sections:
     - **Due Now**: Checkbox to show only characters with `nextReviewAt <= now` (or `0`/empty).
     - **Familiarity**: Operator dropdown (`<=` or `>=`) and number input (0-100) to filter by `getMemorizationProbability(word)`.
     - **Tags (Cascade)**: Multi-select dropdown showing all available cascade tags (format: `TextbookName · Grade · Unit · Lesson`). OR logic: word must have ANY selected tag to be shown.
 17. Default filters can be individually toggled on/off; a [Clear Filters] button resets all three.
 18. When filters are active and no words match, "No characters match the selected filters." is shown with a Clear Filters link.
-19. Default filter state does NOT persist via URL params (session-only).
-20. **Legacy Tag Filter Bar** (Textbook / Grade / Unit / Lesson dropdowns) is shown for non-child roles when tag data exists (after default filters). Cascade dropdowns reset lower levels on parent-level change. AND logic applies to this bar as well.
-21. Legacy filter logic is AND: a word is shown only if it matches all set filter levels.
-22. Legacy filter state persists via URL search params (`?textbook=...&grade=...&unit=...&lesson=...`). A [Clear Filters] button resets all four.
-23. Non-child users can multi-select words in the table and batch-assign a single 4-level cascade tag (Textbook / Grade / Unit / Lesson) to all selected words.
-24. Batch tag assignment uses existing tag creation and assignment services; duplicate assignments are ignored by upsert behavior.
-25. Child users cannot access tag batch editing controls on `/words/all`.
+19. Default filter state is local UI state and does NOT persist via URL params.
+20. The page does not expose a separate legacy Textbook / Grade / Unit / Lesson filter bar.
+21. Non-child users can multi-select words in the table and batch-assign a single 4-level cascade tag (Textbook / Grade / Unit / Lesson) to all selected words.
+22. Batch tag assignment uses existing tag creation and assignment services; duplicate assignments are ignored by upsert behavior.
+23. The Tags column and tag batch-editing controls are hidden for child users on `/words/all`.
 
 ### Content Admin Curation Rules
 
@@ -118,7 +116,9 @@ These rules govern content curation at `/words/admin`:
 9. Batch AI content generation is exposed from the Content Admin action toolbar with four scopes: `missing only`, `all`, `filtered only`, and `selected only`. The `missing only` action resolves against all admin targets and skips targets that already have persisted content; the `all` action resolves against all admin targets and overwrites persisted content. The `filtered only` and `selected only` scopes overwrite persisted content for their resolved target sets. The destructive `all` action requires a confirmation dialog before mutation.
 10. Characters with no dictionary pronunciation are skipped with notice; this is not a fatal load error.
 11. Batch AI content generation uses a fixed concurrency of 3 (`Promise.allSettled`). Batch size is capped at 3 to avoid saturating the AI provider with concurrent requests from a single session. No per-character retry — a failed character is counted and skipped; the loop continues. The completion notice reports total succeeded and total failed counts. Batch size must not be increased without validating provider rate limits. Batch pinyin generation is exposed from the same action toolbar with the same four scopes, but operates only on saved content rows; `missing only` fills missing phrase/example pinyin only, while the other three scopes refresh phrase/example pinyin for the resolved saved rows. The destructive `all` pinyin action requires a confirmation dialog before mutation.
-12. A **tag filter bar** (Textbook / Grade / Unit / Lesson) is displayed above the character list when tag data exists. Same cascade behavior as `/words/all`; Content Admin tag matching uses OR logic within a target's associated word tags.
+12. A **default filter bar** is displayed above the character list. It includes:
+   - **Due Now**: Checkbox to show only admin targets whose associated character has at least one due word (`nextReviewAt <= now` or `0`/empty).
+   - **Tags (Cascade)**: Multi-select dropdown showing available cascade tags (`TextbookName · Grade · Unit · Lesson`). Content Admin tag matching uses OR logic within a target's associated word tags.
 13. Characters with no tags are hidden when any filter is active.
 14. No Lessons column is added to the admin table (filter-only in this phase).
 15. Target-level destructive actions are split:
@@ -140,7 +140,7 @@ These rules govern content curation at `/words/admin`:
 
 These rules govern the due queue view at `/words/review`:
 
-1. `/words` is the landing page for the Words area. Due review lives at `/words/review` and remains the operational review entry route.
+1. `/words` redirects to `/words/review`, making due review the operational review entry route.
 2. Due eligibility is sourced from `getDueWords()`:
   - rows with `nextReviewAt <= now` are due
   - missing/zero `nextReviewAt` is treated as due
