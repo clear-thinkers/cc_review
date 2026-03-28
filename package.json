@@ -16,7 +16,9 @@
     "export:shop-content-sql": "node scripts/export-shop-content-patch.mjs",
     "check:encoding": "node scripts/check-mojibake.mjs",
     "verify:rls": "tsx scripts/verify-rls.ts",
-    "seed:admin": "node scripts/seed-platform-admin.mjs"
+    "seed:admin": "node scripts/seed-platform-admin.mjs",
+    "db:push": "supabase db push --include-all",
+    "db:status": "supabase migration list"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
@@ -31,7 +33,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "supabase": "^2.76.17",
+    "supabase": "^2.84.4",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",
