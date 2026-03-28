@@ -18,7 +18,9 @@
     "verify:rls": "tsx scripts/verify-rls.ts",
     "seed:admin": "node scripts/seed-platform-admin.mjs",
     "db:push": "supabase db push --include-all",
-    "db:status": "supabase migration list"
+    "db:status": "supabase migration list",
+    "db:push:prod": "node scripts/db-push-prod.mjs",
+    "db:push:prod:dry": "node scripts/db-push-prod.mjs --dry-run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",
@@ -31,6 +33,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "supabase": "^2.84.4",

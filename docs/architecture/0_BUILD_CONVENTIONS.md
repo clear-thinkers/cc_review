@@ -1,6 +1,6 @@
 # Build Conventions — HanziQuest (`cc_review`)
 
-_Last updated: 2026-03-26_
+_Last updated: 2026-03-28_
 
 For authority hierarchy, hard stops, doc update policy, and fix log policy — see `AI_CONTRACT.md`.
 For where to file new documents — see `0_ARCHITECTURE.md §6`.
@@ -221,3 +221,41 @@ Every new feature must have tests before it is considered complete.
 - **Encoding check:** `npm run check:encoding` — runs `scripts/check-mojibake.mjs`, scans for garbled characters in source and docs.
 - **String parity check:** asserts identical EN/ZH key sets across all `*.strings.ts` files. Runs as part of `npm test`.
 - **CI workflow:** `.github/workflows/encoding-guardrails.yml` — triggers on all PRs and pushes to `main`/`master`.
+
+---
+
+## 9 · Database Migration Workflow
+
+Migrations live in `supabase/migrations/`. They are applied manually — there is no automatic deployment on push.
+
+**Project configuration**
+- `supabase/config.toml` — committed to the repo; contains the dev project ref (`project_id`). Required for the CLI to target the correct dev project. Generate with `supabase init` then `supabase link`.
+- `SUPABASE_PROD_DB_URL` — stored in `.env.production.local` (gitignored). Used only by `scripts/db-push-prod.mjs` for prod deployments.
+- Auth: run `supabase login` once per machine. Token stored in `~/.supabase/` and persists across sessions.
+
+**Getting the prod connection string**
+1. Supabase dashboard → prod project → **Settings → Database → Connection string → URI**
+2. Switch **Method** to **Session Pooler** (required for IPv4 networks — direct connection is IPv6 only)
+3. Copy the URI and replace `[YOUR-PASSWORD]` with the actual password — **remove the square brackets**, they are a UI placeholder, not part of the password
+4. Add to `.env.production.local`: `SUPABASE_PROD_DB_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`
+
+**Note on `--project-ref`:** this flag is not supported by `supabase db push` or `supabase migration list`. Prod deployments use `--db-url` via `scripts/db-push-prod.mjs`, which reads `SUPABASE_PROD_DB_URL` from `.env.production.local` and handles special character encoding in the password automatically.
+
+**Dev workflow**
+```bash
+npm run db:status       # confirm new migration shows as pending
+npm run db:push         # apply pending migrations to dev
+npm run db:status       # confirm migration shows as applied
+```
+
+**Prod workflow**
+```bash
+npm run db:push:prod:dry    # preview what will be applied (dry run)
+npm run db:push:prod        # apply pending migrations to prod
+```
+
+**Rules**
+- Always run `db:push:prod:dry` before `db:push:prod` — review the output before committing to prod.
+- `supabase migration list` only works for the linked dev project — there is no prod equivalent.
+- Mocked RPC tests confirm the service-layer contract only. They do not validate the live database function. A fix involving a migration is not complete until deployment is confirmed.
+- If `supabase login` has not been run on the current machine, `db:push` will fail with an auth error — run `supabase login` first.

@@ -129,5 +129,8 @@ When a fix involves a database migration, include a deployment verification step
 ### Docs Updated
 - AI_CONTRACT.md: no - no agent policy or hard-stop rule changed
 - 0_ARCHITECTURE.md: no - layer boundaries unchanged
-- 0_BUILD_CONVENTIONS.md: no - no implementation convention changed
+- 0_BUILD_CONVENTIONS.md: yes - added §9 documenting the migration deployment workflow, scripts, and connection string setup
 - 0_PRODUCT_ROADMAP.md: no - roadmap scope unchanged
+
+### Resolution
+Migration deployed to prod via `npm run db:push:prod` using the Session Pooler connection string stored in `.env.production.local`. Bug confirmed resolved — quiz sessions complete cleanly and coins are credited.
