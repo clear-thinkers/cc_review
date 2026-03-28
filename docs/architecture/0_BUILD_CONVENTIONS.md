@@ -1,6 +1,6 @@
 # Build Conventions — HanziQuest (`cc_review`)
 
-_Last updated: 2026-03-28_
+_Last updated: 2026-03-28 (§10 added)_
 
 For authority hierarchy, hard stops, doc update policy, and fix log policy — see `AI_CONTRACT.md`.
 For where to file new documents — see `0_ARCHITECTURE.md §6`.
@@ -259,3 +259,96 @@ npm run db:push:prod        # apply pending migrations to prod
 - `supabase migration list` only works for the linked dev project — there is no prod equivalent.
 - Mocked RPC tests confirm the service-layer contract only. They do not validate the live database function. A fix involving a migration is not complete until deployment is confirmed.
 - If `supabase login` has not been run on the current machine, `db:push` will fail with an auth error — run `supabase login` first.
+
+---
+
+## 10 · Admin and Repair Scripts
+
+Scripts in `scripts/` that operate outside the app runtime. Each entry records the script's purpose, required env vars, key flags, and the fix-log that introduced it.
+
+When invoking a prod-targeting repair script through `npm run`, prefer `npm run <script> -- prod ...`. The explicit-flag fallback is `npm run <script> -- --env prod ...`. On Windows/npm, `--prod` may be consumed by npm before the script receives it.
+
+**Rules**
+- All repair scripts must be idempotent — safe to run more than once without double-applying changes.
+- Scripts that target prod data must load `.env.production.local` explicitly and support a clear prod selector. Dev is the default.
+- A repair script must validate its target before emitting any SQL or performing any write (e.g. confirm the target user exists and has the expected role).
+- Do not perform manual table edits ad hoc without a checked-in repair script or SQL artifact.
+
+---
+
+### `scripts/generate-coin-compensation-fix.ts`
+
+**npm command:** `npm run generate:coin-compensation-sql`
+
+**Purpose:** Generates an idempotent SQL transaction that compensates a child profile for coins missed due to a failed `record_quiz_session()` RPC. Writes a `quiz_sessions` row and a matching `wallets` increment in a single transaction so both Quiz Results and the Recipe Shop wallet reflect the credit.
+
+**When to use:** A child's quiz completion was recorded in the session log but the coin credit was never applied (e.g. due to an RPC timing bug). Run this to produce the SQL patch, review it, then apply it via Supabase SQL editor or migration.
+
+**Env vars required**
+| Var | Where |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `.env.local` / `.env.production.local` |
+| `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` / `.env.production.local` |
+
+**Required flags**
+| Flag | Type | Description |
+|---|---|---|
+| `--child-user-id` | UUID | Target child profile's `users.id` |
+| `--coins` | integer | Number of coins to credit |
+| `--reason` | string | Human-readable reason (stored in the session row) |
+
+**Optional flags**
+| Flag | Default | Description |
+|---|---|---|
+| `--created-at` | now | ISO 8601 timestamp for the backfilled session row |
+| `--session-id` | deterministic | Override the auto-generated deterministic session UUID |
+| `--output` | stdout | Write SQL to a file path instead of printing |
+| `--prod` | off | Load `.env.production.local` and target prod |
+| `prod` | off | Preferred leading positional prod selector when running this script through `npm run` |
+| `--env prod` | off | Explicit prod selector that is safer than `--prod` under `npm run` |
+
+**Key behaviours**
+- Fetches and validates the target `users` row via the service-role client; aborts if the user is not found or is not `role="child"`.
+- Session ID is deterministic (derived from `childUserId + createdAt`) — re-running with the same inputs produces the same UUID, making the transaction idempotent.
+- No new route, RPC, schema field, or RLS policy is touched; the script writes only through existing table shapes.
+
+**Example**
+```bash
+npm run generate:coin-compensation-sql -- \
+  prod \
+  11111111-2222-3333-4444-555555555555 \
+  13 \
+  "Missed coins after RPC bug" \
+  supabase/manual/coin-fix.sql
+```
+
+**Equivalent explicit-flag form**
+```bash
+npm run generate:coin-compensation-sql -- \
+  --env prod \
+  --child-user-id 11111111-2222-3333-4444-555555555555 \
+  --coins 13 \
+  --reason "Missed coins after RPC bug" \
+  --output supabase/manual/coin-fix.sql
+```
+
+**Fix log:** `docs/fix-log/build-fix-log-2026-03-28-child-coin-compensation-script.md`
+**Shared lib:** `src/lib/coinCompensationFix.ts` (validation, session-id generation, SQL builder)
+**Tests:** `src/lib/coinCompensationFix.test.ts`
+
+---
+
+### `scripts/verify-rls.ts`
+
+**Purpose:** Verifies RLS policy correctness against a live Supabase dev project. Covers table accessibility, platform-admin bypass, unenriched session isolation, cross-family isolation, child write scope, and quiz session immutability.
+
+**When to use:** After any migration that adds or modifies RLS policies, or as a sanity check before a prod deployment that touches auth or RLS.
+
+**Env vars required**
+| Var | Where |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `.env.local` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env.local` |
+| `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` |
+
+Runs against dev only — no `--prod` flag. Never point this at prod without first auditing the test sections for destructive writes.
