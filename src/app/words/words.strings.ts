@@ -734,6 +734,9 @@ export const wordsStrings = {
           label: "Tags",
           placeholder: "Select tags (multi-select)",
           tooltip: "Filter by one or more tags (must have all selected)",
+          selectAll: "Select All",
+          clearAll: "Clear All",
+          selectedCount: "{count} selected",
         },
       },
       pagination: {
@@ -779,6 +782,9 @@ export const wordsStrings = {
           placeholder: "Select tags (multi-select)",
           tooltip: "Filter by one or more tags",
           searchPlaceholder: "Search tags...",
+          selectAll: "Select All",
+          clearAll: "Clear All",
+          selectedCount: "{count} selected",
         },
       },
       pagination: {
@@ -1668,6 +1674,9 @@ export const wordsStrings = {
           label: "标签",
           placeholder: "选择标签（多选）",
           tooltip: "按一个或多个标签筛选（必须拥有所有选定标签）",
+          selectAll: "全选",
+          clearAll: "全部清除",
+          selectedCount: "已选择 {count} 个",
         },
       },
       pagination: {
@@ -1713,6 +1722,9 @@ export const wordsStrings = {
           placeholder: "选择标签（多选）",
           tooltip: "按一个或多个标签筛选",
           searchPlaceholder: "搜索标签...",
+          selectAll: "全选",
+          clearAll: "全部清除",
+          selectedCount: "已选择 {count} 个",
         },
       },
       pagination: {

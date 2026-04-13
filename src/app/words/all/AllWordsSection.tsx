@@ -7,6 +7,7 @@ import { taggingStrings } from "../shared/tagging.strings";
 import { assignWordLessonTags, clearWordLessonTags, createLessonTagIfNew, createTextbook, listLessonTags, listTextbooks, putWord } from "@/lib/supabase-service";
 import type { LessonTag, Textbook } from "../shared/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
+import { getAllTagFilterOptionIds, toggleTagFilterId } from "../shared/tagFilter.utils";
 import { matchesFamiliarityFilter } from "./all.utils";
 
 function appendSelectedOption(options: string[], selectedValue: string | null): string[] {
@@ -553,32 +554,50 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
               <summary className="cursor-pointer rounded-md border px-2 py-1 text-sm bg-gray-50 hover:bg-gray-100">
                 {filterSelectedTagIds.length === 0
                   ? str.all.filters.tags.placeholder
-                  : `${filterSelectedTagIds.length} selected`}
+                  : str.all.filters.tags.selectedCount.replace("{count}", String(filterSelectedTagIds.length))}
               </summary>
               <div className="mt-2 space-y-1 max-h-96 overflow-y-auto border rounded-md p-2 bg-white">
                 {availableTagsWithIds.length === 0 ? (
                   <p className="text-xs text-gray-500 py-2">{str.all.filters.tags.placeholder}</p>
                 ) : (
-                  availableTagsWithIds.map((tag) => {
-                    const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
-                    const isSelected = filterSelectedTagIds.includes(tag.id);
-                    return (
-                      <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFilterSelectedTagIds((prev) => [...prev, tag.id]);
-                            } else {
-                              setFilterSelectedTagIds((prev) => prev.filter((id) => id !== tag.id));
+                  <>
+                    <div className="mb-2 flex flex-wrap items-center gap-2 border-b pb-2">
+                      <button
+                        type="button"
+                        className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary disabled:opacity-50"
+                        onClick={() => setFilterSelectedTagIds(getAllTagFilterOptionIds(availableTagsWithIds))}
+                        disabled={availableTagsWithIds.length === 0}
+                      >
+                        {str.all.filters.tags.selectAll}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
+                        onClick={() => setFilterSelectedTagIds([])}
+                        disabled={filterSelectedTagIds.length === 0}
+                      >
+                        {str.all.filters.tags.clearAll}
+                      </button>
+                    </div>
+                    {availableTagsWithIds.map((tag) => {
+                      const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+                      const isSelected = filterSelectedTagIds.includes(tag.id);
+                      return (
+                        <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) =>
+                              setFilterSelectedTagIds((prev) =>
+                                toggleTagFilterId(prev, tag.id, e.target.checked)
+                              )
                             }
-                          }}
-                        />
-                        <span>{tagDisplay}</span>
-                      </label>
-                    );
-                  })
+                          />
+                          <span>{tagDisplay}</span>
+                        </label>
+                      );
+                    })}
+                  </>
                 )}
               </div>
             </details>
