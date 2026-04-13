@@ -19,8 +19,9 @@ Tier 2 is blocked until all Tier 1 gates close.
 | C | Parent difficulty setting | Beginner-level AI prompts scoped per family; admin configures via Prompts page | TBD | 📋 Planned |
 | D | Phrase-keyed input | Parent enters a phrase (not just a character) as primary unit | TBD | 📋 Planned |
 | E | Pilot feedback triage | Collect and triage structured feedback from pilot families | — | 🔄 In Progress |
+| F | Ingredient shopping for kids | Add shopping controls to the ingredient detail page so kids can mark/add ingredients while viewing a recipe's ingredients | `docs/feature-specs/2026-03-30-shop-ingredient-shopping.md` | 📋 Planned |
 
-> B–D require spec before build. See `AI_CONTRACT.md §2` for scope confirmation rules.
+> B–F require spec before build. See `AI_CONTRACT.md §2` for scope confirmation rules.
 
 ---
 
