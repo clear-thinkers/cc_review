@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-03-27_
+_Last updated: 2026-04-13_
 
 ---
 
@@ -729,6 +729,8 @@ docs/
     YYYY-MM-DD-short-scope.md             ← periodic code quality reviews
   fix-log/
     build-fix-log-YYYY-MM-DD-summary.md   ← one file per fix; created after merge
+  skills/
+    SKILL-[name].md                       ← reusable agent skills; one file per skill
   archive/
     YYYY-MM/
       *.md                                ← superseded docs moved here
@@ -762,6 +764,12 @@ docs/
 - Filename: `build-fix-log-YYYY-MM-DD-short-kebab-summary.md`
 - Do not move to archive — fix logs are a permanent record.
 
+**`docs/skills/` — reusable agent skill files**
+- Create when: a repeatable multi-step workflow is worth encoding so agents invoke it
+  consistently rather than improvising.
+- Filename: `SKILL-[kebab-name].md`
+- Do not move to archive — skills are active references, not historical records. Deprecate
+  by adding a `deprecated: true` note in the frontmatter and a replacement pointer.
 ---
 
 ### Archive Rule
