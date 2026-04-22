@@ -50,3 +50,6 @@ Stop and confirm before acting on any of these:
 
 All prior feature specs are archived at `docs/archive/specs/`.
 Note that specs may not reflect the current implementation — the codebase has evolved through multiple iterations and specs were not always updated to match. Treat them as historical context, not ground truth. When in doubt, read the code.
+
+- 2026-04-22: Quiz Results can package one session's failed Hanzi into a named review test session via the existing packaged-session flow.
+  Spec: `docs/feature-specs/2026-04-22-results-failed-to-test-session.md`

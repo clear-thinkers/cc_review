@@ -177,7 +177,7 @@ These rules govern the flashcard review screen for memory consolidation:
 
 These rules govern the results/history view for session data reporting:
 
-1. Results page is **view-only and read-only** — no modifications to `quizSessions` are performed here except for the explicit "Clear History" action.
+1. Results page is read-only with respect to `quizSessions`. It must not edit existing quiz-session records, and it may mutate persisted state only through the explicit `Clear History` action and the explicit `Send Failed to Test Session` action.
 2. The page displays all completed fill-test sessions in a table/list sorted by `createdAt` (newest first).
 3. Each session row displays: Session Date, % Fully Correct, % Failed, % Partial, Duration, Tested Count, Tested Characters, Failed Count, Failed Characters, Coins Earned.
 4. **Accuracy calculation rules:**
@@ -202,7 +202,16 @@ These rules govern the results/history view for session data reporting:
    - Requires confirmation dialog before deletion
    - On confirmation, all records in `quizSessions` table are deleted permanently with no undo
    - Table and summary cards clear immediately upon successful deletion
-8. **Empty state:** When no sessions exist, display a placeholder message directing users to start a review session; hide all table and summary UI elements.
+8. **Send Failed to Test Session action:**
+   - Each session row may expose a `Send Failed to Test Session` action when that row has at least one failed Hanzi
+   - The action opens a dialog with a required review-test session name
+   - Submission must not modify `quizSessions`; it packages the row's failed Hanzi into `review_test_sessions*` using the existing packaged-session flow
+   - Failed Hanzi resolve against the current family state only: existing `words` rows plus currently saved `flashcard_contents`
+   - For each eligible failed Hanzi, all currently saved `character|pronunciation` content rows for that Hanzi are packaged into the session
+   - Hanzi with no current word row, duplicate current word rows, or no saved flashcard content are skipped instead of creating an invalid packaged session
+   - If the entered session name matches an existing active packaged review test session with exact case, the action appends only new targets to that session
+   - If no eligible targets remain after resolution, no mutation occurs and the UI surfaces an error notice
+9. **Empty state:** When no sessions exist, display a placeholder message directing users to start a review session; hide all table and summary UI elements.
 
 ### Recipe Shop Rules (`/words/shop`)
 

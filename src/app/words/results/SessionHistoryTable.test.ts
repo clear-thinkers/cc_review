@@ -94,6 +94,11 @@ function showClearButton(sessionCount: number, hideDestructiveActions?: boolean)
   return sessionCount > 0 && !hideDestructiveActions;
 }
 
+/** Mirror of send-failed button render guard */
+function showSendFailedButton(failedCharacterCount: number): boolean {
+  return failedCharacterCount > 0;
+}
+
 // ---------------------------------------------------------------------------
 // Fixture
 // ---------------------------------------------------------------------------
@@ -301,5 +306,16 @@ describe("clear-button visibility", () => {
 
   it("hides when both conditions are unfavorable", () => {
     expect(showClearButton(0, true)).toBe(false);
+  });
+});
+
+describe("send-failed button visibility", () => {
+  it("shows when the row has at least one failed character", () => {
+    expect(showSendFailedButton(1)).toBe(true);
+    expect(showSendFailedButton(3)).toBe(true);
+  });
+
+  it("hides when the row has no failed characters", () => {
+    expect(showSendFailedButton(0)).toBe(false);
   });
 });

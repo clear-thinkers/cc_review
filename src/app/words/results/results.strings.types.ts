@@ -43,6 +43,30 @@ export type ResultsLocaleStrings = {
     confirmButton: string;
     cancelButton: string;
   };
+  sendFailedToSession: {
+    button: string;
+    suggestedName: string;
+    dialog: {
+      title: string;
+      message: string;
+      nameLabel: string;
+      namePlaceholder: string;
+      failedCharacters: string;
+      confirmButton: string;
+      submittingButton: string;
+      cancelButton: string;
+    };
+    messages: {
+      nameRequired: string;
+      noFailedCharacters: string;
+      noEligibleTargets: string;
+      createSuccess: string;
+      appendSuccess: string;
+      noNewTargets: string;
+      skippedCharacters: string;
+      createError: string;
+    };
+  };
   emptyState: {
     heading: string;
     message: string;

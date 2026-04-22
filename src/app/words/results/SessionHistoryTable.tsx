@@ -10,6 +10,8 @@ export interface SessionHistoryTableProps {
   sessions: QuizSession[];
   strings: ResultsLocaleStrings;
   onClearClick: () => void;
+  onSendFailedToSession: (session: QuizSession) => void;
+  sendingSessionId?: string | null;
   hideDestructiveActions?: boolean;
 }
 
@@ -29,6 +31,8 @@ export function SessionHistoryTable({
   sessions,
   strings,
   onClearClick,
+  onSendFailedToSession,
+  sendingSessionId,
   hideDestructiveActions,
 }: SessionHistoryTableProps) {
   const [sortField, setSortField] = useState<SortField>("createdAt");
@@ -203,7 +207,21 @@ export function SessionHistoryTable({
                   </td>
                   <td className={styles.sessionTableCell + " " + styles.characters}>
                     {session.charactersFailed.length > 0
-                      ? truncateCharacters(session.charactersFailed)
+                      ? (
+                        <div className={styles.cellContentStack}>
+                          <span>{truncateCharacters(session.charactersFailed)}</span>
+                          <button
+                            type="button"
+                            className="btn-secondary rounded border-2 px-3 py-1 text-[11px] font-medium leading-none disabled:opacity-50"
+                            onClick={() => onSendFailedToSession(session)}
+                            disabled={sendingSessionId === session.id}
+                          >
+                            {sendingSessionId === session.id
+                              ? strings.sendFailedToSession.dialog.submittingButton
+                              : strings.sendFailedToSession.button}
+                          </button>
+                        </div>
+                      )
                       : strings.table.noCharacters}
                   </td>
                   <td className={styles.sessionTableCell + " " + styles.numeric}>
