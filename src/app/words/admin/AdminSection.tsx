@@ -709,10 +709,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [filterFamiliarityOperator, setFilterFamiliarityOperator] = useState<"<=" | ">=">("<=");
   const [filterFamiliarityValue, setFilterFamiliarityValue] = useState<number | "">("");
   const [filterSelectedTagIds, setFilterSelectedTagIds] = useState<string[]>([]);
-  const [filterTagTextbook, setFilterTagTextbook] = useState("");
-  const [filterTagGrade, setFilterTagGrade] = useState("");
-  const [filterTagUnit, setFilterTagUnit] = useState("");
-  const [filterTagLesson, setFilterTagLesson] = useState("");
+  const [filterTagTextbooks, setFilterTagTextbooks] = useState<string[]>([]);
+  const [filterTagGrades, setFilterTagGrades] = useState<string[]>([]);
+  const [filterTagUnits, setFilterTagUnits] = useState<string[]>([]);
+  const [filterTagLessons, setFilterTagLessons] = useState<string[]>([]);
   const [filterSectionOpen, setFilterSectionOpen] = useState(false);
   const [reviewTestSessionFormOpen, setReviewTestSessionFormOpen] = useState(false);
   const [reviewTestSessionName, setReviewTestSessionName] = useState("");
@@ -760,11 +760,11 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       Array.from(
         new Set(
           availableTagsWithIds
-            .filter((t) => !filterTagTextbook || t.textbookName === filterTagTextbook)
+            .filter((t) => filterTagTextbooks.length === 0 || filterTagTextbooks.includes(t.textbookName))
             .map((t) => t.grade)
         )
       ),
-    [availableTagsWithIds, filterTagTextbook]
+    [availableTagsWithIds, filterTagTextbooks]
   );
   const partialFilterUnitOptions = useMemo(
     () =>
@@ -773,13 +773,13 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           availableTagsWithIds
             .filter(
               (t) =>
-                (!filterTagTextbook || t.textbookName === filterTagTextbook) &&
-                (!filterTagGrade || t.grade === filterTagGrade)
+                (filterTagTextbooks.length === 0 || filterTagTextbooks.includes(t.textbookName)) &&
+                (filterTagGrades.length === 0 || filterTagGrades.includes(t.grade))
             )
             .map((t) => t.unit)
         )
       ),
-    [availableTagsWithIds, filterTagTextbook, filterTagGrade]
+    [availableTagsWithIds, filterTagTextbooks, filterTagGrades]
   );
   const partialFilterLessonOptions = useMemo(
     () =>
@@ -788,14 +788,14 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           availableTagsWithIds
             .filter(
               (t) =>
-                (!filterTagTextbook || t.textbookName === filterTagTextbook) &&
-                (!filterTagGrade || t.grade === filterTagGrade) &&
-                (!filterTagUnit || t.unit === filterTagUnit)
+                (filterTagTextbooks.length === 0 || filterTagTextbooks.includes(t.textbookName)) &&
+                (filterTagGrades.length === 0 || filterTagGrades.includes(t.grade)) &&
+                (filterTagUnits.length === 0 || filterTagUnits.includes(t.unit))
             )
             .map((t) => t.lesson)
         )
       ),
-    [availableTagsWithIds, filterTagTextbook, filterTagGrade, filterTagUnit]
+    [availableTagsWithIds, filterTagTextbooks, filterTagGrades, filterTagUnits]
   );
 
   // Apply filters to admin rows
@@ -835,7 +835,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
       }
 
       // Filter: Partial tag (textbook/grade/unit/lesson) — AND with full tag filter
-      if (filterTagTextbook || filterTagGrade || filterTagUnit || filterTagLesson) {
+      if (filterTagTextbooks.length > 0 || filterTagGrades.length > 0 || filterTagUnits.length > 0 || filterTagLessons.length > 0) {
         const targetWords = vm.words.filter((w) => w.hanzi === target.character);
         const targetWordIds = new Set(targetWords.map((w) => w.id));
         let hasMatchingTag = false;
@@ -844,10 +844,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
           if (
             wordTags.some(
               (t) =>
-                (!filterTagTextbook || t.textbookName === filterTagTextbook) &&
-                (!filterTagGrade || t.grade === filterTagGrade) &&
-                (!filterTagUnit || t.unit === filterTagUnit) &&
-                (!filterTagLesson || t.lesson === filterTagLesson)
+                (filterTagTextbooks.length === 0 || filterTagTextbooks.includes(t.textbookName)) &&
+                (filterTagGrades.length === 0 || filterTagGrades.includes(t.grade)) &&
+                (filterTagUnits.length === 0 || filterTagUnits.includes(t.unit)) &&
+                (filterTagLessons.length === 0 || filterTagLessons.includes(t.lesson))
             )
           ) {
             hasMatchingTag = true;
@@ -863,10 +863,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     filteredByStatsAdminRenderRows,
     filterDueNow,
     filterSelectedTagIds,
-    filterTagTextbook,
-    filterTagGrade,
-    filterTagUnit,
-    filterTagLesson,
+    filterTagTextbooks,
+    filterTagGrades,
+    filterTagUnits,
+    filterTagLessons,
     adminTargetByKey,
     vm.words,
     vm.wordTagsMap,
@@ -875,7 +875,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     () => new Set(filteredAdminRenderRows.map((row) => row.targetKey)).size,
     [filteredAdminRenderRows]
   );
-  const hasActivePartialTagFilter = !!(filterTagTextbook || filterTagGrade || filterTagUnit || filterTagLesson);
+  const hasActivePartialTagFilter = filterTagTextbooks.length > 0 || filterTagGrades.length > 0 || filterTagUnits.length > 0 || filterTagLessons.length > 0;
   const adminHasActiveCountFilter =
     (adminStatsFilter !== "targets" && adminStatsFilter !== "characters") ||
     filterDueNow ||
@@ -974,10 +974,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     setFilterFamiliarityOperator("<=");
     setFilterFamiliarityValue("");
     setFilterSelectedTagIds([]);
-    setFilterTagTextbook("");
-    setFilterTagGrade("");
-    setFilterTagUnit("");
-    setFilterTagLesson("");
+    setFilterTagTextbooks([]);
+    setFilterTagGrades([]);
+    setFilterTagUnits([]);
+    setFilterTagLessons([]);
     setCurrentPage(1);
   }
 
@@ -1318,69 +1318,122 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             <div className="space-y-2">
               <label className="block text-xs text-gray-600">{str.admin.filters.partialTag.label}</label>
               <div className="grid grid-cols-2 gap-2 min-w-[280px]">
+                {/* Textbook */}
                 <div className="space-y-0.5">
                   <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.textbookLabel}</label>
-                  <select
-                    className="w-full rounded border px-1.5 py-1 text-xs bg-white"
-                    value={filterTagTextbook}
-                    onChange={(e) => {
-                      setFilterTagTextbook(e.target.value);
-                      setFilterTagGrade("");
-                      setFilterTagUnit("");
-                      setFilterTagLesson("");
-                    }}
-                  >
-                    <option value="">{str.admin.filters.partialTag.allOption}</option>
-                    {partialFilterTextbookOptions.map((tb) => (
-                      <option key={tb} value={tb}>{tb}</option>
-                    ))}
-                  </select>
+                  <details className="group">
+                    <summary className="cursor-pointer rounded-md border px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100">
+                      {filterTagTextbooks.length === 0
+                        ? str.admin.filters.partialTag.allOption
+                        : str.admin.filters.partialTag.selectedCount.replace("{count}", String(filterTagTextbooks.length))}
+                    </summary>
+                    <div className="mt-1 space-y-1 max-h-48 overflow-y-auto border rounded-md p-1.5 bg-white z-10 relative">
+                      {partialFilterTextbookOptions.map((tb) => (
+                        <label key={tb} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                          <input
+                            type="checkbox"
+                            checked={filterTagTextbooks.includes(tb)}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...filterTagTextbooks, tb]
+                                : filterTagTextbooks.filter((x) => x !== tb);
+                              setFilterTagTextbooks(next);
+                              setFilterTagGrades((prev) => prev.filter((g) => partialFilterGradeOptions.includes(g)));
+                              setFilterTagUnits((prev) => prev.filter((u) => partialFilterUnitOptions.includes(u)));
+                              setFilterTagLessons((prev) => prev.filter((l) => partialFilterLessonOptions.includes(l)));
+                            }}
+                          />
+                          <span>{tb}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
                 </div>
+                {/* Grade */}
                 <div className="space-y-0.5">
                   <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.gradeLabel}</label>
-                  <select
-                    className="w-full rounded border px-1.5 py-1 text-xs bg-white"
-                    value={filterTagGrade}
-                    onChange={(e) => {
-                      setFilterTagGrade(e.target.value);
-                      setFilterTagUnit("");
-                      setFilterTagLesson("");
-                    }}
-                  >
-                    <option value="">{str.admin.filters.partialTag.allOption}</option>
-                    {partialFilterGradeOptions.map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
+                  <details className="group">
+                    <summary className="cursor-pointer rounded-md border px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100">
+                      {filterTagGrades.length === 0
+                        ? str.admin.filters.partialTag.allOption
+                        : str.admin.filters.partialTag.selectedCount.replace("{count}", String(filterTagGrades.length))}
+                    </summary>
+                    <div className="mt-1 space-y-1 max-h-48 overflow-y-auto border rounded-md p-1.5 bg-white z-10 relative">
+                      {partialFilterGradeOptions.map((g) => (
+                        <label key={g} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                          <input
+                            type="checkbox"
+                            checked={filterTagGrades.includes(g)}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...filterTagGrades, g]
+                                : filterTagGrades.filter((x) => x !== g);
+                              setFilterTagGrades(next);
+                              setFilterTagUnits((prev) => prev.filter((u) => partialFilterUnitOptions.includes(u)));
+                              setFilterTagLessons((prev) => prev.filter((l) => partialFilterLessonOptions.includes(l)));
+                            }}
+                          />
+                          <span>{g}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
                 </div>
+                {/* Unit */}
                 <div className="space-y-0.5">
                   <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.unitLabel}</label>
-                  <select
-                    className="w-full rounded border px-1.5 py-1 text-xs bg-white"
-                    value={filterTagUnit}
-                    onChange={(e) => {
-                      setFilterTagUnit(e.target.value);
-                      setFilterTagLesson("");
-                    }}
-                  >
-                    <option value="">{str.admin.filters.partialTag.allOption}</option>
-                    {partialFilterUnitOptions.map((u) => (
-                      <option key={u} value={u}>{u}</option>
-                    ))}
-                  </select>
+                  <details className="group">
+                    <summary className="cursor-pointer rounded-md border px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100">
+                      {filterTagUnits.length === 0
+                        ? str.admin.filters.partialTag.allOption
+                        : str.admin.filters.partialTag.selectedCount.replace("{count}", String(filterTagUnits.length))}
+                    </summary>
+                    <div className="mt-1 space-y-1 max-h-48 overflow-y-auto border rounded-md p-1.5 bg-white z-10 relative">
+                      {partialFilterUnitOptions.map((u) => (
+                        <label key={u} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                          <input
+                            type="checkbox"
+                            checked={filterTagUnits.includes(u)}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...filterTagUnits, u]
+                                : filterTagUnits.filter((x) => x !== u);
+                              setFilterTagUnits(next);
+                              setFilterTagLessons((prev) => prev.filter((l) => partialFilterLessonOptions.includes(l)));
+                            }}
+                          />
+                          <span>{u}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
                 </div>
+                {/* Lesson */}
                 <div className="space-y-0.5">
                   <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.lessonLabel}</label>
-                  <select
-                    className="w-full rounded border px-1.5 py-1 text-xs bg-white"
-                    value={filterTagLesson}
-                    onChange={(e) => setFilterTagLesson(e.target.value)}
-                  >
-                    <option value="">{str.admin.filters.partialTag.allOption}</option>
-                    {partialFilterLessonOptions.map((l) => (
-                      <option key={l} value={l}>{l}</option>
-                    ))}
-                  </select>
+                  <details className="group">
+                    <summary className="cursor-pointer rounded-md border px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100">
+                      {filterTagLessons.length === 0
+                        ? str.admin.filters.partialTag.allOption
+                        : str.admin.filters.partialTag.selectedCount.replace("{count}", String(filterTagLessons.length))}
+                    </summary>
+                    <div className="mt-1 space-y-1 max-h-48 overflow-y-auto border rounded-md p-1.5 bg-white z-10 relative">
+                      {partialFilterLessonOptions.map((l) => (
+                        <label key={l} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                          <input
+                            type="checkbox"
+                            checked={filterTagLessons.includes(l)}
+                            onChange={(e) => {
+                              setFilterTagLessons((prev) =>
+                                e.target.checked ? [...prev, l] : prev.filter((x) => x !== l)
+                              );
+                            }}
+                          />
+                          <span>{l}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
                 </div>
               </div>
             </div>

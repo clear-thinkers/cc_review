@@ -769,6 +769,7 @@ export const wordsStrings = {
           unitLabel: "Unit",
           lessonLabel: "Lesson",
           allOption: "All",
+          selectedCount: "{count} selected",
         },
       },
       pagination: {
@@ -825,6 +826,7 @@ export const wordsStrings = {
           unitLabel: "Unit",
           lessonLabel: "Lesson",
           allOption: "All",
+          selectedCount: "{count} selected",
         },
         hasContent: {
           label: "Has Content?",
@@ -1755,6 +1757,7 @@ export const wordsStrings = {
           unitLabel: "单元",
           lessonLabel: "课",
           allOption: "全部",
+          selectedCount: "已选择 {count} 个",
         },
       },
       pagination: {
@@ -1811,6 +1814,7 @@ export const wordsStrings = {
           unitLabel: "单元",
           lessonLabel: "课",
           allOption: "全部",
+          selectedCount: "已选择 {count} 个",
         },
         hasContent: {
           label: "有内容？",
