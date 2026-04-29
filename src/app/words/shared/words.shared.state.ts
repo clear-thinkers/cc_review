@@ -3911,6 +3911,7 @@ const gradeLabels = getGradeLabels(str);
     clearAdminTargetSelection,
     handleAdminBatchToggleFillTestInclude,
     createSelectedReviewTestSession,
+    allFlashcardContents,
     allWordsSummary,
     words,
     toggleAllWordsSort,

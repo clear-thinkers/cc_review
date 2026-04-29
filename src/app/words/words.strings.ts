@@ -762,6 +762,14 @@ export const wordsStrings = {
           clearAll: "Clear All",
           selectedCount: "{count} selected",
         },
+        partialTag: {
+          label: "Filter by Tag Part",
+          textbookLabel: "Textbook",
+          gradeLabel: "Grade",
+          unitLabel: "Unit",
+          lessonLabel: "Lesson",
+          allOption: "All",
+        },
       },
       pagination: {
         pageInfo: "Page {current} of {total}",
@@ -809,6 +817,20 @@ export const wordsStrings = {
           selectAll: "Select All",
           clearAll: "Clear All",
           selectedCount: "{count} selected",
+        },
+        partialTag: {
+          label: "Filter by Tag Part",
+          textbookLabel: "Textbook",
+          gradeLabel: "Grade",
+          unitLabel: "Unit",
+          lessonLabel: "Lesson",
+          allOption: "All",
+        },
+        hasContent: {
+          label: "Has Content?",
+          all: "All",
+          yes: "Yes",
+          no: "No",
         },
       },
       pagination: {
@@ -1726,6 +1748,14 @@ export const wordsStrings = {
           clearAll: "全部清除",
           selectedCount: "已选择 {count} 个",
         },
+        partialTag: {
+          label: "按标签部分筛选",
+          textbookLabel: "教材",
+          gradeLabel: "年级",
+          unitLabel: "单元",
+          lessonLabel: "课",
+          allOption: "全部",
+        },
       },
       pagination: {
         pageInfo: "第 {current} 页，共 {total} 页",
@@ -1773,6 +1803,20 @@ export const wordsStrings = {
           selectAll: "全选",
           clearAll: "全部清除",
           selectedCount: "已选择 {count} 个",
+        },
+        partialTag: {
+          label: "按标签部分筛选",
+          textbookLabel: "教材",
+          gradeLabel: "年级",
+          unitLabel: "单元",
+          lessonLabel: "课",
+          allOption: "全部",
+        },
+        hasContent: {
+          label: "有内容？",
+          all: "全部",
+          yes: "是",
+          no: "否",
         },
       },
       pagination: {

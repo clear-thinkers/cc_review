@@ -709,6 +709,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [filterFamiliarityOperator, setFilterFamiliarityOperator] = useState<"<=" | ">=">("<=");
   const [filterFamiliarityValue, setFilterFamiliarityValue] = useState<number | "">("");
   const [filterSelectedTagIds, setFilterSelectedTagIds] = useState<string[]>([]);
+  const [filterTagTextbook, setFilterTagTextbook] = useState("");
+  const [filterTagGrade, setFilterTagGrade] = useState("");
+  const [filterTagUnit, setFilterTagUnit] = useState("");
+  const [filterTagLesson, setFilterTagLesson] = useState("");
   const [filterSectionOpen, setFilterSectionOpen] = useState(false);
   const [reviewTestSessionFormOpen, setReviewTestSessionFormOpen] = useState(false);
   const [reviewTestSessionName, setReviewTestSessionName] = useState("");
@@ -746,6 +750,54 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     );
   }, [vm.wordTagsMap]);
 
+  // Cascade options for partial tag filter
+  const partialFilterTextbookOptions = useMemo(
+    () => Array.from(new Set(availableTagsWithIds.map((t) => t.textbookName))),
+    [availableTagsWithIds]
+  );
+  const partialFilterGradeOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          availableTagsWithIds
+            .filter((t) => !filterTagTextbook || t.textbookName === filterTagTextbook)
+            .map((t) => t.grade)
+        )
+      ),
+    [availableTagsWithIds, filterTagTextbook]
+  );
+  const partialFilterUnitOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          availableTagsWithIds
+            .filter(
+              (t) =>
+                (!filterTagTextbook || t.textbookName === filterTagTextbook) &&
+                (!filterTagGrade || t.grade === filterTagGrade)
+            )
+            .map((t) => t.unit)
+        )
+      ),
+    [availableTagsWithIds, filterTagTextbook, filterTagGrade]
+  );
+  const partialFilterLessonOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          availableTagsWithIds
+            .filter(
+              (t) =>
+                (!filterTagTextbook || t.textbookName === filterTagTextbook) &&
+                (!filterTagGrade || t.grade === filterTagGrade) &&
+                (!filterTagUnit || t.unit === filterTagUnit)
+            )
+            .map((t) => t.lesson)
+        )
+      ),
+    [availableTagsWithIds, filterTagTextbook, filterTagGrade, filterTagUnit]
+  );
+
   // Apply filters to admin rows
   const filteredByStatsAdminRenderRows = useMemo(
     () => adminTableRows.filter((r) => adminVisibleTargetKeySet.has(r.targetKey)),
@@ -782,17 +834,53 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         if (!hasAnySelectedTag) return false;
       }
 
+      // Filter: Partial tag (textbook/grade/unit/lesson) — AND with full tag filter
+      if (filterTagTextbook || filterTagGrade || filterTagUnit || filterTagLesson) {
+        const targetWords = vm.words.filter((w) => w.hanzi === target.character);
+        const targetWordIds = new Set(targetWords.map((w) => w.id));
+        let hasMatchingTag = false;
+        for (const wordId of targetWordIds) {
+          const wordTags = vm.wordTagsMap.get(wordId) ?? [];
+          if (
+            wordTags.some(
+              (t) =>
+                (!filterTagTextbook || t.textbookName === filterTagTextbook) &&
+                (!filterTagGrade || t.grade === filterTagGrade) &&
+                (!filterTagUnit || t.unit === filterTagUnit) &&
+                (!filterTagLesson || t.lesson === filterTagLesson)
+            )
+          ) {
+            hasMatchingTag = true;
+            break;
+          }
+        }
+        if (!hasMatchingTag) return false;
+      }
+
       return true;
     });
-  }, [filteredByStatsAdminRenderRows, filterDueNow, filterSelectedTagIds, adminTargetByKey, vm.words, vm.wordTagsMap]);
+  }, [
+    filteredByStatsAdminRenderRows,
+    filterDueNow,
+    filterSelectedTagIds,
+    filterTagTextbook,
+    filterTagGrade,
+    filterTagUnit,
+    filterTagLesson,
+    adminTargetByKey,
+    vm.words,
+    vm.wordTagsMap,
+  ]);
   const filteredAdminTargetCount = useMemo(
     () => new Set(filteredAdminRenderRows.map((row) => row.targetKey)).size,
     [filteredAdminRenderRows]
   );
+  const hasActivePartialTagFilter = !!(filterTagTextbook || filterTagGrade || filterTagUnit || filterTagLesson);
   const adminHasActiveCountFilter =
     (adminStatsFilter !== "targets" && adminStatsFilter !== "characters") ||
     filterDueNow ||
-    filterSelectedTagIds.length > 0;
+    filterSelectedTagIds.length > 0 ||
+    hasActivePartialTagFilter;
 
   const adminRowPages = useMemo(
     () => paginateAdminRowsByCharacter(filteredAdminRenderRows, ITEMS_PER_PAGE),
@@ -886,6 +974,10 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     setFilterFamiliarityOperator("<=");
     setFilterFamiliarityValue("");
     setFilterSelectedTagIds([]);
+    setFilterTagTextbook("");
+    setFilterTagGrade("");
+    setFilterTagUnit("");
+    setFilterTagLesson("");
     setCurrentPage(1);
   }
 
@@ -1145,7 +1237,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             type="button"
             onClick={clearAllFilters}
             className="text-xs text-blue-600 underline disabled:opacity-50"
-            disabled={!filterDueNow && filterFamiliarityValue === "" && filterSelectedTagIds.length === 0}
+            disabled={!filterDueNow && filterFamiliarityValue === "" && filterSelectedTagIds.length === 0 && !hasActivePartialTagFilter}
           >
             {str.admin.filters.clearButton}
           </button>
@@ -1220,6 +1312,77 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                   )}
                 </div>
               </details>
+            </div>
+
+            {/* Partial Tag Filter */}
+            <div className="space-y-2">
+              <label className="block text-xs text-gray-600">{str.admin.filters.partialTag.label}</label>
+              <div className="grid grid-cols-2 gap-2 min-w-[280px]">
+                <div className="space-y-0.5">
+                  <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.textbookLabel}</label>
+                  <select
+                    className="w-full rounded border px-1.5 py-1 text-xs bg-white"
+                    value={filterTagTextbook}
+                    onChange={(e) => {
+                      setFilterTagTextbook(e.target.value);
+                      setFilterTagGrade("");
+                      setFilterTagUnit("");
+                      setFilterTagLesson("");
+                    }}
+                  >
+                    <option value="">{str.admin.filters.partialTag.allOption}</option>
+                    {partialFilterTextbookOptions.map((tb) => (
+                      <option key={tb} value={tb}>{tb}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-0.5">
+                  <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.gradeLabel}</label>
+                  <select
+                    className="w-full rounded border px-1.5 py-1 text-xs bg-white"
+                    value={filterTagGrade}
+                    onChange={(e) => {
+                      setFilterTagGrade(e.target.value);
+                      setFilterTagUnit("");
+                      setFilterTagLesson("");
+                    }}
+                  >
+                    <option value="">{str.admin.filters.partialTag.allOption}</option>
+                    {partialFilterGradeOptions.map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-0.5">
+                  <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.unitLabel}</label>
+                  <select
+                    className="w-full rounded border px-1.5 py-1 text-xs bg-white"
+                    value={filterTagUnit}
+                    onChange={(e) => {
+                      setFilterTagUnit(e.target.value);
+                      setFilterTagLesson("");
+                    }}
+                  >
+                    <option value="">{str.admin.filters.partialTag.allOption}</option>
+                    {partialFilterUnitOptions.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-0.5">
+                  <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.lessonLabel}</label>
+                  <select
+                    className="w-full rounded border px-1.5 py-1 text-xs bg-white"
+                    value={filterTagLesson}
+                    onChange={(e) => setFilterTagLesson(e.target.value)}
+                  >
+                    <option value="">{str.admin.filters.partialTag.allOption}</option>
+                    {partialFilterLessonOptions.map((l) => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         )}

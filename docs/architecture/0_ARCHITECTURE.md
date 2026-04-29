@@ -83,11 +83,12 @@ These rules govern the inventory view at `/words/all`:
 13. **Pagination**: The table shows 50 words per page. Navigation uses First, Previous, Next, Last buttons. Page info shows "Page X of Y". Pagination applies after all filters.
 14. The page owns display/sorting behavior only; scheduler logic remains in `scheduler.ts`.
 15. A **Tags column** displays cascade tag pills (`TextbookName · Grade · Unit · Lesson`) for non-child roles. Multiple tags stack vertically; no tags = empty cell.
-16. **Default Filter Bar** (always available at top): Three filter sections:
+16. **Default Filter Bar** (always available at top): Four filter sections:
     - **Due Now**: Checkbox to show only characters with `nextReviewAt <= now` (or `0`/empty).
     - **Familiarity**: Operator dropdown (`<=` or `>=`) and number input (0-100) to filter by `getMemorizationProbability(word)`.
     - **Tags (Cascade)**: Multi-select dropdown showing all available cascade tags (format: `TextbookName · Grade · Unit · Lesson`). OR logic: word must have ANY selected tag to be shown.
-17. Default filters can be individually toggled on/off; a [Clear Filters] button resets all three.
+    - **Filter by Tag Part**: Four cascade dropdowns (Textbook → Grade → Unit → Lesson). Each level narrows the options in the levels below it. When any level is set, a word must have at least one tag satisfying ALL specified levels to pass. Operates independently of Tags (Cascade); when both are active, a word must satisfy both (AND logic). Clearing a parent level resets all child levels.
+17. Default filters can be individually toggled on/off; a [Clear Filters] button resets all four.
 18. When filters are active and no words match, "No characters match the selected filters." is shown with a Clear Filters link.
 19. Default filter state is local UI state and does NOT persist via URL params.
 20. The page does not expose a separate legacy Textbook / Grade / Unit / Lesson filter bar.
@@ -117,6 +118,7 @@ These rules govern content curation at `/words/admin`:
 12. A **default filter bar** is displayed above the character list. It includes:
    - **Due Now**: Checkbox to show only admin targets whose associated character has at least one due word (`nextReviewAt <= now` or `0`/empty).
    - **Tags (Cascade)**: Multi-select dropdown showing available cascade tags (`TextbookName · Grade · Unit · Lesson`). Content Admin tag matching uses OR logic within a target's associated word tags.
+   - **Filter by Tag Part**: Four cascade dropdowns (Textbook → Grade → Unit → Lesson). Each level narrows the options in the levels below it. When any level is set, a target must have at least one tag satisfying ALL specified levels to pass. This filter operates independently of the Tags (Cascade) filter; when both are active, a target must satisfy both (AND logic). Clearing any parent level resets all child levels.
 13. Characters with no tags are hidden when any filter is active.
 14. No Lessons column is added to the admin table (filter-only in this phase).
 15. Target-level destructive actions are split:

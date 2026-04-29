@@ -23,6 +23,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const {
     page,
     str,
+    allFlashcardContents,
     allWordsSummary,
     formatProbability,
     loading,
@@ -77,6 +78,11 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [filterFamiliarityOperator, setFilterFamiliarityOperator] = useState<"<=" | ">=">("<=");
   const [filterFamiliarityValue, setFilterFamiliarityValue] = useState<number | "">("");
   const [filterSelectedTagIds, setFilterSelectedTagIds] = useState<string[]>([]);
+  const [filterTagTextbook, setFilterTagTextbook] = useState("");
+  const [filterTagGrade, setFilterTagGrade] = useState("");
+  const [filterTagUnit, setFilterTagUnit] = useState("");
+  const [filterTagLesson, setFilterTagLesson] = useState("");
+  const [filterHasContent, setFilterHasContent] = useState<"" | "yes" | "no">("");
   const [filterSectionOpen, setFilterSectionOpen] = useState(false);
 
   // Pagination state
@@ -108,6 +114,59 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     );
   }, [wordTagsMap]);
 
+  const hanziWithContent = useMemo(
+    () => new Set(allFlashcardContents.map((e) => e.character)),
+    [allFlashcardContents]
+  );
+
+  // Cascade options for partial tag filter
+  const partialFilterTextbookOptions = useMemo(
+    () => Array.from(new Set(availableTagsWithIds.map((t) => t.textbookName))),
+    [availableTagsWithIds]
+  );
+  const partialFilterGradeOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          availableTagsWithIds
+            .filter((t) => !filterTagTextbook || t.textbookName === filterTagTextbook)
+            .map((t) => t.grade)
+        )
+      ),
+    [availableTagsWithIds, filterTagTextbook]
+  );
+  const partialFilterUnitOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          availableTagsWithIds
+            .filter(
+              (t) =>
+                (!filterTagTextbook || t.textbookName === filterTagTextbook) &&
+                (!filterTagGrade || t.grade === filterTagGrade)
+            )
+            .map((t) => t.unit)
+        )
+      ),
+    [availableTagsWithIds, filterTagTextbook, filterTagGrade]
+  );
+  const partialFilterLessonOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          availableTagsWithIds
+            .filter(
+              (t) =>
+                (!filterTagTextbook || t.textbookName === filterTagTextbook) &&
+                (!filterTagGrade || t.grade === filterTagGrade) &&
+                (!filterTagUnit || t.unit === filterTagUnit)
+            )
+            .map((t) => t.lesson)
+        )
+      ),
+    [availableTagsWithIds, filterTagTextbook, filterTagGrade, filterTagUnit]
+  );
+
   // Apply filters to sorted words
   const filteredWords = useMemo(() => {
     const now = Date.now();
@@ -131,9 +190,39 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
         if (!hasAnySelectedTag) return false;
       }
 
+      // Filter: Partial tag (textbook/grade/unit/lesson) — AND with full tag filter
+      if (filterTagTextbook || filterTagGrade || filterTagUnit || filterTagLesson) {
+        const wordTags = wordTagsMap.get(word.id) ?? [];
+        const hasMatchingTag = wordTags.some(
+          (t) =>
+            (!filterTagTextbook || t.textbookName === filterTagTextbook) &&
+            (!filterTagGrade || t.grade === filterTagGrade) &&
+            (!filterTagUnit || t.unit === filterTagUnit) &&
+            (!filterTagLesson || t.lesson === filterTagLesson)
+        );
+        if (!hasMatchingTag) return false;
+      }
+
+      // Filter: Has Content
+      if (filterHasContent === "yes" && !hanziWithContent.has(word.hanzi)) return false;
+      if (filterHasContent === "no" && hanziWithContent.has(word.hanzi)) return false;
+
       return true;
     });
-  }, [sortedAllWords, filterDueNow, filterFamiliarityOperator, filterFamiliarityValue, filterSelectedTagIds, wordTagsMap]);
+  }, [
+    sortedAllWords,
+    filterDueNow,
+    filterFamiliarityOperator,
+    filterFamiliarityValue,
+    filterSelectedTagIds,
+    filterTagTextbook,
+    filterTagGrade,
+    filterTagUnit,
+    filterTagLesson,
+    filterHasContent,
+    wordTagsMap,
+    hanziWithContent,
+  ]);
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredWords.length / ITEMS_PER_PAGE);
@@ -146,7 +235,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterDueNow, filterFamiliarityValue, filterSelectedTagIds]);
+  }, [filterDueNow, filterFamiliarityValue, filterSelectedTagIds, filterTagTextbook, filterTagGrade, filterTagUnit, filterTagLesson, filterHasContent]);
 
   // Update the visibleWordIds to use paginatedWords instead of sortedAllWords
   useEffect(() => {
@@ -169,8 +258,13 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   }, [isChild]);
 
   const paginatedWordIds = useMemo(() => paginatedWords.map(({ word }) => word.id), [paginatedWords]);
+  const hasActivePartialTagFilter = !!(filterTagTextbook || filterTagGrade || filterTagUnit || filterTagLesson);
   const hasActiveFilters =
-    filterDueNow || filterFamiliarityValue !== "" || filterSelectedTagIds.length > 0;
+    filterDueNow ||
+    filterFamiliarityValue !== "" ||
+    filterSelectedTagIds.length > 0 ||
+    hasActivePartialTagFilter ||
+    filterHasContent !== "";
 
   useEffect(() => {
     if (!batchTextbookId) {
@@ -445,6 +539,11 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     setFilterFamiliarityOperator("<=");
     setFilterFamiliarityValue("");
     setFilterSelectedTagIds([]);
+    setFilterTagTextbook("");
+    setFilterTagGrade("");
+    setFilterTagUnit("");
+    setFilterTagLesson("");
+    setFilterHasContent("");
     setCurrentPage(1);
   }
 
@@ -494,115 +593,200 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
             type="button"
             onClick={clearAllFilters}
             className="text-xs text-blue-600 underline disabled:opacity-50"
-            disabled={!filterDueNow && filterFamiliarityValue === "" && filterSelectedTagIds.length === 0}
+            disabled={!hasActiveFilters}
           >
             {str.all.filters.clearButton}
           </button>
         </div>
 
         {filterSectionOpen && (
-          <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
-            {/* Due Now + Familiarity in flex row on the left */}
-            <div className="flex gap-12 items-start">
-              {/* Due Now Filter */}
-              <div className="pt-6">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={filterDueNow}
-                  onChange={(e) => setFilterDueNow(e.target.checked)}
-                  title={str.all.filters.dueNow.tooltip}
-                />
-                <span className="text-sm">{str.all.filters.dueNow.label}</span>
-              </label>
+          <div className="space-y-4">
+            {/* Row 1: Tag-related filters */}
+            <div className="flex gap-6 items-start">
+              {/* Tags (full multi-select) */}
+              <div className="space-y-1 flex-1">
+                <label className="block text-xs text-gray-600">{str.all.filters.tags.label}</label>
+                <details className="group">
+                  <summary className="cursor-pointer rounded-md border px-2 py-1 text-sm bg-gray-50 hover:bg-gray-100">
+                    {filterSelectedTagIds.length === 0
+                      ? str.all.filters.tags.placeholder
+                      : str.all.filters.tags.selectedCount.replace("{count}", String(filterSelectedTagIds.length))}
+                  </summary>
+                  <div className="mt-2 space-y-1 max-h-96 overflow-y-auto border rounded-md p-2 bg-white">
+                    {availableTagsWithIds.length === 0 ? (
+                      <p className="text-xs text-gray-500 py-2">{str.all.filters.tags.placeholder}</p>
+                    ) : (
+                      <>
+                        <div className="mb-2 flex flex-wrap items-center gap-2 border-b pb-2">
+                          <button
+                            type="button"
+                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary disabled:opacity-50"
+                            onClick={() => setFilterSelectedTagIds(getAllTagFilterOptionIds(availableTagsWithIds))}
+                            disabled={availableTagsWithIds.length === 0}
+                          >
+                            {str.all.filters.tags.selectAll}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
+                            onClick={() => setFilterSelectedTagIds([])}
+                            disabled={filterSelectedTagIds.length === 0}
+                          >
+                            {str.all.filters.tags.clearAll}
+                          </button>
+                        </div>
+                        {availableTagsWithIds.map((tag) => {
+                          const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+                          const isSelected = filterSelectedTagIds.includes(tag.id);
+                          return (
+                            <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) =>
+                                  setFilterSelectedTagIds((prev) =>
+                                    toggleTagFilterId(prev, tag.id, e.target.checked)
+                                  )
+                                }
+                              />
+                              <span>{tagDisplay}</span>
+                            </label>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                </details>
+              </div>
+
+              {/* Filter by Tag Part (2×2 cascade) */}
+              <div className="space-y-1 flex-1">
+                <label className="block text-xs text-gray-600">{str.all.filters.partialTag.label}</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-0.5">
+                    <label className="block text-[11px] text-gray-500">{str.all.filters.partialTag.textbookLabel}</label>
+                    <select
+                      className="w-full rounded border px-1.5 py-1 text-xs bg-white"
+                      value={filterTagTextbook}
+                      onChange={(e) => {
+                        setFilterTagTextbook(e.target.value);
+                        setFilterTagGrade("");
+                        setFilterTagUnit("");
+                        setFilterTagLesson("");
+                      }}
+                    >
+                      <option value="">{str.all.filters.partialTag.allOption}</option>
+                      {partialFilterTextbookOptions.map((tb) => (
+                        <option key={tb} value={tb}>{tb}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-0.5">
+                    <label className="block text-[11px] text-gray-500">{str.all.filters.partialTag.gradeLabel}</label>
+                    <select
+                      className="w-full rounded border px-1.5 py-1 text-xs bg-white"
+                      value={filterTagGrade}
+                      onChange={(e) => {
+                        setFilterTagGrade(e.target.value);
+                        setFilterTagUnit("");
+                        setFilterTagLesson("");
+                      }}
+                    >
+                      <option value="">{str.all.filters.partialTag.allOption}</option>
+                      {partialFilterGradeOptions.map((g) => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-0.5">
+                    <label className="block text-[11px] text-gray-500">{str.all.filters.partialTag.unitLabel}</label>
+                    <select
+                      className="w-full rounded border px-1.5 py-1 text-xs bg-white"
+                      value={filterTagUnit}
+                      onChange={(e) => {
+                        setFilterTagUnit(e.target.value);
+                        setFilterTagLesson("");
+                      }}
+                    >
+                      <option value="">{str.all.filters.partialTag.allOption}</option>
+                      {partialFilterUnitOptions.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-0.5">
+                    <label className="block text-[11px] text-gray-500">{str.all.filters.partialTag.lessonLabel}</label>
+                    <select
+                      className="w-full rounded border px-1.5 py-1 text-xs bg-white"
+                      value={filterTagLesson}
+                      onChange={(e) => setFilterTagLesson(e.target.value)}
+                    >
+                      <option value="">{str.all.filters.partialTag.allOption}</option>
+                      {partialFilterLessonOptions.map((l) => (
+                        <option key={l} value={l}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
             </div>
 
-            {/* Familiarity Filter */}
-            <div className="flex-grow space-y-1">
-              <label className="block text-xs text-gray-600">{str.all.filters.familiarity.label}</label>
-              <div className="flex gap-2 items-center">
+            {/* Row 2: Due Now + Familiarity + Has Content */}
+            <div className="flex flex-wrap gap-8 items-start border-t pt-3">
+              <div className="pt-5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filterDueNow}
+                    onChange={(e) => setFilterDueNow(e.target.checked)}
+                    title={str.all.filters.dueNow.tooltip}
+                  />
+                  <span className="text-sm">{str.all.filters.dueNow.label}</span>
+                </label>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs text-gray-600">{str.all.filters.familiarity.label}</label>
+                <div className="flex gap-2 items-center">
+                  <select
+                    className="flex-shrink-0 rounded-md border px-2 py-1 text-sm"
+                    value={filterFamiliarityOperator}
+                    onChange={(e) => setFilterFamiliarityOperator(e.target.value as "<=" | ">=")}
+                    title={str.all.filters.familiarity.tooltip}
+                  >
+                    <option value="<=">{str.all.filters.familiarity.operators.lessThanOrEqual}</option>
+                    <option value=">=">{str.all.filters.familiarity.operators.greaterThanOrEqual}</option>
+                  </select>
+                  <input
+                    type="number"
+                    className="w-44 rounded-md border px-2 py-1 text-sm"
+                    min="0"
+                    max="100"
+                    placeholder={str.all.filters.familiarity.valueLabel}
+                    value={filterFamiliarityValue}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFilterFamiliarityValue(val === "" ? "" : Math.max(0, Math.min(100, Number(val))));
+                    }}
+                    title={str.all.filters.familiarity.tooltip}
+                  />
+                </div>
+              </div>
+              {/* Has Content filter */}
+              <div className="space-y-1">
+                <label className="block text-xs text-gray-600">{str.all.filters.hasContent.label}</label>
                 <select
-                  className="flex-shrink-0 rounded-md border px-2 py-1 text-sm"
-                  value={filterFamiliarityOperator}
-                  onChange={(e) => setFilterFamiliarityOperator(e.target.value as "<=" | ">=")}
-                  title={str.all.filters.familiarity.tooltip}
+                  className="rounded-md border px-2 py-1 text-sm bg-white"
+                  value={filterHasContent}
+                  onChange={(e) => setFilterHasContent(e.target.value as "" | "yes" | "no")}
                 >
-                  <option value="<=">{str.all.filters.familiarity.operators.lessThanOrEqual}</option>
-                  <option value=">=">{str.all.filters.familiarity.operators.greaterThanOrEqual}</option>
+                  <option value="">{str.all.filters.hasContent.all}</option>
+                  <option value="yes">{str.all.filters.hasContent.yes}</option>
+                  <option value="no">{str.all.filters.hasContent.no}</option>
                 </select>
-                <input
-                  type="number"
-                  className="flex-grow rounded-md border px-2 py-1 text-sm"
-                  min="0"
-                  max="100"
-                  placeholder={str.all.filters.familiarity.valueLabel}
-                  value={filterFamiliarityValue}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFilterFamiliarityValue(val === "" ? "" : Math.max(0, Math.min(100, Number(val))));
-                  }}
-                  title={str.all.filters.familiarity.tooltip}
-                />
               </div>
             </div>
           </div>
-
-          {/* Tags Filter */}
-          <div className="space-y-1 pt-0">
-            <label className="block text-xs text-gray-600">{str.all.filters.tags.label}</label>
-            <details className="group">
-              <summary className="cursor-pointer rounded-md border px-2 py-1 text-sm bg-gray-50 hover:bg-gray-100">
-                {filterSelectedTagIds.length === 0
-                  ? str.all.filters.tags.placeholder
-                  : str.all.filters.tags.selectedCount.replace("{count}", String(filterSelectedTagIds.length))}
-              </summary>
-              <div className="mt-2 space-y-1 max-h-96 overflow-y-auto border rounded-md p-2 bg-white">
-                {availableTagsWithIds.length === 0 ? (
-                  <p className="text-xs text-gray-500 py-2">{str.all.filters.tags.placeholder}</p>
-                ) : (
-                  <>
-                    <div className="mb-2 flex flex-wrap items-center gap-2 border-b pb-2">
-                      <button
-                        type="button"
-                        className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary disabled:opacity-50"
-                        onClick={() => setFilterSelectedTagIds(getAllTagFilterOptionIds(availableTagsWithIds))}
-                        disabled={availableTagsWithIds.length === 0}
-                      >
-                        {str.all.filters.tags.selectAll}
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
-                        onClick={() => setFilterSelectedTagIds([])}
-                        disabled={filterSelectedTagIds.length === 0}
-                      >
-                        {str.all.filters.tags.clearAll}
-                      </button>
-                    </div>
-                    {availableTagsWithIds.map((tag) => {
-                      const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
-                      const isSelected = filterSelectedTagIds.includes(tag.id);
-                      return (
-                        <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) =>
-                              setFilterSelectedTagIds((prev) =>
-                                toggleTagFilterId(prev, tag.id, e.target.checked)
-                              )
-                            }
-                          />
-                          <span>{tagDisplay}</span>
-                        </label>
-                      );
-                    })}
-                  </>
-                )}
-              </div>
-            </details>
-          </div>
-        </div>
         )}
       </div>
 
@@ -929,7 +1113,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
         <p>{str.common.loading}</p>
       ) : words.length === 0 ? (
         <p>{str.all.noCharacters}</p>
-      ) : filteredWords.length === 0 && (filterDueNow || filterFamiliarityValue !== "" || filterSelectedTagIds.length > 0) ? (
+      ) : filteredWords.length === 0 && hasActiveFilters ? (
         <div className="flex items-center justify-between rounded-lg border p-4 bg-blue-50">
           <p>{str.all.filters.noMatch}</p>
           <button
