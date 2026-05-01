@@ -11,7 +11,7 @@ import type {
   AdminTarget,
 } from "./admin.types";
 import { getAllTagFilterOptionIds, toggleTagFilterId } from "../shared/tagFilter.utils";
-import { renderPhraseWithPinyin, renderSentenceWithPinyin } from "../shared/words.shared.utils";
+import { matchesCharacterSearchFilter, renderPhraseWithPinyin, renderSentenceWithPinyin } from "../shared/words.shared.utils";
 
 type AdminBatchWarningKind = "content_all" | "pinyin_all";
 
@@ -713,6 +713,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [filterTagGrades, setFilterTagGrades] = useState<string[]>([]);
   const [filterTagUnits, setFilterTagUnits] = useState<string[]>([]);
   const [filterTagLessons, setFilterTagLessons] = useState<string[]>([]);
+  const [filterCharacterSearch, setFilterCharacterSearch] = useState("");
   const [filterSectionOpen, setFilterSectionOpen] = useState(false);
   const [reviewTestSessionFormOpen, setReviewTestSessionFormOpen] = useState(false);
   const [reviewTestSessionName, setReviewTestSessionName] = useState("");
@@ -857,6 +858,9 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         if (!hasMatchingTag) return false;
       }
 
+      // Filter: Character search
+      if (!matchesCharacterSearchFilter(target.character, filterCharacterSearch)) return false;
+
       return true;
     });
   }, [
@@ -867,6 +871,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     filterTagGrades,
     filterTagUnits,
     filterTagLessons,
+    filterCharacterSearch,
     adminTargetByKey,
     vm.words,
     vm.wordTagsMap,
@@ -880,7 +885,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     (adminStatsFilter !== "targets" && adminStatsFilter !== "characters") ||
     filterDueNow ||
     filterSelectedTagIds.length > 0 ||
-    hasActivePartialTagFilter;
+    hasActivePartialTagFilter ||
+    filterCharacterSearch.trim() !== "";
 
   const adminRowPages = useMemo(
     () => paginateAdminRowsByCharacter(filteredAdminRenderRows, ITEMS_PER_PAGE),
@@ -943,7 +949,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterDueNow, filterFamiliarityValue, filterSelectedTagIds]);
+  }, [filterDueNow, filterFamiliarityValue, filterSelectedTagIds, filterCharacterSearch]);
 
   useEffect(() => {
     if (adminSelectedTargetKeys.length > 0) {
@@ -978,6 +984,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     setFilterTagGrades([]);
     setFilterTagUnits([]);
     setFilterTagLessons([]);
+    setFilterCharacterSearch("");
     setCurrentPage(1);
   }
 
@@ -1237,7 +1244,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
             type="button"
             onClick={clearAllFilters}
             className="text-xs text-blue-600 underline disabled:opacity-50"
-            disabled={!filterDueNow && filterFamiliarityValue === "" && filterSelectedTagIds.length === 0 && !hasActivePartialTagFilter}
+            disabled={!filterDueNow && filterFamiliarityValue === "" && filterSelectedTagIds.length === 0 && !hasActivePartialTagFilter && filterCharacterSearch.trim() === ""}
           >
             {str.admin.filters.clearButton}
           </button>
@@ -1245,6 +1252,20 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
         {filterSectionOpen && (
           <div className="flex flex-wrap items-start gap-12">
+            {/* Character Search */}
+            <div className="space-y-1">
+              <label className="block text-xs text-gray-600">
+                {str.admin.filters.characterSearch.label}
+              </label>
+              <input
+                type="text"
+                className="rounded-md border px-2 py-1 text-sm w-full max-w-xs"
+                placeholder={str.admin.filters.characterSearch.placeholder}
+                value={filterCharacterSearch}
+                onChange={(e) => setFilterCharacterSearch(e.target.value)}
+              />
+            </div>
+
             {/* Due Now Filter */}
             <div className="pt-5">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -1258,64 +1279,66 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               </label>
             </div>
 
-            {/* Tags Filter */}
-            <div className="w-1/2 space-y-1">
-              <label className="block text-xs text-gray-600">{str.admin.filters.tags.label}</label>
-              <details className="group">
-                <summary className="cursor-pointer rounded-md border px-2 py-1 text-sm bg-gray-50 hover:bg-gray-100">
-                  {filterSelectedTagIds.length === 0
-                    ? str.admin.filters.tags.placeholder
-                    : str.admin.filters.tags.selectedCount.replace("{count}", String(filterSelectedTagIds.length))}
-                </summary>
-                <div className="mt-2 space-y-1 max-h-96 overflow-y-auto border rounded-md p-2 bg-white">
-                  {availableTagsWithIds.length === 0 ? (
-                    <p className="text-xs text-gray-500 py-2">{str.admin.filters.tags.placeholder}</p>
-                  ) : (
-                    <>
-                      <div className="mb-2 flex flex-wrap items-center gap-2 border-b pb-2">
-                        <button
-                          type="button"
-                          className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary disabled:opacity-50"
-                          onClick={() => setFilterSelectedTagIds(getAllTagFilterOptionIds(availableTagsWithIds))}
-                          disabled={availableTagsWithIds.length === 0}
-                        >
-                          {str.admin.filters.tags.selectAll}
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
-                          onClick={() => setFilterSelectedTagIds([])}
-                          disabled={filterSelectedTagIds.length === 0}
-                        >
-                          {str.admin.filters.tags.clearAll}
-                        </button>
-                      </div>
-                      {availableTagsWithIds.map((tag) => {
-                        const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
-                        const isSelected = filterSelectedTagIds.includes(tag.id);
-                        return (
-                          <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) =>
-                                setFilterSelectedTagIds((prev) =>
-                                  toggleTagFilterId(prev, tag.id, e.target.checked)
-                                )
-                              }
-                            />
-                            <span>{tagDisplay}</span>
-                          </label>
-                        );
-                      })}
-                    </>
-                  )}
-                </div>
-              </details>
-            </div>
+            {/* Tag-related filters: Tags (Cascade) + Filter by Tag Part on same row */}
+            <div className="flex items-start gap-6">
+              {/* Tags Filter */}
+              <div className="space-y-1">
+                <label className="block text-xs text-gray-600">{str.admin.filters.tags.label}</label>
+                <details className="group">
+                  <summary className="cursor-pointer rounded-md border px-2 py-1 text-sm bg-gray-50 hover:bg-gray-100">
+                    {filterSelectedTagIds.length === 0
+                      ? str.admin.filters.tags.placeholder
+                      : str.admin.filters.tags.selectedCount.replace("{count}", String(filterSelectedTagIds.length))}
+                  </summary>
+                  <div className="mt-2 space-y-1 max-h-96 overflow-y-auto border rounded-md p-2 bg-white">
+                    {availableTagsWithIds.length === 0 ? (
+                      <p className="text-xs text-gray-500 py-2">{str.admin.filters.tags.placeholder}</p>
+                    ) : (
+                      <>
+                        <div className="mb-2 flex flex-wrap items-center gap-2 border-b pb-2">
+                          <button
+                            type="button"
+                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary disabled:opacity-50"
+                            onClick={() => setFilterSelectedTagIds(getAllTagFilterOptionIds(availableTagsWithIds))}
+                            disabled={availableTagsWithIds.length === 0}
+                          >
+                            {str.admin.filters.tags.selectAll}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
+                            onClick={() => setFilterSelectedTagIds([])}
+                            disabled={filterSelectedTagIds.length === 0}
+                          >
+                            {str.admin.filters.tags.clearAll}
+                          </button>
+                        </div>
+                        {availableTagsWithIds.map((tag) => {
+                          const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+                          const isSelected = filterSelectedTagIds.includes(tag.id);
+                          return (
+                            <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) =>
+                                  setFilterSelectedTagIds((prev) =>
+                                    toggleTagFilterId(prev, tag.id, e.target.checked)
+                                  )
+                                }
+                              />
+                              <span>{tagDisplay}</span>
+                            </label>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                </details>
+              </div>
 
-            {/* Partial Tag Filter */}
-            <div className="space-y-2">
+              {/* Partial Tag Filter */}
+              <div className="space-y-2">
               <label className="block text-xs text-gray-600">{str.admin.filters.partialTag.label}</label>
               <div className="grid grid-cols-2 gap-2 min-w-[280px]">
                 {/* Textbook */}
@@ -1436,6 +1459,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                   </details>
                 </div>
               </div>
+            </div>
             </div>
           </div>
         )}

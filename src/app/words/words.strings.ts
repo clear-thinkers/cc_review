@@ -771,6 +771,10 @@ export const wordsStrings = {
           allOption: "All",
           selectedCount: "{count} selected",
         },
+        characterSearch: {
+          label: "Character Search",
+          placeholder: "Enter characters to search...",
+        },
       },
       pagination: {
         pageInfo: "Page {current} of {total}",
@@ -833,6 +837,10 @@ export const wordsStrings = {
           all: "All",
           yes: "Yes",
           no: "No",
+        },
+        characterSearch: {
+          label: "Character Search",
+          placeholder: "Enter characters to search...",
         },
       },
       pagination: {
@@ -1759,6 +1767,10 @@ export const wordsStrings = {
           allOption: "全部",
           selectedCount: "已选择 {count} 个",
         },
+        characterSearch: {
+          label: "汉字搜索",
+          placeholder: "输入汉字进行搜索...",
+        },
       },
       pagination: {
         pageInfo: "第 {current} 页，共 {total} 页",
@@ -1821,6 +1833,10 @@ export const wordsStrings = {
           all: "全部",
           yes: "是",
           no: "否",
+        },
+        characterSearch: {
+          label: "汉字搜索",
+          placeholder: "输入汉字进行搜索...",
         },
       },
       pagination: {

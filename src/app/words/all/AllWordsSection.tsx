@@ -8,6 +8,7 @@ import { assignWordLessonTags, clearWordLessonTags, createLessonTagIfNew, create
 import type { LessonTag, Textbook } from "../shared/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import { getAllTagFilterOptionIds, toggleTagFilterId } from "../shared/tagFilter.utils";
+import { matchesCharacterSearchFilter } from "../shared/words.shared.utils";
 import { matchesFamiliarityFilter } from "./all.utils";
 
 function appendSelectedOption(options: string[], selectedValue: string | null): string[] {
@@ -83,6 +84,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [filterTagUnits, setFilterTagUnits] = useState<string[]>([]);
   const [filterTagLessons, setFilterTagLessons] = useState<string[]>([]);
   const [filterHasContent, setFilterHasContent] = useState<"" | "yes" | "no">("");
+  const [filterCharacterSearch, setFilterCharacterSearch] = useState("");
   const [filterSectionOpen, setFilterSectionOpen] = useState(false);
 
   // Pagination state
@@ -207,6 +209,9 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       if (filterHasContent === "yes" && !hanziWithContent.has(word.hanzi)) return false;
       if (filterHasContent === "no" && hanziWithContent.has(word.hanzi)) return false;
 
+      // Filter: Character search
+      if (!matchesCharacterSearchFilter(word.hanzi, filterCharacterSearch)) return false;
+
       return true;
     });
   }, [
@@ -220,6 +225,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     filterTagUnits,
     filterTagLessons,
     filterHasContent,
+    filterCharacterSearch,
     wordTagsMap,
     hanziWithContent,
   ]);
@@ -235,7 +241,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterDueNow, filterFamiliarityValue, filterSelectedTagIds, filterTagTextbooks, filterTagGrades, filterTagUnits, filterTagLessons, filterHasContent]);
+  }, [filterDueNow, filterFamiliarityValue, filterSelectedTagIds, filterTagTextbooks, filterTagGrades, filterTagUnits, filterTagLessons, filterHasContent, filterCharacterSearch]);
 
   // Update the visibleWordIds to use paginatedWords instead of sortedAllWords
   useEffect(() => {
@@ -264,7 +270,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     filterFamiliarityValue !== "" ||
     filterSelectedTagIds.length > 0 ||
     hasActivePartialTagFilter ||
-    filterHasContent !== "";
+    filterHasContent !== "" ||
+    filterCharacterSearch.trim() !== "";
 
   useEffect(() => {
     if (!batchTextbookId) {
@@ -544,6 +551,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
     setFilterTagUnits([]);
     setFilterTagLessons([]);
     setFilterHasContent("");
+    setFilterCharacterSearch("");
     setCurrentPage(1);
   }
 
@@ -601,6 +609,20 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
 
         {filterSectionOpen && (
           <div className="space-y-4">
+            {/* Character Search */}
+            <div className="space-y-1">
+              <label className="block text-xs text-gray-600">
+                {str.all.filters.characterSearch.label}
+              </label>
+              <input
+                type="text"
+                className="rounded-md border px-2 py-1 text-sm w-full max-w-xs"
+                placeholder={str.all.filters.characterSearch.placeholder}
+                value={filterCharacterSearch}
+                onChange={(e) => setFilterCharacterSearch(e.target.value)}
+              />
+            </div>
+
             {/* Row 1: Tag-related filters */}
             <div className="flex gap-6 items-start">
               {/* Tags (full multi-select) */}

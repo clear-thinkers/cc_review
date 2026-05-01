@@ -310,6 +310,14 @@ export function extractUniqueHanzi(input: string): string[] {
   return unique;
 }
 
+export function matchesCharacterSearchFilter(hanzi: string, searchInput: string): boolean {
+  const trimmed = searchInput.trim();
+  if (!trimmed) return true;
+  const chars = extractUniqueHanzi(trimmed);
+  if (chars.length === 0) return true;
+  return chars.includes(hanzi);
+}
+
 export function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
