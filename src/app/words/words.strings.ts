@@ -236,7 +236,8 @@ export const wordsStrings = {
         submitButton: "Submit answer",
       },
       results: {
-        scoreLabel: "Score: {correct}/3, scheduler tier: ",
+        scoreLabel: "Score: {correct}/{total}",
+        memberGradeLabel: "{hanzi}: {correct}/{total}, grade {grade}",
         nextCharacterButton: "Next character",
         sentenceResult: "Sentence {index}: {result} (chosen: {chosen}, expected: {expected})",
         correct: "correct",
@@ -267,6 +268,10 @@ export const wordsStrings = {
         stayButton: "Stay in quiz",
         leaveButton: "Leave quiz",
         imageAlt: "Sad milk puddle warning",
+      },
+      notices: {
+        noQuizReady: "No due characters match this fill-test selection.",
+        skippedBundledCharacters: "Skipped {characters} because no valid bundled quiz could be built.",
       },
       completionMessage: "Fill-test quiz complete.",
       reviewTestSession: {
@@ -1243,7 +1248,8 @@ export const wordsStrings = {
         submitButton: "提交答案",
       },
       results: {
-        scoreLabel: "得分: {correct}/3, 调度等级: ",
+        scoreLabel: "得分: {correct}/{total}",
+        memberGradeLabel: "{hanzi}：{correct}/{total}，等级 {grade}",
         nextCharacterButton: "下一个汉字",
         sentenceResult: "例句 {index}: {result}（选择: {chosen}，正确: {expected}）",
         correct: "正确",
@@ -1274,6 +1280,10 @@ export const wordsStrings = {
         stayButton: "继续测试",
         leaveButton: "离开测试",
         imageAlt: "难过的牛奶警告图",
+      },
+      notices: {
+        noQuizReady: "没有符合本次填空测试的到期汉字。",
+        skippedBundledCharacters: "已跳过 {characters}，因为无法组成有效的组合测试。",
       },
       completionMessage: "填空测试已完成",
       reviewTestSession: {

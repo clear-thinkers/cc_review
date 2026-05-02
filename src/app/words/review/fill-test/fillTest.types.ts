@@ -1,4 +1,4 @@
-import type { FillTest, Tier } from "@/lib/fillTest";
+import type { BundledFillTestResult, FillTest, Tier } from "@/lib/fillTest";
 import type { Word } from "@/lib/types";
 
 /**
@@ -14,14 +14,11 @@ export type QuizHistoryItem = {
   wordId: string;
   hanzi: string;
   tier: Tier;
-  correctCount: 0 | 1 | 2 | 3;
+  correctCount: number;
+  totalCount: number;
 };
 
-export type QuizSelections = [
-  0 | 1 | 2 | null,
-  0 | 1 | 2 | null,
-  0 | 1 | 2 | null
-];
+export type QuizSelections = Array<number | null>;
 
 export type QuizSummary = {
   again: number;
@@ -34,4 +31,11 @@ export type QuizSummary = {
 export type FillTestCandidateRow = {
   phrase: string;
   example: string;
+  characterId?: string;
 };
+
+export type BundledFillTest = FillTest;
+
+export type BundledFillTestMember = NonNullable<FillTest["members"]>[number];
+
+export type BundledQuizResult = BundledFillTestResult;

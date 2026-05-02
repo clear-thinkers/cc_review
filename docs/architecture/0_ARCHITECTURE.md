@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-04-13_
+_Last updated: 2026-05-02_
 
 ---
 
@@ -20,7 +20,7 @@ Tier 1 rules (active):
 - Review sessions consume **persisted content only** — no live generation.
 - AI generation is scoped to admin authoring workflows only (`/words/admin` → `/api/flashcard/generate`).
 - Flashcard content is keyed by `character|pronunciation` and normalized before persistence.
-- Fill-test eligibility is derived from saved phrase/example rows and `include_in_fill_test` flags.
+- Fill-test eligibility is derived from saved phrase/example rows and `include_in_fill_test` flags. One eligible phrase/example row is enough for runtime quiz eligibility; low-phrase characters are bundled at session start.
 - Unsafe content and malformed payloads are dropped during normalization before they can be persisted.
 - Coins are earned from completed quiz sessions and spent only through persisted shop unlocks; neither earning nor spend changes scheduler state.
 
@@ -111,7 +111,7 @@ These rules govern content curation at `/words/admin`:
 8. Content-status buckets are defined as:
    - `with content`: at least one normalized phrase row exists
    - `missing content`: no normalized phrase row exists
-   - `ready for testing`: has content and at least one phrase included for fill test
+   - `ready for testing`: has content and at least one phrase included for fill test; runtime bundled fill-test mode can quiz one- or two-phrase characters
    - `excluded for testing`: has content but no phrase included for fill test
 9. Batch AI content generation is exposed from the Content Admin action toolbar with four scopes: `missing only`, `all`, `filtered only`, and `selected only`. The `missing only` action resolves against all admin targets and skips targets that already have persisted content; the `all` action resolves against all admin targets and overwrites persisted content. The `filtered only` and `selected only` scopes overwrite persisted content for their resolved target sets. The destructive `all` action requires a confirmation dialog before mutation.
 10. Characters with no dictionary pronunciation are skipped with notice; this is not a fatal load error.
@@ -151,16 +151,17 @@ These rules govern the due queue view at `/words/review`:
 5. The page routes to `/words/review/flashcard` and `/words/review/fill-test`, optionally scoped by `wordId`.
 6. This page must not grade words, mutate scheduler fields, create/delete words, or persist admin content edits.
 7. Due-table sorting is client-side; default due ordering uses `nextReviewAt` then `createdAt` as tie-breaker.
-8. Fill-test start/action controls are enabled only when a due row has a usable derived `fillTest`.
-9. Any change to fill-test eligibility or semantics must be reflected here and in the Content Admin Curation Rules (§1) concurrently. Failure to update both documents is a documentation gap.
-10. Due Review also lists active packaged review test sessions for both parent and child users.
-11. Packaged review test sessions are visible on Due Review even when their packaged characters are not currently due.
-12. Parents may inspect packaged targets from Due Review and may delete an active packaged review test session, but cannot initiate one.
-13. Children (and platform admin) may initiate a packaged review test session from Due Review only when at least one packaged character has usable quiz content.
-14. Packaged review test sessions run in two phases: flashcard review first, then immediate handoff into fill-test for the same packaged character set.
-15. Runtime groups multiple packaged targets for the same Hanzi back into one character-level review/test unit; grading remains character-level on the underlying `words.id`.
-16. If duplicate `words` rows for the same Hanzi are encountered at packaged-session runtime despite the schema uniqueness rule, the session must block with an error rather than guess.
-17. Completing a packaged review test session marks it complete and removes it from the active Due Review session list; its name becomes reusable for a future session in the same family.
+8. Fill-test start/action controls are enabled when a due row has at least one usable derived fill-test phrase/example row.
+9. Fill-test sessions use bundled runtime planning: one- and two-phrase characters are queued in bundled quizzes before ordinary three-sentence quizzes; standard characters used as bundle partners do not appear again as ordinary quizzes in the same session.
+10. Any change to fill-test eligibility or semantics must be reflected here and in the Content Admin Curation Rules (§1) concurrently. Failure to update both documents is a documentation gap.
+11. Due Review also lists active packaged review test sessions for both parent and child users.
+12. Packaged review test sessions are visible on Due Review even when their packaged characters are not currently due.
+13. Parents may inspect packaged targets from Due Review and may delete an active packaged review test session, but cannot initiate one.
+14. Children (and platform admin) may initiate a packaged review test session from Due Review only when at least one packaged character has usable quiz content.
+15. Packaged review test sessions run in two phases: flashcard review first, then immediate handoff into bundled fill-test planning for the same packaged character set.
+16. Runtime groups multiple packaged targets for the same Hanzi back into one character-level review/test unit; grading remains character-level on the underlying `words.id`.
+17. If duplicate `words` rows for the same Hanzi are encountered at packaged-session runtime despite the schema uniqueness rule, the session must block with an error rather than guess.
+18. Completing a packaged review test session marks it complete and removes it from the active Due Review session list; its name becomes reusable for a future session in the same family.
 
 ### Flashcard Review Rules (`/words/review/flashcard`)
 
@@ -176,6 +177,25 @@ These rules govern the flashcard review screen for memory consolidation:
 5. Parent component manages session-level state (toggle, word sequence); individual cards are stateless display components.
 6. No grading buttons, no progress tracking, no scheduler mutations on this screen.
 7. Any change to how flashcard content is displayed (phrases, pinyin, layout) must be codified here before implementation.
+
+### Fill-Test Review Rules (`/words/review/fill-test`)
+
+These rules govern bundled fill-test quiz sessions:
+
+1. Fill-test review reads persisted `flashcardContents` only and uses phrase/example rows where `include_in_fill_test=true`.
+2. One eligible phrase/example row is enough to make a character eligible for runtime bundled planning.
+3. Session planning partitions eligible characters into low-phrase characters (one or two eligible rows) and standard characters (three or more eligible rows).
+4. Bundled quizzes are queued before ordinary quizzes. Planning priority is: low+standard bundles, then low+low bundles with at least three combined unique phrases, then two one-phrase characters as a two-blank bundle, then a single one-phrase character as a one-blank quiz, then remaining ordinary three-blank standard quizzes.
+5. A standard character can be used as a bundle partner at most once per session. If used in a bundle, it does not appear later as an ordinary quiz in that session.
+6. Ordinary standard quizzes continue to use exactly three phrase/example rows. Standard bundle partners also contribute exactly three rows.
+7. The fill-test UI supports one through five blanks, with one phrase option per blank.
+8. Each sentence/blank carries character attribution so bundled grading can split results by underlying character.
+9. Grading remains character-level. A bundled quiz appends one grade entry per included character, not one grade entry per blank.
+10. Standard characters with three blanks use the existing three-blank rule: `3/3=easy`, `2/3=good`, `1/3=hard`, `0/3=again`.
+11. Low-phrase characters use the correct-rate rule on their own blanks: all correct is `easy`, partial and greater than 50% is `good`, partial and less than or equal to 50% is `hard`, none correct is `again`.
+12. Quiz-session coin logic is unchanged and continues to award from character-level grade entries: `easy=5`, `good=3`, `hard=1`, `again=0`.
+13. Packaged review test sessions use the same bundled fill-test planner over the packaged quiz-ready character set.
+14. Fill-test review does not add routes, tables, columns, RPCs, RLS policies, or AI calls.
 
 ### Quiz Results Rules (`/words/results`)
 

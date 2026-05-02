@@ -20,13 +20,14 @@ describe("Fill-Test Types", () => {
       hanzi: "中",
       tier: "easy",
       correctCount: 2,
+      totalCount: 3,
     };
     expect(item.correctCount).toBe(2);
   });
 
   it("should allow creating QuizSelections tuples", () => {
-    const selections: QuizSelections = [0, 1, null];
-    expect(selections).toHaveLength(3);
+    const selections: QuizSelections = [0, 1, null, 3];
+    expect(selections).toHaveLength(4);
     expect(selections[2]).toBeNull();
   });
 

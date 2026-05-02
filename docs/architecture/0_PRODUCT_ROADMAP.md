@@ -1,8 +1,9 @@
 ﻿# Product Roadmap — HanziQuest (`cc_review`)
 
-_Last updated: 2026-03-26 · Authority hierarchy: see `AI_CONTRACT.md`_
+_Last updated: 2026-05-02 · Authority hierarchy: see `AI_CONTRACT.md`_
 
 **Current state:** Tier 1, Phase 2 complete. Pre-pilot.
+Bundled phrase quiz mode shipped on 2026-05-02.
 One Tier 1 gate remains open: mobile layout for quiz results.
 Tier 2 is blocked until all Tier 1 gates close.
 
@@ -15,13 +16,12 @@ Tier 2 is blocked until all Tier 1 gates close.
 | ID | Feature | Notes | Spec | Status |
 |----|---------|-------|------|--------|
 | A | Mobile quiz results layout | `/words/results` table breaks on iPhone | — | 📋 Planned |
-| B | Grouped phrase quiz mode | Bundle phrases across characters in a session | TBD | 📋 Planned |
 | C | Parent difficulty setting | Beginner-level AI prompts scoped per family; admin configures via Prompts page | TBD | 📋 Planned |
 | D | Phrase-keyed input | Parent enters a phrase (not just a character) as primary unit | TBD | 📋 Planned |
 | E | Pilot feedback triage | Collect and triage structured feedback from pilot families | — | 🔄 In Progress |
 | F | Ingredient shopping for kids | Add shopping controls to the ingredient detail page so kids can mark/add ingredients while viewing a recipe's ingredients | `docs/feature-specs/2026-03-30-shop-ingredient-shopping.md` | 📋 Planned |
 
-> B–F require spec before build. See `AI_CONTRACT.md §2` for scope confirmation rules.
+> Planned features with a `TBD` spec require a feature spec before build. See `AI_CONTRACT.md §2` for scope confirmation rules.
 
 ---
 
@@ -53,3 +53,5 @@ Note that specs may not reflect the current implementation — the codebase has 
 
 - 2026-04-22: Quiz Results can package one session's failed Hanzi into a named review test session via the existing packaged-session flow.
   Spec: `docs/feature-specs/2026-04-22-results-failed-to-test-session.md`
+- 2026-05-02: Bundled phrase quiz mode allows one- and two-phrase characters to enter fill-test sessions through runtime bundles, with per-character grading and unchanged coin logic.
+  Spec: `docs/feature-specs/2026-05-02-grouped-phrase-quiz-mode.md`

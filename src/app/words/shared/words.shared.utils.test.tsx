@@ -2,10 +2,12 @@ import { Children, isValidElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import {
   applyAdminMeaningEdit,
+  buildBundledFillTestPlan,
   renderPhraseWithPinyin,
   renderSentenceWithPinyin,
   tokenizePinyinSyllables,
 } from "./words.shared.utils";
+import type { TestableWord } from "../review/fill-test/fillTest.types";
 
 type NodeWithChildren = {
   children?: ReactNode;
@@ -177,5 +179,67 @@ describe("applyAdminMeaningEdit", () => {
     expect(updated.meanings[0].definition).toBe("军人");
     expect(updated.meanings[0].definition_en).toBe("service member");
     expect(updated.meanings[0].phrases.map((phrase) => phrase.phrase)).toEqual(["士兵", "兵种", "兵营"]);
+  });
+});
+
+function makeQuizWord(id: string, hanzi: string, phrases: string[]): TestableWord {
+  return {
+    id,
+    hanzi,
+    createdAt: 1,
+    repetitions: 0,
+    intervalDays: 0,
+    ease: 0,
+    nextReviewAt: 0,
+    fillTest: {
+      phrases,
+      sentences: phrases.map((phrase, index) => ({
+        text: `${hanzi}${index}___。`,
+        answerIndex: index,
+      })),
+    },
+  };
+}
+
+describe("buildBundledFillTestPlan", () => {
+  it("builds standard-partner bundles before ordinary quizzes", () => {
+    const onePhrase = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+    const twoPhrase = makeQuizWord("w2", "\u4e8c", ["\u4e8c\u6708", "\u4e8c\u5341"]);
+    const standardA = makeQuizWord("w3", "\u4e09", ["\u4e09\u4e2a", "\u4e09\u5929", "\u4e09\u5c81"]);
+    const standardB = makeQuizWord("w4", "\u56db", ["\u56db\u4e2a", "\u56db\u5929", "\u56db\u5c81"]);
+    const standardC = makeQuizWord("w5", "\u4e94", ["\u4e94\u4e2a", "\u4e94\u5929", "\u4e94\u5c81"]);
+
+    const plan = buildBundledFillTestPlan([onePhrase, twoPhrase, standardA, standardB, standardC]);
+
+    expect(plan.quizWords.map((word) => word.fillTest.sentences.length)).toEqual([4, 5, 3]);
+    expect(plan.quizWords[0]?.fillTest.members?.map((member) => member.wordId)).toEqual(["w1", "w3"]);
+    expect(plan.quizWords[1]?.fillTest.members?.map((member) => member.wordId)).toEqual(["w2", "w4"]);
+    expect(plan.quizWords[2]?.fillTest.members?.map((member) => member.wordId)).toEqual(["w5"]);
+  });
+
+  it("builds low-plus-low, terminal, and solo bundled quizzes", () => {
+    const oneA = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+    const twoA = makeQuizWord("w2", "\u4e8c", ["\u4e8c\u6708", "\u4e8c\u5341"]);
+    const oneB = makeQuizWord("w3", "\u4e09", ["\u4e09\u4e2a"]);
+    const oneC = makeQuizWord("w4", "\u56db", ["\u56db\u4e2a"]);
+    const oneD = makeQuizWord("w5", "\u4e94", ["\u4e94\u4e2a"]);
+
+    const plan = buildBundledFillTestPlan([oneA, twoA, oneB, oneC, oneD]);
+
+    expect(plan.quizWords.map((word) => word.fillTest.sentences.length)).toEqual([3, 2, 1]);
+    expect(plan.quizWords[0]?.fillTest.members?.map((member) => member.wordId)).toEqual(["w1", "w2"]);
+    expect(plan.quizWords[1]?.fillTest.members?.map((member) => member.wordId)).toEqual(["w3", "w4"]);
+    expect(plan.quizWords[2]?.fillTest.members?.map((member) => member.wordId)).toEqual(["w5"]);
+    expect(plan.skippedCharacters).toEqual([]);
+  });
+
+  it("builds a solo one-blank quiz when one one-phrase character remains", () => {
+    const oneA = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+
+    const plan = buildBundledFillTestPlan([oneA]);
+
+    expect(plan.quizWords).toHaveLength(1);
+    expect(plan.quizWords[0]?.fillTest.sentences).toHaveLength(1);
+    expect(plan.quizWords[0]?.fillTest.members?.map((member) => member.wordId)).toEqual(["w1"]);
   });
 });
