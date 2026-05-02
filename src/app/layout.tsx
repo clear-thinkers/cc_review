@@ -23,8 +23,22 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  applicationName: "HanziQuest",
   title: appStrings.en.metadata.title,
   description: appStrings.en.metadata.description,
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "HanziQuest",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/logo-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/logo-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/logo-180.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({
