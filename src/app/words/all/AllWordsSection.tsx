@@ -7,7 +7,12 @@ import { taggingStrings } from "../shared/tagging.strings";
 import { assignWordLessonTags, clearWordLessonTags, createLessonTagIfNew, createTextbook, listLessonTags, listTextbooks, putWord } from "@/lib/supabase-service";
 import type { LessonTag, Textbook } from "../shared/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
-import { getAllTagFilterOptionIds, toggleTagFilterId } from "../shared/tagFilter.utils";
+import {
+  getAllTagFilterOptionIds,
+  matchesSelectedTagFilter,
+  NO_TAG_FILTER_ID,
+  toggleTagFilterId,
+} from "../shared/tagFilter.utils";
 import { matchesCharacterSearchFilter } from "../shared/words.shared.utils";
 import { matchesFamiliarityFilter } from "./all.utils";
 
@@ -188,8 +193,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       if (filterSelectedTagIds.length > 0) {
         const wordTags = wordTagsMap.get(word.id) ?? [];
         const wordTagIds = new Set(wordTags.map((t) => t.lessonTagId));
-        const hasAnySelectedTag = filterSelectedTagIds.some((tagId) => wordTagIds.has(tagId));
-        if (!hasAnySelectedTag) return false;
+        if (!matchesSelectedTagFilter(wordTagIds, filterSelectedTagIds)) return false;
       }
 
       // Filter: Partial tag (textbook/grade/unit/lesson) — AND with full tag filter
@@ -635,48 +639,54 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       : str.all.filters.tags.selectedCount.replace("{count}", String(filterSelectedTagIds.length))}
                   </summary>
                   <div className="mt-2 space-y-1 max-h-96 overflow-y-auto border rounded-md p-2 bg-white">
-                    {availableTagsWithIds.length === 0 ? (
-                      <p className="text-xs text-gray-500 py-2">{str.all.filters.tags.placeholder}</p>
-                    ) : (
-                      <>
-                        <div className="mb-2 flex flex-wrap items-center gap-2 border-b pb-2">
-                          <button
-                            type="button"
-                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary disabled:opacity-50"
-                            onClick={() => setFilterSelectedTagIds(getAllTagFilterOptionIds(availableTagsWithIds))}
-                            disabled={availableTagsWithIds.length === 0}
-                          >
-                            {str.all.filters.tags.selectAll}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
-                            onClick={() => setFilterSelectedTagIds([])}
-                            disabled={filterSelectedTagIds.length === 0}
-                          >
-                            {str.all.filters.tags.clearAll}
-                          </button>
-                        </div>
-                        {availableTagsWithIds.map((tag) => {
-                          const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
-                          const isSelected = filterSelectedTagIds.includes(tag.id);
-                          return (
-                            <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(e) =>
-                                  setFilterSelectedTagIds((prev) =>
-                                    toggleTagFilterId(prev, tag.id, e.target.checked)
-                                  )
-                                }
-                              />
-                              <span>{tagDisplay}</span>
-                            </label>
-                          );
-                        })}
-                      </>
-                    )}
+                    <div className="mb-2 flex flex-wrap items-center gap-2 border-b pb-2">
+                      <button
+                        type="button"
+                        className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary disabled:opacity-50"
+                        onClick={() => setFilterSelectedTagIds(getAllTagFilterOptionIds(availableTagsWithIds))}
+                        disabled={availableTagsWithIds.length === 0}
+                      >
+                        {str.all.filters.tags.selectAll}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
+                        onClick={() => setFilterSelectedTagIds([])}
+                        disabled={filterSelectedTagIds.length === 0}
+                      >
+                        {str.all.filters.tags.clearAll}
+                      </button>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                      <input
+                        type="checkbox"
+                        checked={filterSelectedTagIds.includes(NO_TAG_FILTER_ID)}
+                        onChange={(e) =>
+                          setFilterSelectedTagIds((prev) =>
+                            toggleTagFilterId(prev, NO_TAG_FILTER_ID, e.target.checked)
+                          )
+                        }
+                      />
+                      <span>{str.all.filters.tags.noneOption}</span>
+                    </label>
+                    {availableTagsWithIds.map((tag) => {
+                      const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+                      const isSelected = filterSelectedTagIds.includes(tag.id);
+                      return (
+                        <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) =>
+                              setFilterSelectedTagIds((prev) =>
+                                toggleTagFilterId(prev, tag.id, e.target.checked)
+                              )
+                            }
+                          />
+                          <span>{tagDisplay}</span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </details>
               </div>

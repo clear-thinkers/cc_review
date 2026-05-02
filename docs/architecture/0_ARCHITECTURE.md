@@ -86,7 +86,7 @@ These rules govern the inventory view at `/words/all`:
 16. **Default Filter Bar** (always available at top): Four filter sections:
     - **Due Now**: Checkbox to show only characters with `nextReviewAt <= now` (or `0`/empty).
     - **Familiarity**: Operator dropdown (`<=` or `>=`) and number input (0-100) to filter by `getMemorizationProbability(word)`.
-    - **Tags (Cascade)**: Multi-select dropdown showing all available cascade tags (format: `TextbookName · Grade · Unit · Lesson`). OR logic: word must have ANY selected tag to be shown.
+    - **Tags (Cascade)**: Multi-select dropdown showing all available cascade tags (format: `TextbookName · Grade · Unit · Lesson`) plus a `None` option for characters with no tags. OR logic: word must have ANY selected tag, or no tags when `None` is selected, to be shown.
     - **Filter by Tag Part**: Four cascade dropdowns (Textbook → Grade → Unit → Lesson). Each level narrows the options in the levels below it. When any level is set, a word must have at least one tag satisfying ALL specified levels to pass. Operates independently of Tags (Cascade); when both are active, a word must satisfy both (AND logic). Clearing a parent level resets all child levels.
     - **Character Search**: Text input that extracts Hanzi using `extractUniqueHanzi`. A word must have its `hanzi` in the extracted character set to pass. When the input is empty or contains no valid Hanzi, the filter is inactive and all words pass.
 17. Default filters can be individually toggled on/off; a [Clear Filters] button resets all four.

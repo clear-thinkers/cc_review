@@ -821,6 +821,7 @@ export const wordsStrings = {
           searchPlaceholder: "Search tags...",
           selectAll: "Select All",
           clearAll: "Clear All",
+          noneOption: "None",
           selectedCount: "{count} selected",
         },
         partialTag: {
@@ -1817,6 +1818,7 @@ export const wordsStrings = {
           searchPlaceholder: "搜索标签...",
           selectAll: "全选",
           clearAll: "全部清除",
+          noneOption: "无",
           selectedCount: "已选择 {count} 个",
         },
         partialTag: {
