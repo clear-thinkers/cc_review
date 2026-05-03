@@ -18,7 +18,7 @@ import { ResultsSummary } from "./ResultsSummary";
 import { SessionHistoryTable } from "./SessionHistoryTable";
 import { ClearHistoryDialog } from "./ClearHistoryDialog";
 import { EmptyState } from "./EmptyState";
-import { SendFailedToSessionDialog } from "./SendFailedToSessionDialog";
+import { type DialogAnchorRect, SendFailedToSessionDialog } from "./SendFailedToSessionDialog";
 import type { ResultsLocaleStrings } from "./results.strings.types";
 import { sortReviewTestSessionTargets } from "../review/reviewSession.utils";
 import styles from "./results.module.css";
@@ -37,6 +37,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
   const [isClearing, setIsClearing] = useState(false);
   const [sendNotice, setSendNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [sendDialogSession, setSendDialogSession] = useState<QuizSession | null>(null);
+  const [sendDialogAnchorRect, setSendDialogAnchorRect] = useState<DialogAnchorRect | null>(null);
   const [isSendingFailedCharacters, setIsSendingFailedCharacters] = useState(false);
   const childTarget = useMemo(
     () => resolveChildProfileTarget(session, familyProfiles),
@@ -98,8 +99,13 @@ export function ResultsPage({ strings }: ResultsPageProps) {
     setShowDialog(false);
   };
 
-  const handleOpenSendFailedDialog = (quizSession: QuizSession) => {
+  const handleOpenSendFailedDialog = (quizSession: QuizSession, anchorRect: DOMRect) => {
     setSendNotice(null);
+    setSendDialogAnchorRect({
+      bottom: anchorRect.bottom,
+      left: anchorRect.left,
+      top: anchorRect.top,
+    });
     setSendDialogSession(quizSession);
   };
 
@@ -109,6 +115,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
     }
 
     setSendDialogSession(null);
+    setSendDialogAnchorRect(null);
   };
 
   const handleConfirmSendFailedDialog = async (sessionName: string) => {
@@ -130,6 +137,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
     const failedCharacters = getFailedCharacters(sourceSession.gradeData);
     if (failedCharacters.length === 0) {
       setSendDialogSession(null);
+      setSendDialogAnchorRect(null);
       setSendNotice({
         tone: "error",
         message: strings.sendFailedToSession.messages.noFailedCharacters,
@@ -154,6 +162,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
 
       if (resolution.targets.length === 0) {
         setSendDialogSession(null);
+        setSendDialogAnchorRect(null);
         setSendNotice({
           tone: "error",
           message: strings.sendFailedToSession.messages.noEligibleTargets,
@@ -189,6 +198,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
       }
 
       setSendDialogSession(null);
+      setSendDialogAnchorRect(null);
       setSendNotice({
         tone: "success",
         message,
@@ -267,6 +277,7 @@ export function ResultsPage({ strings }: ResultsPageProps) {
           strings={strings}
           initialSessionName={buildSuggestedSessionName(sendDialogSession.createdAt)}
           failedCharacters={failedCharactersForDialog}
+          anchorRect={sendDialogAnchorRect}
           isSubmitting={isSendingFailedCharacters}
           onConfirm={handleConfirmSendFailedDialog}
           onCancel={handleCancelSendFailedDialog}

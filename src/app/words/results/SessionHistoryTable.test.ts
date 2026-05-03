@@ -4,9 +4,10 @@
  * @testing-library/react is not available in this project.
  * Tests cover the three stable, self-contained behaviors:
  *   1. truncateCharacters — the character-list display helper
- *   2. Sort state machine — field selection and direction toggling
- *   3. Sort comparator — ordering rows by each supported field
- *   4. Clear-button visibility — hideDestructiveActions + empty-session guard
+ *   2. isCharacterListTruncated — tested-cell expansion guard
+ *   3. Sort state machine — field selection and direction toggling
+ *   4. Sort comparator — ordering rows by each supported field
+ *   5. Clear-button visibility — hideDestructiveActions + empty-session guard
  *
  * Logic is mirrored inline from the component source. If the component
  * logic changes, update these mirrors and tests together.
@@ -14,6 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { SessionDisplayData } from "./results.types";
+import { calculateAnchoredDialogPosition } from "./SendFailedToSessionDialog";
 
 // ---------------------------------------------------------------------------
 // Mirrors of component-internal logic
@@ -25,6 +27,11 @@ function truncateCharacters(chars: string[], maxLength = 10): string {
     return chars.join("、");
   }
   return chars.slice(0, maxLength).join("、") + "…";
+}
+
+/** Mirror of SessionHistoryTable.isCharacterListTruncated */
+function isCharacterListTruncated(chars: string[], maxLength = 10): boolean {
+  return chars.length > maxLength;
 }
 
 type SortField =
@@ -164,7 +171,30 @@ describe("truncateCharacters", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. Sort state machine
+// 2. isCharacterListTruncated
+// ---------------------------------------------------------------------------
+
+describe("isCharacterListTruncated", () => {
+  it("returns false when a tested-character list fits without ellipsis", () => {
+    expect(isCharacterListTruncated([])).toBe(false);
+    expect(isCharacterListTruncated(["一", "二"])).toBe(false);
+  });
+
+  it("returns false when a tested-character list exactly matches the default limit", () => {
+    expect(isCharacterListTruncated(["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"])).toBe(
+      false
+    );
+  });
+
+  it("returns true when a tested-character list needs an ellipsis", () => {
+    expect(isCharacterListTruncated(["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一"])).toBe(
+      true
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3. Sort state machine
 // ---------------------------------------------------------------------------
 
 describe("sort state machine", () => {
@@ -206,7 +236,7 @@ describe("sort state machine", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Sort comparator
+// 4. Sort comparator
 // ---------------------------------------------------------------------------
 
 describe("sort comparator", () => {
@@ -284,7 +314,7 @@ describe("sort comparator", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. Clear-button visibility
+// 5. Clear-button visibility
 // ---------------------------------------------------------------------------
 
 describe("clear-button visibility", () => {
@@ -317,5 +347,43 @@ describe("send-failed button visibility", () => {
 
   it("hides when the row has no failed characters", () => {
     expect(showSendFailedButton(0)).toBe(false);
+  });
+});
+
+describe("send-failed dialog placement", () => {
+  it("opens below and aligned to the clicked button when there is room", () => {
+    expect(
+      calculateAnchoredDialogPosition({
+        anchorRect: { bottom: 128, left: 240, top: 100 },
+        dialogHeight: 260,
+        dialogWidth: 400,
+        viewportHeight: 800,
+        viewportWidth: 1200,
+      })
+    ).toEqual({ left: 240, top: 136 });
+  });
+
+  it("opens above the clicked button when the bottom of the viewport is too close", () => {
+    expect(
+      calculateAnchoredDialogPosition({
+        anchorRect: { bottom: 760, left: 240, top: 732 },
+        dialogHeight: 260,
+        dialogWidth: 400,
+        viewportHeight: 800,
+        viewportWidth: 1200,
+      })
+    ).toEqual({ left: 240, top: 464 });
+  });
+
+  it("clamps the popup inside the viewport near the right edge", () => {
+    expect(
+      calculateAnchoredDialogPosition({
+        anchorRect: { bottom: 128, left: 940, top: 100 },
+        dialogHeight: 260,
+        dialogWidth: 400,
+        viewportHeight: 800,
+        viewportWidth: 1000,
+      })
+    ).toEqual({ left: 588, top: 136 });
   });
 });

@@ -163,6 +163,30 @@
   word-wrap: break-word;
 }
 
+.characterListToggle {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+  padding: 0;
+  text-align: left;
+  word-break: break-word;
+}
+
+.characterListToggle:hover {
+  color: #1d4ed8;
+}
+
+.characterListToggle:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 /* ============= EMPTY STATE ============= */
 
 .emptyState {
