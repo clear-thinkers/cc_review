@@ -351,7 +351,7 @@ describe("send-failed button visibility", () => {
 });
 
 describe("send-failed dialog placement", () => {
-  it("opens below and aligned to the clicked button when there is room", () => {
+  it("opens below the clicked button and centered in the viewport when there is room", () => {
     expect(
       calculateAnchoredDialogPosition({
         anchorRect: { bottom: 128, left: 240, top: 100 },
@@ -360,10 +360,10 @@ describe("send-failed dialog placement", () => {
         viewportHeight: 800,
         viewportWidth: 1200,
       })
-    ).toEqual({ left: 240, top: 136 });
+    ).toEqual({ left: 400, top: 136 });
   });
 
-  it("opens above the clicked button when the bottom of the viewport is too close", () => {
+  it("opens above the clicked button and stays centered when the bottom of the viewport is too close", () => {
     expect(
       calculateAnchoredDialogPosition({
         anchorRect: { bottom: 760, left: 240, top: 732 },
@@ -372,10 +372,10 @@ describe("send-failed dialog placement", () => {
         viewportHeight: 800,
         viewportWidth: 1200,
       })
-    ).toEqual({ left: 240, top: 464 });
+    ).toEqual({ left: 400, top: 464 });
   });
 
-  it("clamps the popup inside the viewport near the right edge", () => {
+  it("keeps the popup centered even when the clicked button is near the right edge", () => {
     expect(
       calculateAnchoredDialogPosition({
         anchorRect: { bottom: 128, left: 940, top: 100 },
@@ -384,6 +384,6 @@ describe("send-failed dialog placement", () => {
         viewportHeight: 800,
         viewportWidth: 1000,
       })
-    ).toEqual({ left: 588, top: 136 });
+    ).toEqual({ left: 300, top: 136 });
   });
 });

@@ -232,10 +232,32 @@
   z-index: 1000;
 }
 
+.contextualDialogOverlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.contextualDialogBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  z-index: 1000;
+}
+
+.contextualDialogPositioner {
+  position: fixed;
+  pointer-events: auto;
+  z-index: 1001;
+}
+
 .dialog {
   background: white;
   border-radius: 8px;
   padding: 32px;
+  width: min(400px, calc(100vw - 24px));
   max-width: 400px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   animation: slideIn 0.2s ease-out;
