@@ -60,6 +60,10 @@ function normalizeText(value: string | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizePinyin(value: string | undefined): string {
+  return normalizeText(value).replace(/\u0261/g, "g");
+}
+
 function ensureArray<T>(value: unknown, label: string): T[] {
   if (!Array.isArray(value)) {
     throw new Error(`Invalid ${label} data. Expected an array.`);
@@ -158,7 +162,7 @@ function extractDetailPronunciations(detailEntry: DictionaryDetailEntry | undefi
     const result: XinhuaFlashcardPronunciation[] = [];
 
     for (const p of detailEntry.pinyin) {
-      const pinyin = normalizeText(p);
+      const pinyin = normalizePinyin(p);
       if (!pinyin || seen.has(pinyin)) {
         continue;
       }
@@ -185,7 +189,7 @@ function extractDetailPronunciations(detailEntry: DictionaryDetailEntry | undefi
   const result: XinhuaFlashcardPronunciation[] = [];
 
   for (const entry of words) {
-    const pinyin = normalizeText(entry.pinyin);
+    const pinyin = normalizePinyin(entry.pinyin);
     if (!pinyin || seen.has(pinyin)) {
       continue;
     }
@@ -221,7 +225,7 @@ function mergePronunciations(
   const result: XinhuaFlashcardPronunciation[] = [];
 
   for (const entry of [...primary, ...secondary]) {
-    const pinyin = normalizeText(entry.pinyin);
+    const pinyin = normalizePinyin(entry.pinyin);
     if (!pinyin || seen.has(pinyin)) {
       continue;
     }

@@ -72,6 +72,20 @@ describe("buildXinhuaFlashcardInfo", () => {
     ]);
   });
 
+  it("dedupes pinyin when base data uses phonetic letter g", () => {
+    const result = buildXinhuaFlashcardInfo(
+      {
+        detail: [{ char: "\u4e1c", pinyin: ["d\u014dng"] }],
+        base: [{ char: "\u4e1c", pinyin: ["d\u014dn\u0261"] }],
+      },
+      "\u4e1c"
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.pinyin).toEqual(["d\u014dng"]);
+    expect(result?.pronunciations).toEqual([{ pinyin: "d\u014dng", explanations: [] }]);
+  });
+
   it("returns null for unknown character", () => {
     const result = buildXinhuaFlashcardInfo(sampleDataset, "未");
     expect(result).toBeNull();

@@ -24,3 +24,30 @@ When deriving pronunciation candidates from Xinhua data, treat `char_detail.json
 - 0_ARCHITECTURE.md: no - static-data behavior remains within the existing Xinhua pronunciation candidate rule.
 - 0_BUILD_CONVENTIONS.md: no - no build or test convention changed.
 - 0_PRODUCT_ROADMAP.md: no - shipped pronunciation behavior fix only.
+
+---
+
+## Retry Attempt - 2026-05-06
+
+### Why the Prior Attempt Failed
+The first attempt merged base pronunciations by exact string. Xinhua base data sometimes spells pinyin `g` as the phonetic letter `ɡ`; for example, `char_detail.json` has `东 -> dōng`, while `char_base.json` has `东 -> dōnɡ`. Those strings look almost identical in the UI but produced different `character|pronunciation` keys.
+
+### Revised Root Cause
+The missing `悄 -> qiāo` pronunciation still came from relying only on detail data, but the merge also needed pinyin canonicalization before dedupe and target-key creation.
+
+### Changes Applied
+- Canonicalized Xinhua pinyin by converting `ɡ` to `g` before pronunciation dedupe.
+- Added a regression test proving `东` does not produce duplicate `dōng`/`dōnɡ` pronunciation targets.
+- Updated `0_ARCHITECTURE.md` Static Data notes to document the supplementary base source and canonicalization rule.
+
+### Architectural Impact
+Still contained to the domain/static-data layer. No UI, service, database schema, RLS, scheduler, coin, or AI/API boundary changed.
+
+### Preventative Rule
+Normalize pinyin glyph variants before deduping or constructing `character|pronunciation` keys.
+
+### Docs Updated
+- AI_CONTRACT.md: no - no hard stop, boundary, or agent rule changed.
+- 0_ARCHITECTURE.md: yes - static-data pronunciation sources and canonicalization are now documented.
+- 0_BUILD_CONVENTIONS.md: no - no build or test convention changed.
+- 0_PRODUCT_ROADMAP.md: no - shipped behavior fix only.

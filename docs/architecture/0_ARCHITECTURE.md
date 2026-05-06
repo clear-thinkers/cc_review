@@ -660,7 +660,7 @@ All tables have RLS enabled. Policies are applied based on JWT claims `family_id
 
 ### Static Data
 
-- **Pronunciation candidates:** `public/data/char_detail.json` — loaded via `src/lib/xinhua.ts`
+- **Pronunciation candidates:** `public/data/char_detail.json` plus supplementary pinyin from `public/data/char_base.json` — loaded via `src/lib/xinhua.ts`; pinyin is canonicalized before dedupe so Xinhua's phonetic `ɡ` does not create duplicate `g` pronunciations.
 
 ### localStorage Schema (Legacy — Fully Retired)
 
