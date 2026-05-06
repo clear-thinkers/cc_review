@@ -108,12 +108,9 @@ export function getGradeLabels(str: WordsLocaleStrings) {
 
 export function cloneFillTest(fillTest: FillTest): FillTest {
   return {
-    phrases: [...fillTest.phrases] as [string, string, string],
-    sentences: fillTest.sentences.map((sentence) => ({ ...sentence })) as [
-      FillTest["sentences"][0],
-      FillTest["sentences"][1],
-      FillTest["sentences"][2],
-    ],
+    phrases: [...fillTest.phrases],
+    sentences: fillTest.sentences.map((sentence) => ({ ...sentence })),
+    ...(fillTest.members ? { members: fillTest.members.map((member) => ({ ...member })) } : {}),
   };
 }
 
@@ -278,13 +275,13 @@ export function getSelectionModeLabel(mode: QuizSelectionMode, str: WordsLocaleS
   return str.fillTest.selectionModes.custom.replace("{count}", mode);
 }
 
-export function parseQuizPhraseIndex(raw: string): 0 | 1 | 2 | null {
+export function parseQuizPhraseIndex(raw: string, phraseCount = 3): number | null {
   const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 2) {
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed >= phraseCount) {
     return null;
   }
 
-  return parsed as 0 | 1 | 2;
+  return parsed;
 }
 
 export function isHanziCharacter(char: string): boolean {
@@ -590,24 +587,232 @@ export function buildFillTestFromSavedContent(contentEntries: FlashcardLlmRespon
   }
 
   if (candidates.length < 3) {
-    return undefined;
+    if (candidates.length === 0) {
+      return undefined;
+    }
   }
 
   const sentenceRows = shuffleArray(candidates).slice(0, 3);
-  const optionPhrases = shuffleArray(sentenceRows.map((item) => item.phrase)) as [string, string, string];
-  const answerIndexByPhrase = new Map<string, 0 | 1 | 2>();
+  const optionPhrases = shuffleArray(sentenceRows.map((item) => item.phrase));
+  const answerIndexByPhrase = new Map<string, number>();
   optionPhrases.forEach((phrase, index) => {
-    answerIndexByPhrase.set(phrase, index as 0 | 1 | 2);
+    answerIndexByPhrase.set(phrase, index);
   });
 
   const sentences = sentenceRows.map((item) => ({
     text: buildBlankedSentence(item.example, item.phrase),
     answerIndex: answerIndexByPhrase.get(item.phrase) ?? 0,
-  })) as [FillTest["sentences"][0], FillTest["sentences"][1], FillTest["sentences"][2]];
+  }));
 
   return {
     phrases: optionPhrases,
     sentences,
+  };
+}
+
+type BundledCandidateRow = {
+  phrase: string;
+  text: string;
+  characterId: string;
+};
+
+type BundledPlanAttempt = {
+  word: TestableWord;
+  rows: BundledCandidateRow[];
+};
+
+export type BundledFillTestPlan = {
+  quizWords: TestableWord[];
+  skippedCharacters: string[];
+};
+
+function rowsFromTestableWord(word: TestableWord): BundledCandidateRow[] {
+  return word.fillTest.sentences.flatMap((sentence) => {
+    const phrase = word.fillTest.phrases[sentence.answerIndex]?.trim() ?? "";
+    if (!phrase) {
+      return [];
+    }
+
+    return [{
+      phrase,
+      text: sentence.text,
+      characterId: word.id,
+    }];
+  });
+}
+
+function hasUniquePhrases(rows: BundledCandidateRow[]): boolean {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = normalizePhraseCompareKey(row.phrase);
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+  }
+  return true;
+}
+
+function createBundledQuizWord(words: TestableWord[], rows: BundledCandidateRow[]): TestableWord | null {
+  if (rows.length === 0 || !hasUniquePhrases(rows)) {
+    return null;
+  }
+
+  const optionPhrases = shuffleArray(rows.map((row) => row.phrase));
+  const answerIndexByPhrase = new Map<string, number>();
+  optionPhrases.forEach((phrase, index) => {
+    answerIndexByPhrase.set(phrase, index);
+  });
+
+  const baseWord = words[0];
+  if (!baseWord) {
+    return null;
+  }
+
+  const hanzi = words.map((word) => word.hanzi).join("");
+
+  return {
+    ...baseWord,
+    id: words.map((word) => word.id).join("|"),
+    hanzi,
+    fillTest: {
+      phrases: optionPhrases,
+      sentences: rows.map((row) => ({
+        text: row.text,
+        answerIndex: answerIndexByPhrase.get(row.phrase) ?? 0,
+        characterId: row.characterId,
+      })),
+      members: words.map((word) => ({
+        wordId: word.id,
+        hanzi: word.hanzi,
+        phraseCount: rows.filter((row) => row.characterId === word.id).length,
+      })),
+    },
+  };
+}
+
+function restoreSingleQuizWord(word: TestableWord): TestableWord | null {
+  const rows = rowsFromTestableWord(word).slice(0, Math.min(3, word.fillTest.sentences.length));
+  return createBundledQuizWord([word], rows);
+}
+
+function tryCreateBundle(left: BundledPlanAttempt, right: BundledPlanAttempt): TestableWord | null {
+  return createBundledQuizWord([left.word, right.word], [...left.rows, ...right.rows]);
+}
+
+export function buildBundledFillTestPlan(words: TestableWord[]): BundledFillTestPlan {
+  const attempts = words.map((word) => ({
+    word,
+    rows: rowsFromTestableWord(word),
+  }));
+  const standardAttempts = attempts.filter((attempt) => attempt.rows.length >= 3);
+  const lowAttempts = attempts.filter((attempt) => attempt.rows.length > 0 && attempt.rows.length < 3);
+  const usedWordIds = new Set<string>();
+  const skippedCharacters: string[] = [];
+  const bundledQuizWords: TestableWord[] = [];
+
+  for (const lowAttempt of lowAttempts) {
+    let paired = false;
+    for (const standardAttempt of standardAttempts) {
+      if (usedWordIds.has(standardAttempt.word.id)) {
+        continue;
+      }
+
+      const bundle = tryCreateBundle(lowAttempt, standardAttempt);
+      if (!bundle) {
+        continue;
+      }
+
+      bundledQuizWords.push(bundle);
+      usedWordIds.add(lowAttempt.word.id);
+      usedWordIds.add(standardAttempt.word.id);
+      paired = true;
+      break;
+    }
+
+    if (!paired) {
+      continue;
+    }
+  }
+
+  const remainingLow = lowAttempts.filter((attempt) => !usedWordIds.has(attempt.word.id));
+  const consumedLowIds = new Set<string>();
+
+  for (let leftIndex = 0; leftIndex < remainingLow.length; leftIndex += 1) {
+    const leftAttempt = remainingLow[leftIndex];
+    if (!leftAttempt || consumedLowIds.has(leftAttempt.word.id)) {
+      continue;
+    }
+
+    for (let rightIndex = leftIndex + 1; rightIndex < remainingLow.length; rightIndex += 1) {
+      const rightAttempt = remainingLow[rightIndex];
+      if (!rightAttempt || consumedLowIds.has(rightAttempt.word.id)) {
+        continue;
+      }
+
+      if (leftAttempt.rows.length + rightAttempt.rows.length < 3) {
+        continue;
+      }
+
+      const bundle = tryCreateBundle(leftAttempt, rightAttempt);
+      if (!bundle) {
+        continue;
+      }
+
+      bundledQuizWords.push(bundle);
+      consumedLowIds.add(leftAttempt.word.id);
+      consumedLowIds.add(rightAttempt.word.id);
+      usedWordIds.add(leftAttempt.word.id);
+      usedWordIds.add(rightAttempt.word.id);
+      break;
+    }
+  }
+
+  const remainingOnePhrase = remainingLow.filter(
+    (attempt) => !consumedLowIds.has(attempt.word.id) && attempt.rows.length === 1
+  );
+
+  for (let index = 0; index + 1 < remainingOnePhrase.length; index += 2) {
+    const leftAttempt = remainingOnePhrase[index];
+    const rightAttempt = remainingOnePhrase[index + 1];
+    if (!leftAttempt || !rightAttempt) {
+      continue;
+    }
+
+    const bundle = tryCreateBundle(leftAttempt, rightAttempt);
+    if (bundle) {
+      bundledQuizWords.push(bundle);
+      consumedLowIds.add(leftAttempt.word.id);
+      consumedLowIds.add(rightAttempt.word.id);
+      usedWordIds.add(leftAttempt.word.id);
+      usedWordIds.add(rightAttempt.word.id);
+    }
+  }
+
+  const soloOnePhrase = remainingOnePhrase.find((attempt) => !consumedLowIds.has(attempt.word.id));
+  if (soloOnePhrase) {
+    const solo = createBundledQuizWord([soloOnePhrase.word], soloOnePhrase.rows);
+    if (solo) {
+      bundledQuizWords.push(solo);
+      consumedLowIds.add(soloOnePhrase.word.id);
+      usedWordIds.add(soloOnePhrase.word.id);
+    }
+  }
+
+  for (const lowAttempt of lowAttempts) {
+    if (!usedWordIds.has(lowAttempt.word.id)) {
+      skippedCharacters.push(lowAttempt.word.hanzi);
+    }
+  }
+
+  const ordinaryQuizWords = standardAttempts
+    .filter((attempt) => !usedWordIds.has(attempt.word.id))
+    .map((attempt) => restoreSingleQuizWord(attempt.word))
+    .filter((word): word is TestableWord => Boolean(word));
+
+  return {
+    quizWords: [...bundledQuizWords, ...ordinaryQuizWords],
+    skippedCharacters,
   };
 }
 

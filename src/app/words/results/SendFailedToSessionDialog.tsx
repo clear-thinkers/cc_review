@@ -1,76 +1,182 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ResultsLocaleStrings } from "./results.strings.types";
 import styles from "./results.module.css";
+
+export interface DialogAnchorRect {
+  bottom: number;
+  left: number;
+  top: number;
+}
+
+export interface AnchoredDialogPositionInput {
+  anchorRect: DialogAnchorRect;
+  viewportWidth: number;
+  viewportHeight: number;
+  dialogWidth: number;
+  dialogHeight: number;
+  gutter?: number;
+  offset?: number;
+}
+
+export function calculateAnchoredDialogPosition({
+  anchorRect,
+  viewportWidth,
+  viewportHeight,
+  dialogWidth,
+  dialogHeight,
+  gutter = 12,
+  offset = 8,
+}: AnchoredDialogPositionInput): { left: number; top: number } {
+  const left = Math.max(gutter, (viewportWidth - dialogWidth) / 2);
+  const belowTop = anchorRect.bottom + offset;
+  const aboveTop = anchorRect.top - dialogHeight - offset;
+  const fitsBelow = belowTop + dialogHeight <= viewportHeight - gutter;
+  const preferredTop = fitsBelow ? belowTop : aboveTop;
+  const maxTop = Math.max(gutter, viewportHeight - dialogHeight - gutter);
+  const top = Math.min(Math.max(preferredTop, gutter), maxTop);
+
+  return { left, top };
+}
 
 export interface SendFailedToSessionDialogProps {
   strings: ResultsLocaleStrings;
   initialSessionName: string;
   failedCharacters: string[];
+  anchorRect: DialogAnchorRect | null;
   isSubmitting: boolean;
   onConfirm: (sessionName: string) => void;
   onCancel: () => void;
 }
 
+const ESTIMATED_DIALOG_WIDTH = 400;
+const ESTIMATED_DIALOG_HEIGHT = 360;
+
 export function SendFailedToSessionDialog({
   strings,
   initialSessionName,
   failedCharacters,
+  anchorRect,
   isSubmitting,
   onConfirm,
   onCancel,
 }: SendFailedToSessionDialogProps) {
   const [sessionName, setSessionName] = useState(initialSessionName);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const [dialogPosition, setDialogPosition] = useState<CSSProperties | undefined>(() => {
+    if (!anchorRect || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const position = calculateAnchoredDialogPosition({
+      anchorRect,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      dialogWidth: ESTIMATED_DIALOG_WIDTH,
+      dialogHeight: ESTIMATED_DIALOG_HEIGHT,
+    });
+
+    return {
+      left: position.left,
+      position: "fixed",
+      top: position.top,
+    };
+  });
 
   useEffect(() => {
     setSessionName(initialSessionName);
   }, [initialSessionName]);
 
+  useLayoutEffect(() => {
+    if (!anchorRect) {
+      setDialogPosition(undefined);
+      return;
+    }
+
+    const updatePosition = () => {
+      const dialog = dialogRef.current;
+      if (!dialog) {
+        return;
+      }
+
+      const dialogRect = dialog.getBoundingClientRect();
+      const dialogWidth = dialogRect.width || ESTIMATED_DIALOG_WIDTH;
+      const dialogHeight = dialogRect.height || ESTIMATED_DIALOG_HEIGHT;
+      const position = calculateAnchoredDialogPosition({
+        anchorRect,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        dialogWidth,
+        dialogHeight,
+      });
+
+      setDialogPosition({
+        left: position.left,
+        position: "fixed",
+        top: position.top,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [anchorRect, failedCharacters.length, initialSessionName]);
+
   const trimmedSessionName = sessionName.trim();
 
   return (
-    <div className={styles.dialogOverlay}>
-      <div className={styles.dialog}>
-        <h2 className={styles.dialogTitle}>{strings.sendFailedToSession.dialog.title}</h2>
-        <p className={styles.dialogMessage}>{strings.sendFailedToSession.dialog.message}</p>
-        <div className={styles.dialogField}>
-          <label className={styles.dialogLabel} htmlFor="results-send-session-name">
-            {strings.sendFailedToSession.dialog.nameLabel}
-          </label>
-          <input
-            id="results-send-session-name"
-            className={styles.dialogInput}
-            type="text"
-            value={sessionName}
-            placeholder={strings.sendFailedToSession.dialog.namePlaceholder}
-            onChange={(event) => setSessionName(event.target.value)}
-            disabled={isSubmitting}
-          />
-        </div>
-        <p className={styles.dialogSummary}>
-          {strings.sendFailedToSession.dialog.failedCharacters.replace(
-            "{chars}",
-            failedCharacters.join("、")
-          )}
-        </p>
-        <div className={styles.dialogActions}>
-          <button
-            type="button"
-            className="btn-neutral rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-50"
-            onClick={onCancel}
-            disabled={isSubmitting}
-          >
-            {strings.sendFailedToSession.dialog.cancelButton}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-50"
-            onClick={() => onConfirm(trimmedSessionName)}
-            disabled={isSubmitting || trimmedSessionName.length === 0}
-          >
-            {isSubmitting ? strings.sendFailedToSession.dialog.submittingButton : strings.sendFailedToSession.dialog.confirmButton}
-          </button>
+    <div className={styles.contextualDialogOverlay}>
+      <div className={styles.contextualDialogBackdrop} />
+      <div className={styles.contextualDialogPositioner} style={dialogPosition}>
+        <div ref={dialogRef} className={styles.dialog}>
+          <h2 className={styles.dialogTitle}>{strings.sendFailedToSession.dialog.title}</h2>
+          <p className={styles.dialogMessage}>{strings.sendFailedToSession.dialog.message}</p>
+          <div className={styles.dialogField}>
+            <label className={styles.dialogLabel} htmlFor="results-send-session-name">
+              {strings.sendFailedToSession.dialog.nameLabel}
+            </label>
+            <input
+              id="results-send-session-name"
+              className={styles.dialogInput}
+              type="text"
+              value={sessionName}
+              placeholder={strings.sendFailedToSession.dialog.namePlaceholder}
+              onChange={(event) => setSessionName(event.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+          <p className={styles.dialogSummary}>
+            {strings.sendFailedToSession.dialog.failedCharacters.replace(
+              "{chars}",
+              failedCharacters.join("、")
+            )}
+          </p>
+          <div className={styles.dialogActions}>
+            <button
+              type="button"
+              className="btn-neutral rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-50"
+              onClick={onCancel}
+              disabled={isSubmitting}
+            >
+              {strings.sendFailedToSession.dialog.cancelButton}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary rounded-md border px-3 py-2 text-sm font-medium disabled:opacity-50"
+              onClick={() => onConfirm(trimmedSessionName)}
+              disabled={isSubmitting || trimmedSessionName.length === 0}
+            >
+              {isSubmitting
+                ? strings.sendFailedToSession.dialog.submittingButton
+                : strings.sendFailedToSession.dialog.confirmButton}
+            </button>
+          </div>
         </div>
       </div>
     </div>

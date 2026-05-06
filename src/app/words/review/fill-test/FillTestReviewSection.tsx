@@ -23,7 +23,6 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     quizIndex,
     quizQueue,
     handleStopQuizSession,
-    SLOT_INDICES,
     quizSelections,
     quizResult,
     quizActivePhraseIndex,
@@ -44,6 +43,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     moveQuizForward,
     quizSummary,
     quizSessionCoins,
+    gradeLabels,
   } = vm;
 
   // Celebration animation state
@@ -79,6 +79,17 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
 
     return () => clearInterval(pollInterval);
   }, []);
+
+  const quizCharacterTotal = quizQueue.reduce(
+    (total, word) => total + (word.fillTest.members?.length ?? 1),
+    0
+  );
+  const quizCharacterProgress = quizQueue
+    .slice(0, quizIndex + 1)
+    .reduce((total, word) => total + (word.fillTest.members?.length ?? 1), 0);
+  const currentQuizHanzi = currentQuizWord?.fillTest.members
+    ? currentQuizWord.fillTest.members.map((member) => member.hanzi).join(", ")
+    : currentQuizWord?.hanzi;
 
   if (!isFillTestReviewPage) {
     return null;
@@ -130,10 +141,10 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                 <div>
                   <p className="text-sm text-gray-600">
                     {str.fillTest.gameplay.characterProgress
-                      .replace("{current}", String(quizIndex + 1))
-                      .replace("{total}", String(quizQueue.length))}
+                      .replace("{current}", String(quizCharacterProgress))
+                      .replace("{total}", String(quizCharacterTotal))}
                   </p>
-                  <p className="text-3xl font-semibold">{currentQuizWord.hanzi}</p>
+                  <p className="text-3xl font-semibold">{currentQuizHanzi}</p>
                 </div>
                 <button
                   type="button"
@@ -150,13 +161,12 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                   <p className="mt-1 text-xs text-gray-600">{str.fillTest.gameplay.dragInstruction}</p>
                   <ul className="mt-3 space-y-2">
                     {currentQuizWord.fillTest.phrases.map((phrase: string, phraseIndex: number) => {
-                      const typedPhraseIndex = phraseIndex as 0 | 1 | 2;
-                      if (quizSelections.includes(typedPhraseIndex)) {
+                      if (quizSelections.includes(phraseIndex)) {
                         return null;
                       }
 
-                      const selectedForTap = quizActivePhraseIndex === typedPhraseIndex;
-                      const draggingNow = quizDraggingPhraseIndex === typedPhraseIndex;
+                      const selectedForTap = quizActivePhraseIndex === phraseIndex;
+                      const draggingNow = quizDraggingPhraseIndex === phraseIndex;
                       const phraseButtonClass = selectedForTap || draggingNow
                         ? "w-full rounded-md border-2 border-sky-500 bg-sky-50 px-3 py-2 text-center text-sm text-sky-900 disabled:opacity-60"
                         : "w-full rounded-md border-2 border-transparent bg-white px-3 py-2 text-center text-sm hover:border-gray-400 disabled:opacity-60";
@@ -169,10 +179,10 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                             disabled={Boolean(quizResult)}
                             onClick={() =>
                               setQuizActivePhraseIndex((previous) =>
-                                previous === typedPhraseIndex ? null : typedPhraseIndex
+                                previous === phraseIndex ? null : phraseIndex
                               )
                             }
-                            onDragStart={(event) => handleQuizPhraseDragStart(event, typedPhraseIndex)}
+                            onDragStart={(event) => handleQuizPhraseDragStart(event, phraseIndex)}
                             onDragEnd={handleQuizPhraseDragEnd}
                             className={`quiz-phrase-pill ${phraseButtonClass}`}
                           >
@@ -185,8 +195,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                 </aside>
 
                 <div className="space-y-3">
-                  {SLOT_INDICES.map((sentenceIndex: 0 | 1 | 2) => {
-                    const sentence = currentQuizWord.fillTest.sentences[sentenceIndex];
+                  {currentQuizWord.fillTest.sentences.map((sentence, sentenceIndex) => {
                     const [beforeBlank, ...afterParts] = sentence.text.split("___");
                     const afterBlank = afterParts.join("___");
                     const selectedPhraseIndex = quizSelections[sentenceIndex];
@@ -215,7 +224,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                         <p className="mb-2 text-sm font-bold">
                           {str.fillTest.gameplay.sentenceLabel
                             .replace("{current}", String(sentenceIndex + 1))
-                            .replace("{total}", String(3))}
+                            .replace("{total}", String(currentQuizWord.fillTest.sentences.length))}
                         </p>
                         <div className="flex flex-wrap items-center gap-1 text-base font-bold text-gray-900">
                           <span>{beforeBlank}</span>
@@ -286,9 +295,21 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
               ) : (
                 <div className="space-y-2 rounded-md border p-3">
                   <p className="text-sm font-bold">
-                    {str.fillTest.results.scoreLabel.replace("{correct}", String(quizResult.correctCount))}
-                    <span className="capitalize">{quizResult.tier}</span>
+                    {str.fillTest.results.scoreLabel
+                      .replace("{correct}", String(quizResult.correctCount))
+                      .replace("{total}", String(quizResult.sentenceResults.length))}
                   </p>
+                  <ul className="space-y-1 text-sm">
+                    {quizResult.memberResults.map((memberResult) => (
+                      <li key={`${currentQuizWord.id}-member-result-${memberResult.wordId}`}>
+                        {str.fillTest.results.memberGradeLabel
+                          .replace("{hanzi}", memberResult.hanzi)
+                          .replace("{correct}", String(memberResult.correctCount))
+                          .replace("{total}", String(memberResult.totalCount))
+                          .replace("{grade}", gradeLabels[memberResult.tier])}
+                      </li>
+                    ))}
+                  </ul>
                   <ul className="space-y-1 text-sm">
                     {quizResult.sentenceResults.map((resultItem) => {
                       const expectedPhrase = currentQuizWord.fillTest.phrases[resultItem.expectedPhraseIndex];
@@ -342,14 +363,14 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                 {str.fillTest.summary.charactersReviewed} <span className="text-xl text-amber-700">{quizHistory.length}</span>
               </p>
               <p className="text-base font-semibold text-gray-900">
-                {str.fillTest.summary.correctBlanks} <span className="text-xl text-amber-700">{quizSummary.correct}/{quizHistory.length * 3}</span>
+                {str.fillTest.summary.correctBlanks} <span className="text-xl text-amber-700">{quizSummary.correct}/{quizHistory.reduce((total, item) => total + item.totalCount, 0)}</span>
               </p>
             </div>
             
             <div className="border-t border-amber-200 pt-3 space-y-2">
               {(() => {
-                const fullyCorrect = quizHistory.filter((item) => item.correctCount === 3);
-                const partiallyCorrect = quizHistory.filter((item) => item.correctCount === 1 || item.correctCount === 2);
+                const fullyCorrect = quizHistory.filter((item) => item.correctCount === item.totalCount);
+                const partiallyCorrect = quizHistory.filter((item) => item.correctCount > 0 && item.correctCount < item.totalCount);
                 const fullyWrong = quizHistory.filter((item) => item.correctCount === 0);
 
                 return (

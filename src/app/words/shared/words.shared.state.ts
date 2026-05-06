@@ -31,7 +31,7 @@ import {
   deleteAdminTargetRow,
   restoreHiddenAdminTargetsForHanzi,
 } from "@/lib/supabase-service";
-import { gradeFillTest, type Placement } from "@/lib/fillTest";
+import { gradeBundledFillTest, type Placement } from "@/lib/fillTest";
 import {
   buildFlashcardLlmRequestKey,
   normalizeFlashcardLlmResponse,
@@ -52,6 +52,7 @@ import {
   QUIZ_SELECTION_MODES,
   SLOT_INDICES,
   buildAdminMeaningKey,
+  buildBundledFillTestPlan,
   buildFillTestFromSavedContent,
   applyAdminMeaningEdit,
   cloneFillTest,
@@ -1003,8 +1004,12 @@ const gradeLabels = getGradeLabels(str);
     await refreshAll();
   }
 
-  function resetQuizWordState() {
-    setQuizSelections([null, null, null]);
+  function buildEmptyQuizSelections(word?: TestableWord): Array<number | null> {
+    return Array(word?.fillTest.sentences.length ?? 0).fill(null);
+  }
+
+  function resetQuizWordState(word?: TestableWord) {
+    setQuizSelections(buildEmptyQuizSelections(word));
     setQuizResult(null);
     setQuizActivePhraseIndex(null);
     setQuizDraggingPhraseIndex(null);
@@ -3176,11 +3181,11 @@ const gradeLabels = getGradeLabels(str);
     });
   }
 
-  function updateQuizSelection(index: 0 | 1 | 2, value: 0 | 1 | 2 | null) {
+  function updateQuizSelection(index: number, value: number | null) {
     setQuizSelections((previous) => {
-      const next = [...previous] as [0 | 1 | 2 | null, 0 | 1 | 2 | null, 0 | 1 | 2 | null];
+      const next = [...previous];
       if (value !== null) {
-        SLOT_INDICES.forEach((slotIndex) => {
+        next.forEach((_selection, slotIndex) => {
           if (slotIndex !== index && next[slotIndex] === value) {
             next[slotIndex] = null;
           }
@@ -3191,7 +3196,7 @@ const gradeLabels = getGradeLabels(str);
     });
   }
 
-  function handleQuizPhraseDragStart(event: React.DragEvent<HTMLElement>, phraseIndex: 0 | 1 | 2) {
+  function handleQuizPhraseDragStart(event: React.DragEvent<HTMLElement>, phraseIndex: number) {
     if (quizResult) {
       event.preventDefault();
       return;
@@ -3208,7 +3213,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizDropSentenceIndex(null);
   }
 
-  function handleQuizSentenceDragOver(event: React.DragEvent<HTMLElement>, sentenceIndex: 0 | 1 | 2) {
+  function handleQuizSentenceDragOver(event: React.DragEvent<HTMLElement>, sentenceIndex: number) {
     if (quizResult) {
       return;
     }
@@ -3218,14 +3223,15 @@ const gradeLabels = getGradeLabels(str);
     setQuizDropSentenceIndex(sentenceIndex);
   }
 
-  function handleQuizSentenceDrop(event: React.DragEvent<HTMLElement>, sentenceIndex: 0 | 1 | 2) {
+  function handleQuizSentenceDrop(event: React.DragEvent<HTMLElement>, sentenceIndex: number) {
     if (quizResult) {
       return;
     }
 
     event.preventDefault();
     const droppedPhraseIndex = parseQuizPhraseIndex(
-      event.dataTransfer.getData(QUIZ_PHRASE_DRAG_MIME)
+      event.dataTransfer.getData(QUIZ_PHRASE_DRAG_MIME),
+      currentQuizWord?.fillTest.phrases.length ?? 0
     );
     if (droppedPhraseIndex === null) {
       setQuizDraggingPhraseIndex(null);
@@ -3239,7 +3245,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizDropSentenceIndex(null);
   }
 
-  function handleQuizSentenceTap(sentenceIndex: 0 | 1 | 2) {
+  function handleQuizSentenceTap(sentenceIndex: number) {
     if (quizResult || quizActivePhraseIndex === null) {
       return;
     }
@@ -3344,20 +3350,30 @@ const gradeLabels = getGradeLabels(str);
 
   function startQuizSessionWithWords(wordsForSession: TestableWord[]) {
     if (wordsForSession.length === 0) {
-      setQuizNotice("No due characters match this fill-test selection.");
+      setQuizNotice(str.fillTest.notices.noQuizReady);
+      return;
+    }
+
+    const plan = buildBundledFillTestPlan(wordsForSession);
+    if (plan.quizWords.length === 0) {
+      setQuizNotice(str.fillTest.notices.noQuizReady);
       return;
     }
 
     stopFlashcardSession();
-    setQuizQueue(wordsForSession.map((word) => ({ ...word, fillTest: cloneFillTest(word.fillTest) })));
+    setQuizQueue(plan.quizWords.map((word) => ({ ...word, fillTest: cloneFillTest(word.fillTest) })));
     setQuizIndex(0);
-    resetQuizWordState();
+    resetQuizWordState(plan.quizWords[0]);
     setQuizHistory([]);
     setQuizCompleted(false);
     setQuizInProgress(true);
     setQuizSessionStartTime(Date.now());
     setCompletedReviewTestSessionName(null);
-    setQuizNotice(null);
+    setQuizNotice(
+      plan.skippedCharacters.length > 0
+        ? str.fillTest.notices.skippedBundledCharacters.replace("{characters}", plan.skippedCharacters.join(""))
+        : null
+    );
   }
 
   function startQuizSession() {
@@ -3395,7 +3411,7 @@ const gradeLabels = getGradeLabels(str);
       setQuizInProgress(false);
       setQuizQueue([]);
       setQuizIndex(0);
-      setQuizSelections([null, null, null]);
+      setQuizSelections([]);
       setQuizResult(null);
       setQuizActivePhraseIndex(null);
       setQuizDraggingPhraseIndex(null);
@@ -3431,7 +3447,7 @@ const gradeLabels = getGradeLabels(str);
     setQuizInProgress(false);
     setQuizQueue([]);
     setQuizIndex(0);
-    setQuizSelections([null, null, null]);
+    setQuizSelections([]);
     setQuizResult(null);
     setQuizActivePhraseIndex(null);
     setQuizDraggingPhraseIndex(null);
@@ -3495,14 +3511,19 @@ const gradeLabels = getGradeLabels(str);
       setFlashcardRevealed(false);
       setFlashcardLlmLoading(false);
       setFlashcardLlmError(null);
+      const plan = buildBundledFillTestPlan(activeReviewTestSessionRuntime.quizWords);
+      if (plan.quizWords.length === 0) {
+        router.replace("/words/review?reviewTestSessionStatus=no_quiz_ready");
+        return;
+      }
       setQuizQueue(
-        activeReviewTestSessionRuntime.quizWords.map((word) => ({
+        plan.quizWords.map((word) => ({
           ...word,
           fillTest: cloneFillTest(word.fillTest),
         }))
       );
       setQuizIndex(0);
-      setQuizSelections([null, null, null]);
+      resetQuizWordState(plan.quizWords[0]);
       setQuizResult(null);
       setQuizActivePhraseIndex(null);
       setQuizDraggingPhraseIndex(null);
@@ -3515,7 +3536,7 @@ const gradeLabels = getGradeLabels(str);
       setQuizNotice(
         str.fillTest.reviewTestSession.activeSession
           .replace("{name}", activeReviewTestSession.name)
-          .replace("{count}", String(activeReviewTestSessionRuntime.quizWords.length))
+          .replace("{count}", String(plan.quizWords.length))
       );
       return;
     }
@@ -3525,9 +3546,7 @@ const gradeLabels = getGradeLabels(str);
       : undefined;
     const wordsForSession = requestedWord ? [requestedWord] : fillTestDueWords;
     if (wordsForSession.length === 0) {
-      setQuizNotice(
-        "No due characters match this fill-test selection."
-      );
+      setQuizNotice(str.fillTest.notices.noQuizReady);
       return;
     }
 
@@ -3537,9 +3556,14 @@ const gradeLabels = getGradeLabels(str);
     setFlashcardRevealed(false);
     setFlashcardLlmLoading(false);
     setFlashcardLlmError(null);
-    setQuizQueue(wordsForSession.map((word) => ({ ...word, fillTest: cloneFillTest(word.fillTest) })));
+    const plan = buildBundledFillTestPlan(wordsForSession);
+    if (plan.quizWords.length === 0) {
+      setQuizNotice(str.fillTest.notices.noQuizReady);
+      return;
+    }
+    setQuizQueue(plan.quizWords.map((word) => ({ ...word, fillTest: cloneFillTest(word.fillTest) })));
     setQuizIndex(0);
-    setQuizSelections([null, null, null]);
+    resetQuizWordState(plan.quizWords[0]);
     setQuizResult(null);
     setQuizActivePhraseIndex(null);
     setQuizDraggingPhraseIndex(null);
@@ -3549,7 +3573,11 @@ const gradeLabels = getGradeLabels(str);
     setQuizInProgress(true);
     setQuizSessionStartTime(Date.now());
     setCompletedReviewTestSessionName(null);
-    setQuizNotice(null);
+    setQuizNotice(
+      plan.skippedCharacters.length > 0
+        ? str.fillTest.notices.skippedBundledCharacters.replace("{characters}", plan.skippedCharacters.join(""))
+        : null
+    );
   }, [
     activeReviewTestSession,
     activeReviewTestSessionRuntime,
@@ -3563,6 +3591,8 @@ const gradeLabels = getGradeLabels(str);
     router,
     session?.isPlatformAdmin,
     session?.role,
+    str.fillTest.notices.noQuizReady,
+    str.fillTest.notices.skippedBundledCharacters,
     str.fillTest.reviewTestSession.activeSession,
   ]);
 
@@ -3571,7 +3601,7 @@ const gradeLabels = getGradeLabels(str);
       return;
     }
 
-    const placements: Placement[] = SLOT_INDICES.flatMap((sentenceIndex) => {
+    const placements: Placement[] = currentQuizWord.fillTest.sentences.flatMap((_sentence, sentenceIndex) => {
       const selectedPhrase = quizSelections[sentenceIndex];
       if (selectedPhrase === null) {
         return [];
@@ -3585,26 +3615,29 @@ const gradeLabels = getGradeLabels(str);
       ];
     });
 
-    const result = gradeFillTest(currentQuizWord.fillTest, placements);
+    const result = gradeBundledFillTest(currentQuizWord.fillTest, placements);
     setQuizResult(result);
     setQuizSubmitting(true);
     setQuizNotice(null);
 
     try {
-      await gradeWord(currentQuizWord.id, { grade: result.tier, source: "fillTest" });
+      for (const memberResult of result.memberResults) {
+        await gradeWord(memberResult.wordId, { grade: memberResult.tier, source: "fillTest" });
+      }
       setQuizHistory((previous) => [
         ...previous,
-        {
-          wordId: currentQuizWord.id,
-          hanzi: currentQuizWord.hanzi,
-          tier: result.tier,
-          correctCount: result.correctCount,
-        },
+        ...result.memberResults.map((memberResult) => ({
+          wordId: memberResult.wordId,
+          hanzi: memberResult.hanzi,
+          tier: memberResult.tier,
+          correctCount: memberResult.correctCount,
+          totalCount: memberResult.totalCount,
+        })),
       ]);
 
-      // Trigger celebration for easy grades
-      if (result.tier === "easy") {
-        // Signal to component that an easy grade was achieved
+      // Trigger celebration only when the whole quiz item is correct.
+      if (result.correctCount === result.sentenceResults.length) {
+        // Signal to component that a fully correct quiz item was achieved
         // This allows the component to show animation and play sound
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).__quizEasyGradeEvent = Date.now();
@@ -3639,8 +3672,6 @@ const gradeLabels = getGradeLabels(str);
           let fullyCorrectCount = 0;
           let failedCount = 0;
           let partiallyCorrectCount = 0;
-
-          console.log("Quiz completion - quizHistory:", quizHistory); // DEBUG
 
           // Build gradeData array from quizHistory
           const gradeData = quizHistory.map((item) => {
@@ -3678,9 +3709,7 @@ const gradeLabels = getGradeLabels(str);
             coinsEarned,
           };
 
-          console.log("Saving quiz session and wallet:", session); // DEBUG
           await recordQuizSession(session);
-          console.log(`Quiz session and wallet saved with ${coinsEarned} coins`); // DEBUG
         }
       } catch (error) {
         console.error("Failed to save quiz session:", error);
@@ -3716,8 +3745,9 @@ const gradeLabels = getGradeLabels(str);
       return;
     }
 
-    setQuizIndex((previous) => previous + 1);
-    resetQuizWordState();
+    const nextIndex = quizIndex + 1;
+    setQuizIndex(nextIndex);
+    resetQuizWordState(quizQueue[nextIndex]);
   }
 
   const pronunciationEntries = useMemo(() => {

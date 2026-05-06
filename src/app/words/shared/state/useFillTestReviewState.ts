@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { FillResult } from "@/lib/fillTest";
+import type { BundledFillTestResult } from "@/lib/fillTest";
 import type {
   QuizHistoryItem,
   QuizSelectionMode,
@@ -13,14 +13,14 @@ export function useFillTestReviewState() {
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [quizQueue, setQuizQueue] = useState<TestableWord[]>([]);
   const [quizIndex, setQuizIndex] = useState(0);
-  const [quizSelections, setQuizSelections] = useState<QuizSelections>([null, null, null]);
-  const [quizResult, setQuizResult] = useState<FillResult | null>(null);
+  const [quizSelections, setQuizSelections] = useState<QuizSelections>([]);
+  const [quizResult, setQuizResult] = useState<BundledFillTestResult | null>(null);
   const [quizHistory, setQuizHistory] = useState<QuizHistoryItem[]>([]);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
   const [quizNotice, setQuizNotice] = useState<string | null>(null);
-  const [quizActivePhraseIndex, setQuizActivePhraseIndex] = useState<0 | 1 | 2 | null>(null);
-  const [quizDraggingPhraseIndex, setQuizDraggingPhraseIndex] = useState<0 | 1 | 2 | null>(null);
-  const [quizDropSentenceIndex, setQuizDropSentenceIndex] = useState<0 | 1 | 2 | null>(null);
+  const [quizActivePhraseIndex, setQuizActivePhraseIndex] = useState<number | null>(null);
+  const [quizDraggingPhraseIndex, setQuizDraggingPhraseIndex] = useState<number | null>(null);
+  const [quizDropSentenceIndex, setQuizDropSentenceIndex] = useState<number | null>(null);
   const [quizSessionStartTime, setQuizSessionStartTime] = useState<number | null>(null);
   const [completedReviewTestSessionName, setCompletedReviewTestSessionName] = useState<string | null>(null);
 

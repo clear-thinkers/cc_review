@@ -10,7 +10,7 @@ export interface SessionHistoryTableProps {
   sessions: QuizSession[];
   strings: ResultsLocaleStrings;
   onClearClick: () => void;
-  onSendFailedToSession: (session: QuizSession) => void;
+  onSendFailedToSession: (session: QuizSession, anchorRect: DOMRect) => void;
   sendingSessionId?: string | null;
   hideDestructiveActions?: boolean;
 }
@@ -37,6 +37,9 @@ export function SessionHistoryTable({
 }: SessionHistoryTableProps) {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [expandedTestedSessionIds, setExpandedTestedSessionIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const handleHeaderClick = (field: SortField) => {
     if (sortField === field) {
@@ -105,6 +108,22 @@ export function SessionHistoryTable({
       return chars.join("、");
     }
     return chars.slice(0, maxLength).join("、") + "…";
+  };
+
+  const isCharacterListTruncated = (chars: string[], maxLength = 10): boolean => {
+    return chars.length > maxLength;
+  };
+
+  const toggleTestedCharacters = (sessionId: string) => {
+    setExpandedTestedSessionIds((current) => {
+      const next = new Set(current);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
   };
 
   return (
@@ -179,8 +198,12 @@ export function SessionHistoryTable({
               </tr>
             </thead>
             <tbody>
-              {sortedData.map((session) => (
-                <tr key={session.id} className={styles.sessionTableRow}>
+              {sortedData.map((session) => {
+                const isTestedExpanded = expandedTestedSessionIds.has(session.id);
+                const canExpandTestedCharacters = isCharacterListTruncated(session.charactersTested);
+
+                return (
+                  <tr key={session.id} className={styles.sessionTableRow}>
                   <td className={styles.sessionTableCell}>{session.sessionDate}</td>
                   <td className={styles.sessionTableCell + " " + styles.numeric}>
                     {session.fullyCorrectPercent}%
@@ -198,9 +221,24 @@ export function SessionHistoryTable({
                     {session.charactersTested.length}
                   </td>
                   <td className={styles.sessionTableCell + " " + styles.characters}>
-                    {session.charactersTested.length > 0
-                      ? truncateCharacters(session.charactersTested)
-                      : strings.table.noCharacters}
+                    {session.charactersTested.length > 0 ? (
+                      canExpandTestedCharacters ? (
+                        <button
+                          type="button"
+                          className={styles.characterListToggle}
+                          onClick={() => toggleTestedCharacters(session.id)}
+                          aria-expanded={isTestedExpanded}
+                        >
+                          {isTestedExpanded
+                            ? session.charactersTested.join("、")
+                            : truncateCharacters(session.charactersTested)}
+                        </button>
+                      ) : (
+                        session.charactersTested.join("、")
+                      )
+                    ) : (
+                      strings.table.noCharacters
+                    )}
                   </td>
                   <td className={styles.sessionTableCell + " " + styles.numeric}>
                     {session.charactersFailed.length}
@@ -213,7 +251,9 @@ export function SessionHistoryTable({
                           <button
                             type="button"
                             className="btn-secondary rounded border-2 px-3 py-1 text-[11px] font-medium leading-none disabled:opacity-50"
-                            onClick={() => onSendFailedToSession(session)}
+                            onClick={(event) =>
+                              onSendFailedToSession(session, event.currentTarget.getBoundingClientRect())
+                            }
                             disabled={sendingSessionId === session.id}
                           >
                             {sendingSessionId === session.id
@@ -227,8 +267,9 @@ export function SessionHistoryTable({
                   <td className={styles.sessionTableCell + " " + styles.numeric}>
                     {session.coinsEarned}
                   </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
