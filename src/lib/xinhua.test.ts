@@ -55,6 +55,23 @@ describe("buildXinhuaFlashcardInfo", () => {
     expect(result?.pronunciations).toEqual([{ pinyin: "xué", explanations: [] }]);
   });
 
+  it("merges missing base pronunciations into trimmed detail entries", () => {
+    const result = buildXinhuaFlashcardInfo(
+      {
+        detail: [{ char: "\u6084", pinyin: ["qi\u01ceo"] }],
+        base: [{ char: "\u6084", pinyin: ["qi\u01ceo", "qi\u0101o"] }],
+      },
+      "\u6084"
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.pinyin).toEqual(["qi\u01ceo", "qi\u0101o"]);
+    expect(result?.pronunciations).toEqual([
+      { pinyin: "qi\u01ceo", explanations: [] },
+      { pinyin: "qi\u0101o", explanations: [] },
+    ]);
+  });
+
   it("returns null for unknown character", () => {
     const result = buildXinhuaFlashcardInfo(sampleDataset, "未");
     expect(result).toBeNull();

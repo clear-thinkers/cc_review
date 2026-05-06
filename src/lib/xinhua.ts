@@ -2,6 +2,7 @@ type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respons
 
 const LOCAL_DATA_PATHS = {
   detail: "/data/char_detail.json",
+  base: "/data/char_base.json",
 } as const;
 
 export type DictionaryExplanationEntry = {
@@ -29,6 +30,7 @@ export type DictionaryDetailEntry = {
 
 export type XinhuaDataset = {
   detail: DictionaryDetailEntry[];
+  base?: DictionaryDetailEntry[];
 };
 
 export type XinhuaFlashcardPronunciation = {
@@ -51,6 +53,7 @@ let datasetPromise: Promise<XinhuaDataset> | null = null;
 // Guardrail: keep O(1) character lookup for admin target hydration. Linear scans per character
 // against char_detail.json can make /words/admin appear to hang on large local datasets.
 let detailIndexCache: Map<string, DictionaryDetailEntry> | null = null;
+let baseIndexCache: Map<string, DictionaryDetailEntry> | null = null;
 const flashcardCache = new Map<string, XinhuaFlashcardInfo | null>();
 
 function normalizeText(value: string | undefined): string {
@@ -197,6 +200,42 @@ function extractDetailPronunciations(detailEntry: DictionaryDetailEntry | undefi
   return result;
 }
 
+function buildCharacterIndex(entries: DictionaryDetailEntry[]): Map<string, DictionaryDetailEntry> {
+  const index = new Map<string, DictionaryDetailEntry>();
+  for (const entry of entries) {
+    const character = normalizeText(entry.char);
+    if (!character || index.has(character)) {
+      continue;
+    }
+    index.set(character, entry);
+  }
+
+  return index;
+}
+
+function mergePronunciations(
+  primary: XinhuaFlashcardPronunciation[],
+  secondary: XinhuaFlashcardPronunciation[]
+): XinhuaFlashcardPronunciation[] {
+  const seen = new Set<string>();
+  const result: XinhuaFlashcardPronunciation[] = [];
+
+  for (const entry of [...primary, ...secondary]) {
+    const pinyin = normalizeText(entry.pinyin);
+    if (!pinyin || seen.has(pinyin)) {
+      continue;
+    }
+
+    seen.add(pinyin);
+    result.push({
+      pinyin,
+      explanations: entry.explanations,
+    });
+  }
+
+  return result;
+}
+
 export async function loadXinhuaDataset(fetcher: Fetcher = fetch): Promise<XinhuaDataset> {
   if (datasetCache) {
     return datasetCache;
@@ -206,19 +245,15 @@ export async function loadXinhuaDataset(fetcher: Fetcher = fetch): Promise<Xinhu
     return datasetPromise;
   }
 
-  datasetPromise = fetchDatasetArray<DictionaryDetailEntry>(LOCAL_DATA_PATHS.detail, "char_detail.json", fetcher)
-    .then((detail) => {
-      const detailIndex = new Map<string, DictionaryDetailEntry>();
-      for (const entry of detail) {
-        const character = normalizeText(entry.char);
-        if (!character || detailIndex.has(character)) {
-          continue;
-        }
-        detailIndex.set(character, entry);
-      }
-      const dataset: XinhuaDataset = { detail };
+  datasetPromise = Promise.all([
+    fetchDatasetArray<DictionaryDetailEntry>(LOCAL_DATA_PATHS.detail, "char_detail.json", fetcher),
+    fetchDatasetArray<DictionaryDetailEntry>(LOCAL_DATA_PATHS.base, "char_base.json", fetcher).catch(() => []),
+  ])
+    .then(([detail, base]) => {
+      const dataset: XinhuaDataset = { detail, base };
       datasetCache = dataset;
-      detailIndexCache = detailIndex;
+      detailIndexCache = buildCharacterIndex(detail);
+      baseIndexCache = buildCharacterIndex(base);
       return dataset;
     })
     .finally(() => {
@@ -240,11 +275,17 @@ export function buildXinhuaFlashcardInfo(
   const detailEntry =
     detailIndexCache?.get(character) ??
     dataset.detail.find((entry) => normalizeText(entry.char) === character);
-  if (!detailEntry) {
+  const baseEntry =
+    baseIndexCache?.get(character) ??
+    dataset.base?.find((entry) => normalizeText(entry.char) === character);
+  if (!detailEntry && !baseEntry) {
     return null;
   }
 
-  const pronunciations = extractDetailPronunciations(detailEntry);
+  const pronunciations = mergePronunciations(
+    extractDetailPronunciations(detailEntry),
+    extractDetailPronunciations(baseEntry)
+  );
   const pinyin = dedupeStrings(pronunciations.map((entry) => entry.pinyin));
 
   if (pronunciations.length === 0 && pinyin.length === 0) {
@@ -286,5 +327,6 @@ export function resetXinhuaCachesForTests(): void {
   datasetCache = null;
   datasetPromise = null;
   detailIndexCache = null;
+  baseIndexCache = null;
   flashcardCache.clear();
 }
