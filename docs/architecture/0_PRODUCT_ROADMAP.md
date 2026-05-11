@@ -1,6 +1,6 @@
 ﻿# Product Roadmap — HanziQuest (`cc_review`)
 
-_Last updated: 2026-05-02 · Authority hierarchy: see `AI_CONTRACT.md`_
+_Last updated: 2026-05-11 · Authority hierarchy: see `AI_CONTRACT.md`_
 
 **Current state:** Tier 1, Phase 2 complete. Pre-pilot.
 Bundled phrase quiz mode shipped on 2026-05-02.
@@ -20,6 +20,7 @@ Tier 2 is blocked until all Tier 1 gates close.
 | D | Phrase-keyed input | Parent enters a phrase (not just a character) as primary unit | TBD | 📋 Planned |
 | E | Pilot feedback triage | Collect and triage structured feedback from pilot families | — | 🔄 In Progress |
 | F | Ingredient shopping for kids | Add shopping controls to the ingredient detail page so kids can mark/add ingredients while viewing a recipe's ingredients | `docs/feature-specs/2026-03-30-shop-ingredient-shopping.md` | 📋 Planned |
+| G | Coin cash-out (redemption) | Kids draw real-dollar value from usable coin balance at 100 coins = $1; each redemption is documented with a child-supplied note and signature; usable balance decreases but quiz results (coins earned from sessions) are unaffected; lives on `/words/shop` | `docs/feature-specs/2026-05-11-coin-redemption.md` | ✅ Shipped 2026-05-11 |
 
 > Planned features with a `TBD` spec require a feature spec before build. See `AI_CONTRACT.md §2` for scope confirmation rules.
 
@@ -55,3 +56,5 @@ Note that specs may not reflect the current implementation — the codebase has 
   Spec: `docs/feature-specs/2026-04-22-results-failed-to-test-session.md`
 - 2026-05-02: Bundled phrase quiz mode allows one- and two-phrase characters to enter fill-test sessions through runtime bundles, with per-character grading and unchanged coin logic.
   Spec: `docs/feature-specs/2026-05-02-grouped-phrase-quiz-mode.md`
+- 2026-05-11: Coin cash-out (redemption) ships on `/words/shop`. Kids redeem usable coins at 100:1 for real-dollar value with a child-written note and signature. Four-part breakdown panel replaces single wallet balance display. `redeem_coins` RPC is atomic; quiz results remain immutable.
+  Spec: `docs/feature-specs/2026-05-11-coin-redemption.md`

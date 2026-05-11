@@ -6,6 +6,8 @@ import type {
   ShopRecipe,
   ShopVariantIconRule,
   UnlockShopRecipeResult,
+  RedeemCoinsResult,
+  RedeemCoinsErrorCode,
 } from "./shop.types";
 import {
   canonicalizeShopIngredientKey,
@@ -510,5 +512,54 @@ export function normalizeUnlockShopRecipeResult(raw: unknown): UnlockShopRecipeR
       typeof source.remainingCoins === "number" ? source.remainingCoins : null,
     coinsSpent: typeof source.coinsSpent === "number" ? source.coinsSpent : 0,
     ...(typeof source.message === "string" ? { message: source.message } : {}),
+  };
+}
+
+type RedeemCoinsRpcResult = {
+  success?: boolean;
+  code?: string;
+  coinsRedeemed?: number;
+  dollarValue?: number | string;
+  remainingCoins?: number;
+};
+
+export function normalizeRedeemCoinsResult(raw: unknown): RedeemCoinsResult {
+  const source =
+    raw && typeof raw === "object" ? (raw as RedeemCoinsRpcResult) : {};
+
+  if (source.success === true) {
+    return {
+      success: true,
+      code: "redeemed",
+      coinsRedeemed: typeof source.coinsRedeemed === "number" ? source.coinsRedeemed : 0,
+      dollarValue:
+        typeof source.dollarValue === "number"
+          ? source.dollarValue
+          : typeof source.dollarValue === "string"
+            ? parseFloat(source.dollarValue)
+            : 0,
+      remainingCoins: typeof source.remainingCoins === "number" ? source.remainingCoins : 0,
+    };
+  }
+
+  const validCodes: RedeemCoinsErrorCode[] = [
+    "forbidden",
+    "invalid_amount",
+    "invalid_note",
+    "invalid_signature",
+    "insufficient_coins",
+  ];
+  const code = source.code;
+  const normalizedCode: RedeemCoinsErrorCode =
+    validCodes.includes(code as RedeemCoinsErrorCode)
+      ? (code as RedeemCoinsErrorCode)
+      : "unknown";
+
+  return {
+    success: false,
+    code: normalizedCode,
+    ...(typeof source.remainingCoins === "number"
+      ? { remainingCoins: source.remainingCoins }
+      : {}),
   };
 }

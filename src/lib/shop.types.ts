@@ -62,6 +62,47 @@ export type ShopTransaction = {
   createdAt: number;
 };
 
+export type CoinRedemption = {
+  id: string;
+  userId: string;
+  coinsRedeemed: number;
+  dollarValue: number;
+  note: string;
+  childSignature: string;
+  beginningBalance: number;
+  endingBalance: number;
+  createdAt: number;
+};
+
+export type RedeemCoinsErrorCode =
+  | "forbidden"
+  | "invalid_amount"
+  | "invalid_note"
+  | "invalid_signature"
+  | "insufficient_coins"
+  | "unknown";
+
+export type RedeemCoinsResult =
+  | {
+      success: true;
+      code: "redeemed";
+      coinsRedeemed: number;
+      dollarValue: number;
+      remainingCoins: number;
+    }
+  | {
+      success: false;
+      code: RedeemCoinsErrorCode;
+      remainingCoins?: number;
+    };
+
+export type CoinBreakdown = {
+  totalEarned: number;
+  spentOnRecipes: number;
+  redeemed: number;
+  available: number;
+};
+
 export type UnlockShopRecipeErrorCode =
   | "already_unlocked"
   | "insufficient_coins"

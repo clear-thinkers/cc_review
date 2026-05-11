@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-05-02_
+_Last updated: 2026-05-11_
 
 ---
 
@@ -22,7 +22,8 @@ Tier 1 rules (active):
 - Flashcard content is keyed by `character|pronunciation` and normalized before persistence.
 - Fill-test eligibility is derived from saved phrase/example rows and `include_in_fill_test` flags. One eligible phrase/example row is enough for runtime quiz eligibility; low-phrase characters are bundled at session start.
 - Unsafe content and malformed payloads are dropped during normalization before they can be persisted.
-- Coins are earned from completed quiz sessions and spent only through persisted shop unlocks; neither earning nor spend changes scheduler state.
+- Coins are earned from completed quiz sessions and spent through shop unlocks or redeemed for real-dollar value; neither action changes scheduler state or quiz history.
+- `wallets.total_coins` is a running spendable balance — it is decremented by shop unlocks and coin redemptions. It is NOT a total-earned counter; `quiz_sessions.coins_earned` is the immutable per-session earned record and is never modified by redemptions.
 
 Primary admin user flow:
 1. Add Hanzi       → `/words/add`     → Supabase `words` table (hanzi ingested, optionally tagged, unreviewed).
@@ -242,13 +243,21 @@ These rules govern the results/history view for session data reporting:
 These rules govern the child-facing reward shop:
 
 1. `/words/shop` is accessible to child profiles and platform admin only. Parent profiles are route-blocked.
-2. The shop reads persisted data only from `wallets`, `shop_recipes`, `shop_ingredient_prices`, `shop_recipe_unlocks`, and `shop_coin_transactions`.
+2. The shop reads persisted data only from `wallets`, `shop_recipes`, `shop_ingredient_prices`, `shop_recipe_unlocks`, `shop_coin_transactions`, and `coin_redemptions`.
 3. Recipe unlocks are persisted through the `unlock_shop_recipe` RPC only. UI code must not manually write unlock rows, wallet deductions, or transaction rows.
 4. `unlock_shop_recipe` is atomic: it ensures a wallet row exists, rejects forbidden / unavailable / already-unlocked / insufficient-coin states, inserts the unlock row, decrements the wallet, and appends a spend-history row in one transaction boundary.
 5. Recipe catalog content is shared/global. Unlock state and spend history are per-user.
 6. Unlocking a recipe or opening ingredient/history modals must not modify `words`, `flashcard_contents`, scheduler fields, or quiz history.
 7. Only active recipes are unlockable. Empty wall slots render as reserved content, not ad-hoc generated recipes.
 8. Shop history is read-only and sourced from `shop_coin_transactions`.
+9. **Coin breakdown panel:** The shop displays a four-part coin summary: Total Earned (sum of `quiz_sessions.coins_earned`), Spent on Recipes (sum of `shop_coin_transactions.coins_spent`), Redeemed (sum of `coin_redemptions.coins_redeemed`), and Available (`wallets.total_coins`). The invariant `Total Earned − Spent on Recipes − Redeemed = Available` must hold.
+10. **Cash-out (coin redemption):** Children and platform admin may redeem coins for real-dollar value at a 100:1 rate (100 coins = $1.00). Redemptions are persisted through the `redeem_coins` RPC only. UI code must not manually write redemption rows or wallet decrements.
+11. `redeem_coins` is atomic: it validates the coin amount (must be a positive multiple of 100, ≤ available balance), validates note (1–200 chars) and signature (non-empty), decrements the wallet, and inserts a `coin_redemptions` row with beginning/ending balances in one transaction boundary.
+12. Minimum redemption amount is 100 coins. Maximum is the user's current available balance.
+13. Redemption does not modify `quiz_sessions.coins_earned` — the earned total is immutable.
+14. Cash-out form validation errors (not a multiple of 100, exceeds balance, missing note/signature) are shown inline and block submission. Server-side codes (`insufficient_coins`, `invalid_amount`, `invalid_note`, `invalid_signature`, `forbidden`) surface as translated error messages.
+15. A confirmation modal (portal-rendered) shows coins, dollar value, note, and signature before committing the redemption.
+16. Inline redemption history table (within the cash-out section) is sourced from `coin_redemptions` for the session user.
 
 ### Shop Admin Rules (`/words/shop-admin`)
 
@@ -561,6 +570,23 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `created_at` | timestamptz | Server timestamp |
 | **RLS Guarantee** | | Family-scoped read; insert-only for the acting user except platform admin |
 
+**`coin_redemptions` table** — immutable record of each cash-out transaction, per user
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | Foreign key → `users.id` |
+| `family_id` | uuid | Foreign key → `families.id` (denormalized for RLS efficiency) |
+| `coins_redeemed` | integer | Must be positive and a multiple of 100 |
+| `dollar_value` | numeric(10,2) | `coins_redeemed / 100`; always positive |
+| `note` | text | Child-written free-form note; 1–200 chars |
+| `child_signature` | text | Child-written signature; non-empty |
+| `beginning_balance` | integer | Wallet balance before decrement; non-negative |
+| `ending_balance` | integer | Wallet balance after decrement; non-negative |
+| `created_at` | timestamptz | Server timestamp |
+| **Constraints** | | `coins_redeemed % 100 = 0`, `coins_redeemed > 0`, `dollar_value > 0`, balances `≥ 0` |
+| **RLS Guarantee** | | Family-scoped read; insert-only via `redeem_coins` RPC (no direct inserts from client) |
+
 **`shop_ingredient_prices` table** — shared ingredient catalog pricing and icon metadata
 
 | Field | Type | Notes |
@@ -709,7 +735,9 @@ These are the technical behaviors the system upholds. They are the factual basis
    - Character and meaning remain visible regardless of phrase-test inclusion; phrases are the only conditional element.
    - Parent component (`FlashcardReviewSection`) controls visibility toggle via `showPinyin` state (boolean); when `false`, pinyin spans are removed from DOM entirely (not hidden via CSS).
 6. **Shop recipe unlocks are atomic.** The `unlock_shop_recipe` RPC is the only write path that may create unlock rows, decrement wallets, and append shop spend history.
-7. **Shop writes do not affect learning state.** Shop unlocks, spend history, ingredient catalog edits, and recipe metadata edits never update `words`, `flashcard_contents`, scheduler fields, or quiz-session grading data.
+6a. **Coin redemptions are atomic.** The `redeem_coins` RPC is the only write path that may decrement wallets and insert redemption rows. It validates coin amount, note, and signature; locks the wallet row with `FOR UPDATE`; checks available balance; decrements; and inserts the record in one transaction boundary. Direct client inserts to `coin_redemptions` are blocked by RLS.
+7. **Shop writes do not affect learning state.** Shop unlocks, spend history, coin redemptions, ingredient catalog edits, and recipe metadata edits never update `words`, `flashcard_contents`, scheduler fields, or quiz-session grading data.
+7a. **`quiz_sessions.coins_earned` is immutable.** Coin redemptions decrement `wallets.total_coins` only. The per-session earned totals in `quiz_sessions` are never modified by any redemption path.
 8. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists.
 9. **Due review pages wrap `WordsWorkspace` in `<Suspense>`.** Required for correct search-param handling in Next.js.
 

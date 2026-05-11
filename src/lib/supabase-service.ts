@@ -19,11 +19,14 @@ import type {
   ShopTransaction,
   ShopRecipeUnlock,
   UnlockShopRecipeResult,
+  CoinRedemption,
+  RedeemCoinsResult,
+  CoinBreakdown,
 } from "./shop.types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade, GradeResult } from "./scheduler";
 import { canonicalizeShopIngredientKey } from "./shopIngredients";
-import { normalizeUnlockShopRecipeResult } from "./shop";
+import { normalizeUnlockShopRecipeResult, normalizeRedeemCoinsResult } from "./shop";
 import {
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
@@ -1029,6 +1032,124 @@ export async function unlockShopRecipe(recipeId: string): Promise<UnlockShopReci
   });
   if (error) throw new Error(`unlockShopRecipe: ${error.message}`);
   return normalizeUnlockShopRecipeResult(data);
+}
+
+// ─── Coin Redemptions ────────────────────────────────────────────────────────
+
+interface SupabaseCoinRedemptionRow {
+  id: string;
+  user_id: string;
+  family_id: string;
+  coins_redeemed: number;
+  dollar_value: number | string;
+  note: string;
+  child_signature: string;
+  beginning_balance: number;
+  ending_balance: number;
+  created_at: string;
+}
+
+function toCoinRedemption(row: SupabaseCoinRedemptionRow): CoinRedemption {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    coinsRedeemed: row.coins_redeemed,
+    dollarValue:
+      typeof row.dollar_value === "string"
+        ? parseFloat(row.dollar_value)
+        : row.dollar_value,
+    note: row.note,
+    childSignature: row.child_signature,
+    beginningBalance: row.beginning_balance,
+    endingBalance: row.ending_balance,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+export async function redeemCoins(
+  coins: number,
+  note: string,
+  signature: string
+): Promise<RedeemCoinsResult> {
+  const { data, error } = await supabase.rpc("redeem_coins", {
+    p_coins: coins,
+    p_note: note,
+    p_signature: signature,
+  });
+  if (error) throw new Error(`redeemCoins: ${error.message}`);
+  return normalizeRedeemCoinsResult(data);
+}
+
+export async function listCoinRedemptions(
+  targetUserId?: string
+): Promise<CoinRedemption[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const redemptionUserId = targetUserId ?? userId;
+  const { data, error } = await supabase
+    .from("coin_redemptions")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("user_id", redemptionUserId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`listCoinRedemptions: ${error.message}`);
+  return ((data ?? []) as SupabaseCoinRedemptionRow[]).map(toCoinRedemption);
+}
+
+export async function getCoinBreakdown(
+  targetUserId?: string
+): Promise<CoinBreakdown> {
+  const { familyId, userId } = await getSessionMetadata();
+  const breakdownUserId = targetUserId ?? userId;
+
+  const [sessionsResult, transactionsResult, redemptionsResult, walletResult] =
+    await Promise.all([
+      supabase
+        .from("quiz_sessions")
+        .select("coins_earned")
+        .eq("family_id", familyId)
+        .eq("user_id", breakdownUserId),
+      supabase
+        .from("shop_coin_transactions")
+        .select("coins_spent")
+        .eq("family_id", familyId)
+        .eq("user_id", breakdownUserId),
+      supabase
+        .from("coin_redemptions")
+        .select("coins_redeemed")
+        .eq("family_id", familyId)
+        .eq("user_id", breakdownUserId),
+      supabase
+        .from("wallets")
+        .select("total_coins")
+        .eq("user_id", breakdownUserId)
+        .maybeSingle(),
+    ]);
+
+  if (sessionsResult.error)
+    throw new Error(`getCoinBreakdown sessions: ${sessionsResult.error.message}`);
+  if (transactionsResult.error)
+    throw new Error(`getCoinBreakdown transactions: ${transactionsResult.error.message}`);
+  if (redemptionsResult.error)
+    throw new Error(`getCoinBreakdown redemptions: ${redemptionsResult.error.message}`);
+  if (walletResult.error)
+    throw new Error(`getCoinBreakdown wallet: ${walletResult.error.message}`);
+
+  const totalEarned = (sessionsResult.data ?? []).reduce(
+    (sum, row) => sum + ((row as { coins_earned: number }).coins_earned ?? 0),
+    0
+  );
+  const spentOnRecipes = (transactionsResult.data ?? []).reduce(
+    (sum, row) => sum + ((row as { coins_spent: number }).coins_spent ?? 0),
+    0
+  );
+  const redeemed = (redemptionsResult.data ?? []).reduce(
+    (sum, row) => sum + ((row as { coins_redeemed: number }).coins_redeemed ?? 0),
+    0
+  );
+  const available =
+    (walletResult.data as { total_coins: number } | null)?.total_coins ?? 0;
+
+  return { totalEarned, spentOnRecipes, redeemed, available };
 }
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────

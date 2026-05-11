@@ -9,6 +9,7 @@ import {
   normalizeShopSpecialIngredientList,
   normalizeShopVariantIconRules,
   normalizeUnlockShopRecipeResult,
+  normalizeRedeemCoinsResult,
   resolvePlainShopRecipeIconPath,
   resolveShopIngredientCost,
   resolveShopIngredientIconPath,
@@ -414,5 +415,93 @@ describe("getShopRecipeContentForLocale", () => {
       baseIngredients: [{ name: "Flour", quantity: 1 }],
       specialIngredients: [],
     });
+  });
+});
+
+describe("normalizeRedeemCoinsResult", () => {
+  it("maps a successful RPC result", () => {
+    expect(
+      normalizeRedeemCoinsResult({
+        success: true,
+        code: "redeemed",
+        coinsRedeemed: 200,
+        dollarValue: 2.0,
+        remainingCoins: 300,
+      })
+    ).toEqual({
+      success: true,
+      code: "redeemed",
+      coinsRedeemed: 200,
+      dollarValue: 2.0,
+      remainingCoins: 300,
+    });
+  });
+
+  it("parses dollarValue when returned as a string from postgres numeric", () => {
+    const result = normalizeRedeemCoinsResult({
+      success: true,
+      code: "redeemed",
+      coinsRedeemed: 100,
+      dollarValue: "1.00",
+      remainingCoins: 0,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.dollarValue).toBe(1.0);
+    }
+  });
+
+  it("maps insufficient_coins failure", () => {
+    expect(
+      normalizeRedeemCoinsResult({
+        success: false,
+        code: "insufficient_coins",
+        remainingCoins: 50,
+      })
+    ).toEqual({
+      success: false,
+      code: "insufficient_coins",
+      remainingCoins: 50,
+    });
+  });
+
+  it("maps invalid_amount failure", () => {
+    expect(normalizeRedeemCoinsResult({ success: false, code: "invalid_amount" })).toEqual({
+      success: false,
+      code: "invalid_amount",
+    });
+  });
+
+  it("maps invalid_note failure", () => {
+    expect(normalizeRedeemCoinsResult({ success: false, code: "invalid_note" })).toEqual({
+      success: false,
+      code: "invalid_note",
+    });
+  });
+
+  it("maps invalid_signature failure", () => {
+    expect(normalizeRedeemCoinsResult({ success: false, code: "invalid_signature" })).toEqual({
+      success: false,
+      code: "invalid_signature",
+    });
+  });
+
+  it("maps forbidden failure", () => {
+    expect(normalizeRedeemCoinsResult({ success: false, code: "forbidden" })).toEqual({
+      success: false,
+      code: "forbidden",
+    });
+  });
+
+  it("falls back to unknown for unrecognised codes", () => {
+    expect(normalizeRedeemCoinsResult({ success: false, code: "something_new" })).toEqual({
+      success: false,
+      code: "unknown",
+    });
+  });
+
+  it("falls back to unknown when raw is not an object", () => {
+    expect(normalizeRedeemCoinsResult(null)).toEqual({ success: false, code: "unknown" });
+    expect(normalizeRedeemCoinsResult(undefined)).toEqual({ success: false, code: "unknown" });
   });
 });
