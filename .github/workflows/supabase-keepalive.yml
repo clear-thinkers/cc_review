@@ -12,6 +12,6 @@ jobs:
       - name: Ping Supabase dev project
         run: |
           curl -s -o /dev/null -w "%{http_code}" \
-            "https://wsmwmlohwymmstevibjn.supabase.co/rest/v1/" \
+            "https://wsmwmlohwymmstevibjn.supabase.co/rest/v1/words?limit=1" \
             -H "apikey: ${{ secrets.DEV_SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.DEV_SUPABASE_ANON_KEY }}"
