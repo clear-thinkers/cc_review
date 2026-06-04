@@ -13,5 +13,5 @@ jobs:
         run: |
           curl -s -o /dev/null -w "%{http_code}" \
             "https://wsmwmlohwymmstevibjn.supabase.co/rest/v1/" \
-            -H "apikey: ${{ secrets.sb_publishable_H7hB_zTRvjtMSZnbr00GWw_HW3GcMHS }}" \
-            -H "Authorization: Bearer ${{ secrets.sb_publishable_H7hB_zTRvjtMSZnbr00GWw_HW3GcMHS }}"
+            -H "apikey: ${{ secrets.DEV_SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.DEV_SUPABASE_ANON_KEY }}"
