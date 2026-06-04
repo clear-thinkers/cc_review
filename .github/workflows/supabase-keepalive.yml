@@ -1,0 +1,17 @@
+name: Supabase Dev Keep-Alive
+
+on:
+  schedule:
+    - cron: '0 12 * * 1,4'  # Every Monday and Thursday at noon UTC
+  workflow_dispatch:         # Allow manual trigger
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase dev project
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            "https://wsmwmlohwymmstevibjn.supabase.co/rest/v1/" \
+            -H "apikey: ${{ secrets.sb_publishable_H7hB_zTRvjtMSZnbr00GWw_HW3GcMHS }}" \
+            -H "Authorization: Bearer ${{ secrets.sb_publishable_H7hB_zTRvjtMSZnbr00GWw_HW3GcMHS }}"
