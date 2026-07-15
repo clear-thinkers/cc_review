@@ -437,6 +437,7 @@ const gradeLabels = getGradeLabels(str);
   const pendingQuizExitActionRef = useRef<(() => void | Promise<void>) | null>(null);
   const quizExitWarningOpenRef = useRef(false);
   const skipNextPopStateGuardRef = useRef(false);
+  const quizFinishInFlightRef = useRef(false);
 
   useEffect(() => {
     quizExitWarningOpenRef.current = quizExitWarningOpen;
@@ -3657,91 +3658,102 @@ const gradeLabels = getGradeLabels(str);
 
     const isLastWord = quizIndex >= quizQueue.length - 1;
     if (isLastWord) {
-      const completedReviewTestSession =
-        requestedReviewTestSessionId && activeReviewTestSession
-          ? activeReviewTestSession
-          : null;
+      if (quizFinishInFlightRef.current) {
+        return;
+      }
+      quizFinishInFlightRef.current = true;
+      setQuizSubmitting(true);
 
-      // Create and save the quiz session before finishing
       try {
-        if (quizSessionStartTime !== null) {
-          const sessionEndTime = Date.now();
-          const durationSeconds = Math.floor((sessionEndTime - quizSessionStartTime) / 1000);
+        const completedReviewTestSession =
+          requestedReviewTestSessionId && activeReviewTestSession
+            ? activeReviewTestSession
+            : null;
 
-          // Calculate grade counts from quizHistory
-          let fullyCorrectCount = 0;
-          let failedCount = 0;
-          let partiallyCorrectCount = 0;
-
-          // Build gradeData array from quizHistory
-          const gradeData = quizHistory.map((item) => {
-            const grade: "again" | "hard" | "good" | "easy" = item.tier;
-            
-            if (grade === "easy") {
-              fullyCorrectCount += 1;
-            } else if (grade === "again") {
-              failedCount += 1;
-            } else {
-              partiallyCorrectCount += 1;
-            }
-
-            return {
-              wordId: item.wordId,
-              hanzi: item.hanzi,
-              grade,
-              timestamp: sessionEndTime, // Use session end time as approximation
-            };
-          });
-
-          // Calculate coins earned from grades
-          const coinsEarned = calculateSessionCoins(gradeData);
-
-          const session: QuizSession = {
-            id: makeId(),
-            createdAt: sessionEndTime,
-            sessionType: "fill-test",
-            gradeData,
-            fullyCorrectCount,
-            failedCount,
-            partiallyCorrectCount,
-            totalGrades: quizHistory.length,
-            durationSeconds,
-            coinsEarned,
-          };
-
-          await recordQuizSession(session);
-        }
-      } catch (error) {
-        console.error("Failed to save quiz session:", error);
-        // Don't block quiz completion if session save fails
-      }
-
-      if (completedReviewTestSession) {
+        // Create and save the quiz session before finishing
         try {
-          await completeReviewTestSession(completedReviewTestSession.id);
-          setCompletedReviewTestSessionName(completedReviewTestSession.name);
-        } catch (error) {
-          console.error("Failed to complete review test session:", error);
-          setQuizNotice(
-            str.fillTest.reviewTestSession.completeError.replace(
-              "{name}",
-              completedReviewTestSession.name
-            )
-          );
-        }
-      }
+          if (quizSessionStartTime !== null) {
+            const sessionEndTime = Date.now();
+            const durationSeconds = Math.floor((sessionEndTime - quizSessionStartTime) / 1000);
 
-      stopQuizSession();
-      setQuizCompleted(true);
-      setQuizNotice(
-        completedReviewTestSession
-          ? str.fillTest.reviewTestSession.completed.replace(
-              "{name}",
-              completedReviewTestSession.name
-            )
-          : str.fillTest.completionMessage
-      );
-      await refreshAll();
+            // Calculate grade counts from quizHistory
+            let fullyCorrectCount = 0;
+            let failedCount = 0;
+            let partiallyCorrectCount = 0;
+
+            // Build gradeData array from quizHistory
+            const gradeData = quizHistory.map((item) => {
+              const grade: "again" | "hard" | "good" | "easy" = item.tier;
+
+              if (grade === "easy") {
+                fullyCorrectCount += 1;
+              } else if (grade === "again") {
+                failedCount += 1;
+              } else {
+                partiallyCorrectCount += 1;
+              }
+
+              return {
+                wordId: item.wordId,
+                hanzi: item.hanzi,
+                grade,
+                timestamp: sessionEndTime, // Use session end time as approximation
+              };
+            });
+
+            // Calculate coins earned from grades
+            const coinsEarned = calculateSessionCoins(gradeData);
+
+            const session: QuizSession = {
+              id: makeId(),
+              createdAt: sessionEndTime,
+              sessionType: "fill-test",
+              gradeData,
+              fullyCorrectCount,
+              failedCount,
+              partiallyCorrectCount,
+              totalGrades: quizHistory.length,
+              durationSeconds,
+              coinsEarned,
+            };
+
+            await recordQuizSession(session);
+          }
+        } catch (error) {
+          console.error("Failed to save quiz session:", error);
+          // Don't block quiz completion if session save fails
+        }
+
+        if (completedReviewTestSession) {
+          try {
+            await completeReviewTestSession(completedReviewTestSession.id);
+            setCompletedReviewTestSessionName(completedReviewTestSession.name);
+          } catch (error) {
+            console.error("Failed to complete review test session:", error);
+            setQuizNotice(
+              str.fillTest.reviewTestSession.completeError.replace(
+                "{name}",
+                completedReviewTestSession.name
+              )
+            );
+          }
+        }
+
+        stopQuizSession();
+        setQuizCompleted(true);
+        setQuizNotice(
+          completedReviewTestSession
+            ? str.fillTest.reviewTestSession.completed.replace(
+                "{name}",
+                completedReviewTestSession.name
+              )
+            : str.fillTest.completionMessage
+        );
+        await refreshAll();
+      } finally {
+        quizFinishInFlightRef.current = false;
+        setQuizSubmitting(false);
+      }
       return;
     }
 
