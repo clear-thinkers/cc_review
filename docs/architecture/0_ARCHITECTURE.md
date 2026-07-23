@@ -163,6 +163,9 @@ These rules govern the due queue view at `/words/review`:
 16. Runtime groups multiple packaged targets for the same Hanzi back into one character-level review/test unit; grading remains character-level on the underlying `words.id`.
 17. If duplicate `words` rows for the same Hanzi are encountered at packaged-session runtime despite the schema uniqueness rule, the session must block with an error rather than guess.
 18. Completing a packaged review test session marks it complete and removes it from the active Due Review session list; its name becomes reusable for a future session in the same family.
+19. Parents may remove a single packaged target (one `character|pronunciation` row) from an active review test session without deleting the rest of the session. This uses the existing parent-scoped `DELETE` policy on `review_test_session_targets` — no new RLS policy, RPC, or route.
+20. Removing a packaged target is immediate with no confirmation dialog, matching the `/words/all` delete precedent (§ All Characters Inventory Rules, rule 8) — except when the target being removed is the session's last remaining target, in which case the removal deletes the whole session and reuses the existing whole-session delete confirmation dialog instead.
+21. Per-target delete controls are visible to parents only, matching the visibility rule for whole-session deletion; children never see per-target delete controls on Due Review.
 
 ### Flashcard Review Rules (`/words/review/flashcard`)
 

@@ -21,6 +21,7 @@ import {
   completeReviewTestSession,
   createReviewTestSession,
   deleteReviewTestSession,
+  deleteReviewTestSessionTarget,
   listReviewTestSessions,
 } from "./supabase-service";
 
@@ -224,6 +225,106 @@ describe("supabase-service review test sessions", () => {
     });
 
     await expect(deleteReviewTestSession("session-1")).resolves.toBeUndefined();
+  });
+
+  it("deletes a single target without deleting the session when others remain", async () => {
+    const deleteTargetBuilder = {
+      delete: vi.fn(),
+      eq: vi.fn(),
+    };
+    deleteTargetBuilder.delete.mockReturnValue(deleteTargetBuilder);
+    deleteTargetBuilder.eq
+      .mockReturnValueOnce(deleteTargetBuilder)
+      .mockReturnValueOnce(deleteTargetBuilder)
+      .mockReturnValueOnce(deleteTargetBuilder)
+      .mockResolvedValueOnce({ error: null });
+
+    const countBuilder = {
+      select: vi.fn(),
+      eq: vi.fn(),
+    };
+    countBuilder.select.mockReturnValue(countBuilder);
+    countBuilder.eq
+      .mockReturnValueOnce(countBuilder)
+      .mockResolvedValueOnce({ count: 1, error: null });
+
+    fromMock
+      .mockImplementationOnce(() => deleteTargetBuilder)
+      .mockImplementationOnce(() => countBuilder);
+
+    await expect(
+      deleteReviewTestSessionTarget("session-1", "alpha", "hao3")
+    ).resolves.toEqual({ sessionDeleted: false });
+
+    expect(fromMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("deletes the session when the last remaining target is removed", async () => {
+    const deleteTargetBuilder = {
+      delete: vi.fn(),
+      eq: vi.fn(),
+    };
+    deleteTargetBuilder.delete.mockReturnValue(deleteTargetBuilder);
+    deleteTargetBuilder.eq
+      .mockReturnValueOnce(deleteTargetBuilder)
+      .mockReturnValueOnce(deleteTargetBuilder)
+      .mockReturnValueOnce(deleteTargetBuilder)
+      .mockResolvedValueOnce({ error: null });
+
+    const countBuilder = {
+      select: vi.fn(),
+      eq: vi.fn(),
+    };
+    countBuilder.select.mockReturnValue(countBuilder);
+    countBuilder.eq
+      .mockReturnValueOnce(countBuilder)
+      .mockResolvedValueOnce({ count: 0, error: null });
+
+    const sessionDeleteBuilder = {
+      delete: vi.fn(),
+      eq: vi.fn(),
+      is: vi.fn(),
+      select: vi.fn(),
+    };
+    sessionDeleteBuilder.delete.mockReturnValue(sessionDeleteBuilder);
+    sessionDeleteBuilder.eq.mockReturnValue(sessionDeleteBuilder);
+    sessionDeleteBuilder.is.mockReturnValue(sessionDeleteBuilder);
+    sessionDeleteBuilder.select.mockResolvedValue({
+      data: [{ id: "session-1" }],
+      error: null,
+    });
+
+    fromMock
+      .mockImplementationOnce(() => deleteTargetBuilder)
+      .mockImplementationOnce(() => countBuilder)
+      .mockImplementationOnce(() => sessionDeleteBuilder);
+
+    await expect(
+      deleteReviewTestSessionTarget("session-1", "alpha", "hao3")
+    ).resolves.toEqual({ sessionDeleted: true });
+
+    expect(fromMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("propagates the error and does not attempt a session delete when the target delete fails", async () => {
+    const deleteTargetBuilder = {
+      delete: vi.fn(),
+      eq: vi.fn(),
+    };
+    deleteTargetBuilder.delete.mockReturnValue(deleteTargetBuilder);
+    deleteTargetBuilder.eq
+      .mockReturnValueOnce(deleteTargetBuilder)
+      .mockReturnValueOnce(deleteTargetBuilder)
+      .mockReturnValueOnce(deleteTargetBuilder)
+      .mockResolvedValueOnce({ error: { message: "boom" } });
+
+    fromMock.mockImplementationOnce(() => deleteTargetBuilder);
+
+    await expect(
+      deleteReviewTestSessionTarget("session-1", "alpha", "hao3")
+    ).rejects.toThrow("deleteReviewTestSessionTarget: boom");
+
+    expect(fromMock).toHaveBeenCalledTimes(1);
   });
 
   it("completes a review test session through the RPC helper", async () => {

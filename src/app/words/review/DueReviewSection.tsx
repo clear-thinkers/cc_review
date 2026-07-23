@@ -51,6 +51,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
     formatProbability,
     hasFillTest,
     handleDeleteReviewTestSession,
+    handleDeleteReviewTestSessionTarget,
     reviewTestSessionStatus,
     reviewTestSessionName,
   } = vm;
@@ -64,6 +65,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
   const isParentView = session?.role === "parent" && !(session?.isPlatformAdmin ?? false);
   const [reviewTestSessionNotice, setReviewTestSessionNotice] = useState<string | null>(null);
   const [deletingReviewTestSessionId, setDeletingReviewTestSessionId] = useState<string | null>(null);
+  const [deletingTargetKey, setDeletingTargetKey] = useState<string | null>(null);
   const reviewTestSessionStatusMessage = getReviewTestSessionStatusMessage(
     reviewTestSessionStatus,
     reviewTestSessionName,
@@ -101,6 +103,40 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
       );
     } finally {
       setDeletingReviewTestSessionId(null);
+    }
+  }
+
+  async function handleDeleteTarget(
+    sessionId: string,
+    sessionName: string,
+    character: string,
+    pronunciation: string,
+    isLastTarget: boolean
+  ): Promise<void> {
+    if (isLastTarget) {
+      const confirmed = window.confirm(
+        str.due.reviewTestSessions.confirmDeleteLastTarget
+          .replace("{character}", character)
+          .replace("{name}", sessionName)
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const targetKey = `${sessionId}:${character}|${pronunciation}`;
+    setDeletingTargetKey(targetKey);
+    try {
+      await handleDeleteReviewTestSessionTarget(sessionId, character, pronunciation);
+      setReviewTestSessionNotice(
+        str.due.reviewTestSessions.deleteTargetSuccess.replace("{character}", character)
+      );
+    } catch {
+      setReviewTestSessionNotice(
+        str.due.reviewTestSessions.deleteTargetError.replace("{character}", character)
+      );
+    } finally {
+      setDeletingTargetKey(null);
     }
   }
 
@@ -142,7 +178,42 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                       </p>
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-700">
-                      {previewLabelsBySessionId.get(row.session.id)}
+                      {isParentView ? (
+                        <div className="flex flex-wrap gap-1">
+                          {row.session.targets.map((target) => {
+                            const targetKey = `${row.session.id}:${target.key}`;
+                            return (
+                              <span
+                                key={targetKey}
+                                className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5"
+                              >
+                                {target.character}
+                                <button
+                                  type="button"
+                                  className="rounded px-1 text-[10px] font-medium leading-none btn-destructive disabled:opacity-50"
+                                  disabled={deletingTargetKey === targetKey}
+                                  aria-label={`${str.due.reviewTestSessions.deleteTarget} ${target.character}`}
+                                  onClick={() =>
+                                    void handleDeleteTarget(
+                                      row.session.id,
+                                      row.session.name,
+                                      target.character,
+                                      target.pronunciation,
+                                      row.session.targets.length === 1
+                                    )
+                                  }
+                                >
+                                  {deletingTargetKey === targetKey
+                                    ? str.due.reviewTestSessions.deletingTarget
+                                    : str.due.reviewTestSessions.deleteTarget}
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        previewLabelsBySessionId.get(row.session.id)
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       {row.quizReadyCount}/{row.characterCount}

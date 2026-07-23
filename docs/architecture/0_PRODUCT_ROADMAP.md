@@ -58,3 +58,5 @@ Note that specs may not reflect the current implementation — the codebase has 
   Spec: `docs/feature-specs/2026-05-02-grouped-phrase-quiz-mode.md`
 - 2026-05-11: Coin cash-out (redemption) ships on `/words/shop`. Kids redeem usable coins at 100:1 for real-dollar value with a child-written note and signature. Four-part breakdown panel replaces single wallet balance display. `redeem_coins` RPC is atomic; quiz results remain immutable.
   Spec: `docs/feature-specs/2026-05-11-coin-redemption.md`
+- 2026-07-23: Parents can delete a single packaged character from an active review test session on Due Review without deleting the whole session; deleting the last remaining character deletes the session. No new RLS, RPC, or schema — reuses the existing parent-scoped delete policy on `review_test_session_targets`.
+  Spec: `docs/feature-specs/2026-07-23-delete-target-from-review-test-session.md`

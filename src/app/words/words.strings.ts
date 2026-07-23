@@ -134,6 +134,12 @@ export const wordsStrings = {
         confirmDelete: "Delete the whole test session \"{name}\"?",
         deleteSuccess: "Deleted test session: {name}",
         deleteError: "Could not delete test session: {name}",
+        deleteTarget: "Remove",
+        deletingTarget: "Removing...",
+        deleteTargetSuccess: "Removed character: {character}",
+        deleteTargetError: "Could not remove character: {character}",
+        confirmDeleteLastTarget:
+          "Removing \"{character}\" will delete the whole test session \"{name}\" since it's the last character. Continue?",
       },
       table: {
         character: "Character",
@@ -1195,6 +1201,12 @@ export const wordsStrings = {
         confirmDelete: "要删除整个测验“{name}”吗？",
         deleteSuccess: "已删除测验：{name}",
         deleteError: "删除测验失败：{name}",
+        deleteTarget: "移除",
+        deletingTarget: "移除中...",
+        deleteTargetSuccess: "已移除汉字：{character}",
+        deleteTargetError: "无法移除汉字：{character}",
+        confirmDeleteLastTarget:
+          "移除“{character}”将删除整个测验“{name}”，因为它是最后一个汉字。要继续吗？",
       },
       table: {
         character: "汉字",

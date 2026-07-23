@@ -828,6 +828,40 @@ export async function deleteReviewTestSession(sessionId: string): Promise<void> 
   }
 }
 
+export async function deleteReviewTestSessionTarget(
+  sessionId: string,
+  character: string,
+  pronunciation: string
+): Promise<{ sessionDeleted: boolean }> {
+  const { familyId } = await getSessionMetadata();
+
+  const { error: targetError } = await supabase
+    .from("review_test_session_targets")
+    .delete()
+    .eq("family_id", familyId)
+    .eq("session_id", sessionId)
+    .eq("character", character)
+    .eq("pronunciation", pronunciation);
+  if (targetError) {
+    throw new Error(`deleteReviewTestSessionTarget: ${targetError.message}`);
+  }
+
+  const { count, error: countError } = await supabase
+    .from("review_test_session_targets")
+    .select("id", { count: "exact", head: true })
+    .eq("family_id", familyId)
+    .eq("session_id", sessionId);
+  if (countError) {
+    throw new Error(`deleteReviewTestSessionTarget count: ${countError.message}`);
+  }
+
+  if ((count ?? 0) === 0) {
+    await deleteReviewTestSession(sessionId);
+    return { sessionDeleted: true };
+  }
+  return { sessionDeleted: false };
+}
+
 export async function completeReviewTestSession(sessionId: string): Promise<void> {
   const { error } = await supabase.rpc("complete_review_test_session", {
     p_session_id: sessionId,

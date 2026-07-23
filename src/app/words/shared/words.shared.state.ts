@@ -27,6 +27,7 @@ import {
   createReviewTestSession,
   appendTargetsToReviewTestSession,
   deleteReviewTestSession,
+  deleteReviewTestSessionTarget,
   completeReviewTestSession,
   deleteAdminTargetRow,
   restoreHiddenAdminTargetsForHanzi,
@@ -2817,6 +2818,16 @@ const gradeLabels = getGradeLabels(str);
     await refreshAll();
   }
 
+  async function handleDeleteReviewTestSessionTarget(
+    sessionId: string,
+    character: string,
+    pronunciation: string
+  ): Promise<{ sessionDeleted: boolean }> {
+    const result = await deleteReviewTestSessionTarget(sessionId, character, pronunciation);
+    await refreshAll();
+    return result;
+  }
+
   // Stable key: only changes when the set of hanzi characters changes.
   // Prevents the admin effect from re-running on every refreshAll() call that
   // produces a new `words` array reference without changing which characters exist.
@@ -3812,6 +3823,7 @@ const gradeLabels = getGradeLabels(str);
     formatProbability,
     hasFillTest,
     handleDeleteReviewTestSession,
+    handleDeleteReviewTestSessionTarget,
     reviewTestSessionStatus,
     reviewTestSessionName,
     isFlashcardReviewPage,
