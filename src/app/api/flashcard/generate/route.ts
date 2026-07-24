@@ -8,8 +8,8 @@ import { supabase, getServerSupabaseClient } from "@/lib/supabaseClient";
 import type { PromptType } from "@/lib/supabase-service";
 
 const DEFAULT_DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
-const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
-const MAX_EXAMPLE_LENGTH = 30;
+const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
+const MAX_EXAMPLE_LENGTH = 50;
 const RETRY_LIMIT = 2;
 
 // ── Hardcoded return-format suffixes (not user-editable) ───────────────────
