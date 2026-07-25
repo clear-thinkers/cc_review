@@ -3,11 +3,23 @@ import { describe, expect, it } from "vitest";
 import {
   applyAdminMeaningEdit,
   buildBundledFillTestPlan,
+  buildContentByCharacterMap,
+  buildDueReviewAutosavePayload,
+  filterPausedSessionsForViewer,
+  getPausedSessionRemainingCount,
   renderPhraseWithPinyin,
   renderSentenceWithPinyin,
+  resolveDueReviewResume,
+  resolvePackagedReviewResume,
+  revalidateSavedQuizQueue,
   tokenizePinyinSyllables,
 } from "./words.shared.utils";
 import type { TestableWord } from "../review/fill-test/fillTest.types";
+import type { FlashcardContentEntry } from "@/lib/supabase-service";
+import type { FlashcardLlmResponse } from "@/lib/flashcardLlm";
+import type { ReviewSessionProgress } from "@/lib/reviewSessionProgress.types";
+import type { Word } from "@/lib/types";
+import { wordsStrings } from "../words.strings";
 
 type NodeWithChildren = {
   children?: ReactNode;
@@ -241,5 +253,493 @@ describe("buildBundledFillTestPlan", () => {
     expect(plan.quizWords).toHaveLength(1);
     expect(plan.quizWords[0]?.fillTest.sentences).toHaveLength(1);
     expect(plan.quizWords[0]?.fillTest.members?.map((member) => member.wordId)).toEqual(["w1"]);
+  });
+});
+
+function makeWord(id: string, hanzi: string): Word {
+  return {
+    id,
+    hanzi,
+    createdAt: 1,
+    repetitions: 0,
+    intervalDays: 0,
+    ease: 0,
+    nextReviewAt: 0,
+  };
+}
+
+function makeContent(character: string, phrase: string, example: string): FlashcardLlmResponse {
+  return {
+    character,
+    pronunciation: "ce4",
+    meanings: [
+      {
+        definition: "def",
+        phrases: [{ phrase, pinyin: "py", example, example_pinyin: "py" }],
+      },
+    ],
+  };
+}
+
+function makeContentEntry(character: string, phrase: string, example: string): FlashcardContentEntry {
+  return {
+    key: `${character}|ce4`,
+    character,
+    pronunciation: "ce4",
+    content: makeContent(character, phrase, example),
+    updatedAt: 0,
+  };
+}
+
+function makeBundledQuizWord(members: Array<{ wordId: string; hanzi: string }>): TestableWord {
+  return {
+    id: members.map((member) => member.wordId).join("|"),
+    hanzi: members.map((member) => member.hanzi).join(""),
+    createdAt: 1,
+    repetitions: 0,
+    intervalDays: 0,
+    ease: 0,
+    nextReviewAt: 0,
+    fillTest: {
+      phrases: members.map((member) => `${member.hanzi}phrase`),
+      sentences: members.map((member, index) => ({
+        text: `${member.hanzi}___sentence`,
+        answerIndex: index,
+        characterId: member.wordId,
+      })),
+      members: members.map((member) => ({ wordId: member.wordId, hanzi: member.hanzi, phraseCount: 1 })),
+    },
+  };
+}
+
+describe("buildContentByCharacterMap", () => {
+  it("groups saved content entries by character", () => {
+    const entries = [
+      makeContentEntry("\u4e00", "\u4e00\u4e2a", "\u8fd9\u662f\u4e00\u4e2a\u4e2a\u3002"),
+      makeContentEntry("\u4e8c", "\u4e8c\u6708", "\u73b0\u5728\u662f\u4e8c\u6708\u3002"),
+    ];
+
+    const map = buildContentByCharacterMap(entries);
+
+    expect(map.get("\u4e00")).toHaveLength(1);
+    expect(map.get("\u4e8c")).toHaveLength(1);
+    expect(map.get("\u4e09")).toBeUndefined();
+  });
+});
+
+describe("revalidateSavedQuizQueue", () => {
+  it("keeps a single-member item whose word still exists and content is still eligible", () => {
+    const savedItem = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+    const currentWords = [makeWord("w1", "\u4e00")];
+    const contentByCharacter = buildContentByCharacterMap([
+      makeContentEntry("\u4e00", "\u4e00\u4e2a", "\u8fd9\u662f\u4e00\u4e2a\u4e2a\u3002"),
+    ]);
+
+    const result = revalidateSavedQuizQueue([savedItem], currentWords, contentByCharacter);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("w1");
+  });
+
+  it("drops an item whose underlying word no longer exists", () => {
+    const savedItem = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+    const contentByCharacter = buildContentByCharacterMap([
+      makeContentEntry("\u4e00", "\u4e00\u4e2a", "\u8fd9\u662f\u4e00\u4e2a\u4e2a\u3002"),
+    ]);
+
+    const result = revalidateSavedQuizQueue([savedItem], [], contentByCharacter);
+
+    expect(result).toHaveLength(0);
+  });
+
+  it("drops an item whose word exists but has lost fill-test eligible content", () => {
+    const savedItem = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+    const currentWords = [makeWord("w1", "\u4e00")];
+    const contentByCharacter = buildContentByCharacterMap([]);
+
+    const result = revalidateSavedQuizQueue([savedItem], currentWords, contentByCharacter);
+
+    expect(result).toHaveLength(0);
+  });
+
+  it("drops a whole bundled item when any one member is invalid", () => {
+    const bundled = makeBundledQuizWord([
+      { wordId: "w1", hanzi: "\u4e00" },
+      { wordId: "w2", hanzi: "\u4e8c" },
+    ]);
+    // w1 still exists with eligible content, w2's word row was deleted.
+    const currentWords = [makeWord("w1", "\u4e00")];
+    const contentByCharacter = buildContentByCharacterMap([
+      makeContentEntry("\u4e00", "\u4e00phrase", "\u4e00phrase___sentence"),
+      makeContentEntry("\u4e8c", "\u4e8cphrase", "\u4e8cphrase___sentence"),
+    ]);
+
+    const result = revalidateSavedQuizQueue([bundled], currentWords, contentByCharacter);
+
+    expect(result).toHaveLength(0);
+  });
+
+  it("passes through a fully-valid queue unchanged", () => {
+    const first = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+    const second = makeQuizWord("w2", "\u4e8c", ["\u4e8c\u6708"]);
+    const currentWords = [makeWord("w1", "\u4e00"), makeWord("w2", "\u4e8c")];
+    const contentByCharacter = buildContentByCharacterMap([
+      makeContentEntry("\u4e00", "\u4e00\u4e2a", "\u8fd9\u662f\u4e00\u4e2a\u4e2a\u3002"),
+      makeContentEntry("\u4e8c", "\u4e8c\u6708", "\u73b0\u5728\u662f\u4e8c\u6708\u3002"),
+    ]);
+
+    const result = revalidateSavedQuizQueue([first, second], currentWords, contentByCharacter);
+
+    expect(result.map((word) => word.id)).toEqual(["w1", "w2"]);
+  });
+
+  // Packaged-session-only check: allowedWordIds, when passed, adds an extra
+  // "still one of the session's CURRENT quiz-ready targets" filter on top of
+  // the word-exists/content-eligible checks above.
+  it("drops an item that's still content-eligible but no longer in allowedWordIds (packaged target removed)", () => {
+    const savedItem = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+    const currentWords = [makeWord("w1", "\u4e00")];
+    const contentByCharacter = buildContentByCharacterMap([
+      makeContentEntry("\u4e00", "\u4e00\u4e2a", "\u8fd9\u662f\u4e00\u4e2a\u4e2a\u3002"),
+    ]);
+
+    const result = revalidateSavedQuizQueue(
+      [savedItem],
+      currentWords,
+      contentByCharacter,
+      new Set(["w2"]) // w1 is not a current packaged quiz-ready target
+    );
+
+    expect(result).toHaveLength(0);
+  });
+
+  it("keeps an item present in allowedWordIds when the set is provided", () => {
+    const savedItem = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+    const currentWords = [makeWord("w1", "\u4e00")];
+    const contentByCharacter = buildContentByCharacterMap([
+      makeContentEntry("\u4e00", "\u4e00\u4e2a", "\u8fd9\u662f\u4e00\u4e2a\u4e2a\u3002"),
+    ]);
+
+    const result = revalidateSavedQuizQueue(
+      [savedItem],
+      currentWords,
+      contentByCharacter,
+      new Set(["w1"])
+    );
+
+    expect(result).toHaveLength(1);
+  });
+
+  it("drops a whole bundled item when only some members remain in allowedWordIds", () => {
+    const bundled = makeBundledQuizWord([
+      { wordId: "w1", hanzi: "\u4e00" },
+      { wordId: "w2", hanzi: "\u4e8c" },
+    ]);
+    const currentWords = [makeWord("w1", "\u4e00"), makeWord("w2", "\u4e8c")];
+    const contentByCharacter = buildContentByCharacterMap([
+      makeContentEntry("\u4e00", "\u4e00phrase", "\u4e00phrase___sentence"),
+      makeContentEntry("\u4e8c", "\u4e8cphrase", "\u4e8cphrase___sentence"),
+    ]);
+
+    // Parent removed w2's target from the packaged session -- w1 alone is
+    // still a current quiz-ready target, but the whole bundled grading unit
+    // must be dropped since resuming it would try to grade a removed word.
+    const result = revalidateSavedQuizQueue(
+      [bundled],
+      currentWords,
+      contentByCharacter,
+      new Set(["w1"])
+    );
+
+    expect(result).toHaveLength(0);
+  });
+});
+
+describe("resolveDueReviewResume", () => {
+  const currentWords = [makeWord("w1", "\u4e00"), makeWord("w2", "\u4e8c")];
+  const allFlashcardContents = [
+    makeContentEntry("\u4e00", "\u4e00\u4e2a", "\u8fd9\u662f\u4e00\u4e2a\u4e2a\u3002"),
+    makeContentEntry("\u4e8c", "\u4e8c\u6708", "\u73b0\u5728\u662f\u4e8c\u6708\u3002"),
+  ];
+
+  it("returns invalid for a malformed payload", () => {
+    expect(
+      resolveDueReviewResume({ progressData: { not: "shaped right" }, currentWords, allFlashcardContents })
+    ).toEqual({ status: "invalid" });
+    expect(
+      resolveDueReviewResume({ progressData: null, currentWords, allFlashcardContents })
+    ).toEqual({ status: "invalid" });
+  });
+
+  it("only re-validates the unanswered tail from resumeIndex onward", () => {
+    const alreadyGraded = makeQuizWord("gone", "\u4e09", ["\u4e09\u4e2a"]); // word no longer exists, but already answered
+    const notYetAnswered = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+
+    const resolved = resolveDueReviewResume({
+      progressData: {
+        quizQueue: [alreadyGraded, notYetAnswered],
+        resumeIndex: 1,
+        quizHistory: [
+          { wordId: "gone", hanzi: "\u4e09", tier: "easy", correctCount: 1, totalCount: 1 },
+        ],
+        quizSelectionMode: "all",
+        quizSessionStartTime: 1000,
+      },
+      currentWords,
+      allFlashcardContents,
+    });
+
+    expect(resolved.status).toBe("ready");
+    if (resolved.status === "ready") {
+      expect(resolved.quizQueue.map((word) => word.id)).toEqual(["w1"]);
+      expect(resolved.quizHistory).toHaveLength(1);
+      expect(resolved.quizSessionStartTime).toBe(1000);
+    }
+  });
+
+  it("returns empty when resumeIndex already reached the end of the saved queue", () => {
+    const item = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+
+    const resolved = resolveDueReviewResume({
+      progressData: {
+        quizQueue: [item],
+        resumeIndex: 1,
+        quizHistory: [],
+        quizSelectionMode: "all",
+        quizSessionStartTime: null,
+      },
+      currentWords,
+      allFlashcardContents,
+    });
+
+    expect(resolved).toEqual({ status: "empty" });
+  });
+
+  it("returns empty when every remaining item fails re-validation", () => {
+    const invalidItem = makeQuizWord("gone", "\u4e09", ["\u4e09\u4e2a"]);
+
+    const resolved = resolveDueReviewResume({
+      progressData: {
+        quizQueue: [invalidItem],
+        resumeIndex: 0,
+        quizHistory: [],
+        quizSelectionMode: "all",
+        quizSessionStartTime: null,
+      },
+      currentWords,
+      allFlashcardContents,
+    });
+
+    expect(resolved).toEqual({ status: "empty" });
+  });
+});
+
+describe("resolvePackagedReviewResume", () => {
+  const currentWords = [makeWord("w1", "\u4e00"), makeWord("w2", "\u4e8c")];
+  const allFlashcardContents = [
+    makeContentEntry("\u4e00", "\u4e00\u4e2a", "\u8fd9\u662f\u4e00\u4e2a\u4e2a\u3002"),
+    makeContentEntry("\u4e8c", "\u4e8c\u6708", "\u73b0\u5728\u662f\u4e8c\u6708\u3002"),
+  ];
+
+  it("returns invalid for a malformed payload, same as resolveDueReviewResume", () => {
+    expect(
+      resolvePackagedReviewResume({
+        progressData: { not: "shaped right" },
+        currentWords,
+        allFlashcardContents,
+        quizWordIds: new Set(["w1", "w2"]),
+      })
+    ).toEqual({ status: "invalid" });
+  });
+
+  it("resumes normally when every remaining item is still a current quiz-ready target", () => {
+    const notYetAnswered = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+
+    const resolved = resolvePackagedReviewResume({
+      progressData: {
+        quizQueue: [notYetAnswered],
+        resumeIndex: 0,
+        quizHistory: [],
+        quizSelectionMode: "all",
+        quizSessionStartTime: 1000,
+      },
+      currentWords,
+      allFlashcardContents,
+      quizWordIds: new Set(["w1", "w2"]),
+    });
+
+    expect(resolved.status).toBe("ready");
+    if (resolved.status === "ready") {
+      expect(resolved.quizQueue.map((word) => word.id)).toEqual(["w1"]);
+    }
+  });
+
+  it("drops a saved item that's still content-eligible but no longer a current quiz-ready target (parent removed it)", () => {
+    const notYetAnswered = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+
+    const resolved = resolvePackagedReviewResume({
+      progressData: {
+        quizQueue: [notYetAnswered],
+        resumeIndex: 0,
+        quizHistory: [],
+        quizSelectionMode: "all",
+        quizSessionStartTime: null,
+      },
+      currentWords,
+      allFlashcardContents,
+      // Parent removed w1's packaged target -- it's no longer in the
+      // session's current quiz-ready set, even though the word and its
+      // content are both still otherwise valid.
+      quizWordIds: new Set(["w2"]),
+    });
+
+    expect(resolved).toEqual({ status: "empty" });
+  });
+
+  it("only re-validates the unanswered tail from resumeIndex onward, same as resolveDueReviewResume", () => {
+    const alreadyGraded = makeQuizWord("gone", "\u4e09", ["\u4e09\u4e2a"]); // graded before pause, then removed
+    const notYetAnswered = makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]);
+
+    const resolved = resolvePackagedReviewResume({
+      progressData: {
+        quizQueue: [alreadyGraded, notYetAnswered],
+        resumeIndex: 1,
+        quizHistory: [
+          { wordId: "gone", hanzi: "\u4e09", tier: "easy", correctCount: 1, totalCount: 1 },
+        ],
+        quizSelectionMode: "all",
+        quizSessionStartTime: 1000,
+      },
+      currentWords,
+      allFlashcardContents,
+      // "gone" is not a current quiz-ready target, but it's before
+      // resumeIndex so it must never be re-validated or replayed.
+      quizWordIds: new Set(["w1"]),
+    });
+
+    expect(resolved.status).toBe("ready");
+    if (resolved.status === "ready") {
+      expect(resolved.quizQueue.map((word) => word.id)).toEqual(["w1"]);
+      expect(resolved.quizHistory).toHaveLength(1);
+    }
+  });
+});
+
+describe("buildDueReviewAutosavePayload", () => {
+  const quizQueue = [
+    makeQuizWord("w1", "\u4e00", ["\u4e00\u4e2a"]),
+    makeQuizWord("w2", "\u4e8c", ["\u4e8c\u6708"]),
+  ];
+
+  it("saves resumeIndex as quizIndex + 1, the NEXT unanswered word", () => {
+    const payload = buildDueReviewAutosavePayload({
+      quizQueue,
+      quizIndex: 0,
+      quizHistory: [{ wordId: "w1", hanzi: "\u4e00", tier: "easy", correctCount: 1, totalCount: 1 }],
+      quizSelectionMode: "all",
+      quizSessionStartTime: 500,
+    });
+
+    expect(payload?.resumeIndex).toBe(1);
+    expect(payload?.resumeIndex).not.toBe(0);
+  });
+
+  it("returns null when the just-graded word was the last item (avoids a useless row)", () => {
+    const payload = buildDueReviewAutosavePayload({
+      quizQueue,
+      quizIndex: 1,
+      quizHistory: [],
+      quizSelectionMode: "all",
+      quizSessionStartTime: 500,
+    });
+
+    expect(payload).toBeNull();
+  });
+});
+
+describe("due.pausedSessions string parity", () => {
+  it("keeps identical EN/ZH key sets", () => {
+    expect(Object.keys(wordsStrings.en.due.pausedSessions).sort()).toEqual(
+      Object.keys(wordsStrings.zh.due.pausedSessions).sort()
+    );
+  });
+
+  it("keeps the {time} and {count} interpolation placeholders in both locales", () => {
+    expect(wordsStrings.en.due.pausedSessions.lastSaved).toContain("{time}");
+    expect(wordsStrings.zh.due.pausedSessions.lastSaved).toContain("{time}");
+    expect(wordsStrings.en.due.pausedSessions.remaining).toContain("{count}");
+    expect(wordsStrings.zh.due.pausedSessions.remaining).toContain("{count}");
+  });
+});
+
+describe("getPausedSessionRemainingCount", () => {
+  it("subtracts resumeIndex from the full saved queue length", () => {
+    // 3 items saved, 2 already graded before the session was paused --
+    // only 1 is actually left to answer.
+    const progressData = { quizQueue: [{}, {}, {}], resumeIndex: 2 };
+    expect(getPausedSessionRemainingCount(progressData)).toBe(1);
+  });
+
+  it("returns the full queue length when resumeIndex is 0 (nothing graded yet)", () => {
+    const progressData = { quizQueue: [{}, {}], resumeIndex: 0 };
+    expect(getPausedSessionRemainingCount(progressData)).toBe(2);
+  });
+
+  it("treats a missing/invalid resumeIndex as 0", () => {
+    const progressData = { quizQueue: [{}, {}] };
+    expect(getPausedSessionRemainingCount(progressData)).toBe(2);
+  });
+
+  it("returns 0 for malformed progressData", () => {
+    expect(getPausedSessionRemainingCount(null)).toBe(0);
+    expect(getPausedSessionRemainingCount({})).toBe(0);
+    expect(getPausedSessionRemainingCount({ quizQueue: "not-an-array" })).toBe(0);
+  });
+});
+
+describe("filterPausedSessionsForViewer", () => {
+  function makeProgressRow(
+    userId: string,
+    clientSessionKey: string,
+    sourceType: ReviewSessionProgress["sourceType"] = "due_review"
+  ): ReviewSessionProgress {
+    return {
+      id: clientSessionKey,
+      userId,
+      clientSessionKey,
+      sourceType,
+      packagedSessionId: sourceType === "packaged" ? clientSessionKey : null,
+      progressData: {},
+      startedAt: 0,
+      lastSavedAt: 0,
+    };
+  }
+
+  it("returns the full family list unfiltered for a read-only (parent) viewer", () => {
+    const rows = [makeProgressRow("child-a", "key-a"), makeProgressRow("child-b", "key-b")];
+
+    const result = filterPausedSessionsForViewer(rows, "parent-user", false);
+
+    expect(result).toHaveLength(2);
+  });
+
+  it("restricts an actionable (child/admin) viewer to only their own rows", () => {
+    const rows = [makeProgressRow("child-a", "key-a"), makeProgressRow("child-b", "key-b")];
+
+    const result = filterPausedSessionsForViewer(rows, "child-a", true);
+
+    expect(result).toEqual([makeProgressRow("child-a", "key-a")]);
+  });
+
+  it("filters by owning user regardless of source type -- packaged and due-review rows are treated identically", () => {
+    const rows = [
+      makeProgressRow("child-a", "due-key", "due_review"),
+      makeProgressRow("child-a", "packaged-key", "packaged"),
+      makeProgressRow("child-b", "sibling-key", "packaged"),
+    ];
+
+    const result = filterPausedSessionsForViewer(rows, "child-a", true);
+
+    expect(result.map((row) => row.clientSessionKey).sort()).toEqual(["due-key", "packaged-key"]);
   });
 });

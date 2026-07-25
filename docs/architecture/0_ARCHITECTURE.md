@@ -166,6 +166,13 @@ These rules govern the due queue view at `/words/review`:
 19. Parents may remove a single packaged target (one `character|pronunciation` row) from an active review test session without deleting the rest of the session. This uses the existing parent-scoped `DELETE` policy on `review_test_session_targets` — no new RLS policy, RPC, or route.
 20. Removing a packaged target is immediate with no confirmation dialog, matching the `/words/all` delete precedent (§ All Characters Inventory Rules, rule 8) — except when the target being removed is the session's last remaining target, in which case the removal deletes the whole session and reuses the existing whole-session delete confirmation dialog instead.
 21. Per-target delete controls are visible to parents only, matching the visibility rule for whole-session deletion; children never see per-target delete controls on Due Review.
+22. Due Review lists paused sessions of BOTH source types — ad-hoc due-review AND packaged — in one unified "Paused Sessions" table, sourced via `listReviewSessionProgress()` with no `source_type` filter. Packaged and ad-hoc paused sessions are never split into separate list UIs; they share one Resume/Discard affordance.
+23. Child and platform-admin viewers see only their OWN paused sessions (client-filtered by `userId`, even though `listReviewSessionProgress` returns the whole family under the family-scoped read RLS policy) with **Resume** and **Discard** actions. One child must never resume or discard a sibling's paused session, even though the user-scoped write RLS policy would independently reject the attempt.
+24. Parents see every family member's paused sessions unfiltered, read-only (existence + last-saved time + characters remaining only) — no Resume or Discard controls, matching the existing read-only visibility pattern for packaged sessions (rule 13).
+25. The Paused Sessions section does not render when the current viewer has no paused sessions to show (no empty-state message), matching the surrounding page's density.
+26. Discarding a paused session is immediate with no confirmation dialog, matching the `/words/all` delete precedent (§ All Characters Inventory Rules, rule 8).
+27. Resuming a paused session branches by `source_type`: an ad-hoc due-review row navigates to `/words/review/fill-test?resumeProgressKey=<clientSessionKey>`; a packaged row navigates to `/words/review/fill-test?reviewTestSessionId=<packagedSessionId>` instead — the SAME entry point as starting a fresh packaged session — deliberately skipping the flashcard phase, since flashcard review is non-graded and re-doing it isn't required to resume grading.
+28. Each Paused Sessions row displays a session label alongside its saved/remaining info: a packaged row shows the packaged session's name (resolved from the same session list backing the Test Sessions table above, falling back to the raw session id if that list hasn't loaded yet); an ad-hoc due-review row shows a generic "Due Review" label.
 
 ### Flashcard Review Rules (`/words/review/flashcard`)
 
@@ -200,6 +207,13 @@ These rules govern bundled fill-test quiz sessions:
 12. Quiz-session coin logic is unchanged and continues to award from character-level grade entries: `easy=5`, `good=3`, `hard=1`, `again=0`.
 13. Packaged review test sessions use the same bundled fill-test planner over the packaged quiz-ready character set.
 14. Fill-test review does not add routes, tables, columns, RPCs, RLS policies, or AI calls.
+15. Fill-test sessions of BOTH source types (ad-hoc due-review and packaged) autosave progress after every graded word via `saveReviewSessionProgress`, upserted under a `client_session_key` — a client-minted `crypto.randomUUID()` for a NEW ad-hoc session, or the `review_test_sessions.id` itself for a packaged session — held for the life of that runtime session. Autosave is fire-and-forget: a failed save is logged and never blocks quiz interaction or surfaces an error toast.
+16. The saved resume position is always `quizIndex + 1` (the NEXT unanswered word), never the just-graded `quizIndex` — `gradeWord()` already mutates the scheduler for a word the moment it is graded, independent of the "Next" click, so replaying the same word on resume would double-grade it. No autosave row is written when the just-graded word was the last item in the queue (the session is about to complete normally instead).
+17. `/words/review/fill-test?resumeProgressKey=<clientSessionKey>` loads the matching `review_session_progress` row and initializes runtime state from its saved `progress_data` instead of building a fresh plan from due words. If the row is missing (already discarded/completed elsewhere, or points at a non-`due_review` row), the child is redirected to `/words/review?reviewTestSessionStatus=resume_missing`.
+18. On resume, only the NOT-YET-ANSWERED tail of the saved queue (from the saved resume index onward) is re-validated against current `words`/`flashcard_contents` state; each queued item (or, for a bundled item, every member word) must still exist and still resolve usable fill-test content, or the whole item is silently dropped — mirrors the existing skip-invalid-silently precedent in `src/lib/resultsReviewTestSession.ts`. If re-validation drops every remaining item, the session resumes into the same "no eligible targets" empty state as a fresh ad-hoc session with none due, and the now-useless saved row is deleted.
+19. Stopping an in-progress session via the existing "Stop quiz" button leaves its saved `review_session_progress` row intact — only explicit Discard (from the Due Review Paused Sessions list) and normal session completion delete it. Completing an ad-hoc session deletes the row after the `quiz_sessions` insert succeeds; completing a packaged session relies on server-side cleanup in the `complete_review_test_session` RPC instead (not duplicated client-side) — the client never issues its own `deleteReviewSessionProgress` call for packaged completion.
+20. `/words/review/fill-test?reviewTestSessionId=<id>` (the existing packaged entry point, unchanged) checks for a saved `review_session_progress` row for that session id BEFORE building a fresh bundled plan. If one exists (`source_type = 'packaged'`), the session resumes from it instead of starting over; this check runs on every packaged-session entry, so a child who clicks "Start session" again while paused (e.g. after re-doing the non-graded flashcard phase) still lands back on their saved progress rather than a duplicate fresh plan.
+21. Packaged resume re-validation runs the same NOT-YET-ANSWERED-tail check as rule 18, PLUS one packaged-only check: every member word of each remaining queued item must still be one of the session's CURRENT quiz-ready targets (`activeReviewTestSessionRuntime.quizWords`), not just still word/content-eligible. A parent may have removed a packaged target (or its content) while the session was paused; an item referencing a removed target is dropped even if the word and its content are otherwise still valid. If this drops every remaining item, the session redirects to the existing packaged `no_quiz_ready` empty state (not a new status code) and the now-useless saved row is deleted. A corrupted/unreadable saved payload redirects to the existing packaged `invalid` status instead of the ad-hoc `resume_missing` status, which is reserved for the `resumeProgressKey` entry point.
 
 ### Quiz Results Rules (`/words/results`)
 
@@ -496,6 +510,23 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `pronunciation` | text | Packaged pronunciation for that Hanzi |
 | `display_order` | integer | Save-time target order after familiarity/character/pronunciation sorting |
 | **Unique constraint** | | `(session_id, character, pronunciation)` |
+
+**`review_session_progress` table** — paused/in-progress test-session state, per user
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | Foreign key → `users.id`; cascades on delete; owning child (or platform admin) |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete; denormalized for RLS |
+| `client_session_key` | text | Stable key for the paused session — `review_test_sessions.id` for packaged sessions, a client-minted UUID for ad-hoc due-review sessions |
+| `source_type` | text | `'due_review'` or `'packaged'` (checked) |
+| `packaged_session_id` | text (nullable) | Foreign key → `review_test_sessions.id`; cascades on delete; null for `due_review` |
+| `progress_data` | jsonb | Serialized runtime state: quiz queue, index, selections, grade history, elapsed time |
+| `started_at` | timestamptz | When the session was originally started |
+| `last_saved_at` | timestamptz | Updated on every autosave |
+| `created_at` | timestamptz | Server timestamp |
+| **Unique constraint** | | `(user_id, client_session_key)` — autosave upserts this row |
+| **RLS Guarantee** | | Family-scoped read (parents get read-only visibility into a child's paused sessions); insert/update/delete scoped to `user_id = current_user_id()` — one family member cannot write another's progress row |
 
 **`quiz_sessions` table** — completed fill-test session records, immutable audit
 

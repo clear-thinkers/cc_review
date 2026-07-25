@@ -20,6 +20,21 @@ export type QuizHistoryItem = {
 
 export type QuizSelections = Array<number | null>;
 
+/**
+ * Runtime state serialized into review_session_progress.progress_data for an
+ * ad-hoc due-review fill-test session. `resumeIndex` is the index of the
+ * NEXT unanswered item in `quizQueue` (never the last-graded index) -- see
+ * buildDueReviewAutosavePayload / resolveDueReviewResume in
+ * words.shared.utils.tsx for why.
+ */
+export type DueReviewProgressData = {
+  quizQueue: TestableWord[];
+  resumeIndex: number;
+  quizHistory: QuizHistoryItem[];
+  quizSelectionMode: QuizSelectionMode;
+  quizSessionStartTime: number | null;
+};
+
 export type QuizSummary = {
   again: number;
   hard: number;

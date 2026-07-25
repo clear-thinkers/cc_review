@@ -141,6 +141,20 @@ export const wordsStrings = {
         confirmDeleteLastTarget:
           "Removing \"{character}\" will delete the whole test session \"{name}\" since it's the last character. Continue?",
       },
+      pausedSessions: {
+        title: "Paused Sessions",
+        sessionColumn: "Session",
+        savedColumn: "Saved",
+        remainingColumn: "Remaining",
+        dueReviewLabel: "Due Review",
+        lastSaved: "Last saved: {time}",
+        remaining: "{count} characters remaining",
+        resume: "Resume",
+        discard: "Discard",
+        discarding: "Discarding...",
+        discardError: "Could not discard the paused session. Please try again.",
+        statusResumeMissing: "This paused session is no longer available.",
+      },
       table: {
         character: "Character",
         nextReviewDate: "Next Review Date",
@@ -1207,6 +1221,20 @@ export const wordsStrings = {
         deleteTargetError: "无法移除汉字：{character}",
         confirmDeleteLastTarget:
           "移除“{character}”将删除整个测验“{name}”，因为它是最后一个汉字。要继续吗？",
+      },
+      pausedSessions: {
+        title: "暂停的测验",
+        sessionColumn: "测验",
+        savedColumn: "保存时间",
+        remainingColumn: "剩余",
+        dueReviewLabel: "待复习",
+        lastSaved: "上次保存：{time}",
+        remaining: "还剩 {count} 个汉字",
+        resume: "继续",
+        discard: "放弃",
+        discarding: "放弃中...",
+        discardError: "无法放弃这个暂停的测验，请重试。",
+        statusResumeMissing: "这个暂停的测验已不可用。",
       },
       table: {
         character: "汉字",

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FlashcardContentEntry } from "@/lib/supabase-service";
+import type { ReviewSessionProgress } from "@/lib/reviewSessionProgress.types";
 import type { Word } from "@/lib/types";
 import type { AllWordsSortKey } from "../../all/all.types";
 import type { DueWordsSortKey, ReviewTestSession } from "../../review/review.types";
@@ -11,6 +12,7 @@ export function useWordsBaseState() {
   const [dueWords, setDueWords] = useState<Word[]>([]);
   const [allFlashcardContents, setAllFlashcardContents] = useState<FlashcardContentEntry[]>([]);
   const [reviewTestSessions, setReviewTestSessions] = useState<ReviewTestSession[]>([]);
+  const [pausedSessions, setPausedSessions] = useState<ReviewSessionProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -40,6 +42,8 @@ export function useWordsBaseState() {
     setAllFlashcardContents,
     reviewTestSessions,
     setReviewTestSessions,
+    pausedSessions,
+    setPausedSessions,
     loading,
     setLoading,
     loadError,

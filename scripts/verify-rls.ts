@@ -13,6 +13,8 @@
  *   ✅ Cross-family isolation        → Section 4a (JWT-enriched, Family A cannot read Family B)
  *   ✅ Child write scope             → Section 4b (child JWT INSERT into words rejected)
  *   ✅ Quiz session immutability     → Section 4c (UPDATE on quiz_sessions affects 0 rows)
+ *   ✅ review_session_progress RLS   → Section 5 (family-scoped read incl. cross-family
+ *                                       isolation, user-scoped insert/update/delete)
  *
  * Env vars (auto-loaded from .env.local if present):
  *   NEXT_PUBLIC_SUPABASE_URL        — Supabase project URL
@@ -93,9 +95,15 @@ let testFamilyAId: string | null = null;
 let testFamilyBId: string | null = null;
 let testParentAUserId: string | null = null;
 let testChildAUserId: string | null = null;
+let testParentBUserId: string | null = null;
 let testWordBId: string | null = null;
 let testAuthUserParentId: string | null = null;  // auth.users.id for cleanup
 let testAuthUserChildId: string | null = null;   // auth.users.id for cleanup
+let testAuthUserParentBId: string | null = null; // auth.users.id for cleanup
+
+// JWT-enriched clients created in Section 4, reused by Section 5.
+let familyAParentClient: SupabaseClient | null = null;
+let familyAChildClient: SupabaseClient | null = null;
 
 // ─── Enriched client helper ────────────────────────────────────────────────
 //
@@ -168,6 +176,7 @@ async function section1_tableAccessibility(): Promise<void> {
     'hidden_admin_targets',
     'review_test_sessions',
     'review_test_session_targets',
+    'review_session_progress',
     'quiz_sessions',
     'wallets',
     'shop_recipes',
@@ -370,6 +379,11 @@ async function section4_enrichedTests(): Promise<void> {
     });
     childClient = childResult.client;
     testAuthUserChildId = childResult.authUserId;
+
+    // Persist to module scope so Section 5 can reuse these JWT-enriched clients
+    // instead of creating new auth users.
+    familyAParentClient = parentClient;
+    familyAChildClient = childClient;
   } catch (e: unknown) {
     fail('section4 auth user setup failed', e instanceof Error ? e.message : String(e));
     return;
@@ -494,6 +508,201 @@ async function section4_enrichedTests(): Promise<void> {
   }
 }
 
+// ─── Section 5: review_session_progress RLS ────────────────────────────────
+//
+// review_session_progress uses a different policy shape than most tables in
+// this app: SELECT is family-scoped (parents see children's rows, matching
+// the read-only paused-session visibility from the feature spec), but
+// INSERT/UPDATE/DELETE are user-scoped — a family member can only write their
+// own rows, not another family member's, even within the same family. This
+// is modeled after the quiz_sessions user-scoped insert check in Section 4c,
+// extended to also cover UPDATE/DELETE and a second same-family user.
+async function section5_reviewSessionProgress(): Promise<void> {
+  console.log('\n■ Section 5: review_session_progress RLS (family-scoped read, user-scoped write)');
+
+  if (
+    !testFamilyAId ||
+    !testFamilyBId ||
+    !testParentAUserId ||
+    !testChildAUserId ||
+    !familyAParentClient ||
+    !familyAChildClient
+  ) {
+    fail(
+      'section5 setup incomplete — Section 2/4 must have succeeded',
+      'testFamilyAId, testFamilyBId, testParentAUserId, testChildAUserId, and Section 4 clients must all be set'
+    );
+    return;
+  }
+
+  // ── Setup: a Family B parent user + JWT-enriched client ──────────────
+  const { data: parentBRow, error: parentBErr } = await admin
+    .from('users')
+    .insert({ family_id: testFamilyBId, name: `${TEST_TAG}_parent_b`, role: 'parent' })
+    .select('id')
+    .single();
+
+  let familyBParentClient: SupabaseClient | null = null;
+  if (parentBErr || !parentBRow) {
+    fail('section5 setup: service role INSERT parent user for Family B', parentBErr?.message);
+  } else {
+    const parentBUserId: string = parentBRow.id;
+    testParentBUserId = parentBUserId;
+    try {
+      const parentBResult = await createTestAuthClient({
+        email: `${TEST_TAG}-parent-b@test.invalid`,
+        familyId: testFamilyBId,
+        userId: parentBUserId,
+        role: 'parent',
+      });
+      familyBParentClient = parentBResult.client;
+      testAuthUserParentBId = parentBResult.authUserId;
+    } catch (e: unknown) {
+      fail('section5 setup: Family B auth client creation failed', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // ── Setup: Family A child inserts their own paused-session progress row ──
+  const progressKey = `${TEST_TAG}_progress_a`;
+  const { data: progressRow, error: progressInsertErr } = await familyAChildClient
+    .from('review_session_progress')
+    .insert({
+      user_id: testChildAUserId,
+      family_id: testFamilyAId,
+      client_session_key: progressKey,
+      source_type: 'due_review',
+      packaged_session_id: null,
+      progress_data: { quizIndex: 1 },
+    })
+    .select('id')
+    .single();
+
+  if (progressInsertErr || !progressRow) {
+    fail(
+      'review_session_progress setup: child JWT INSERT own progress row failed',
+      progressInsertErr?.message
+    );
+    return;
+  }
+  pass('review_session_progress setup: child JWT INSERT own progress row succeeded');
+  const progressRowId = (progressRow as { id: string }).id;
+
+  // ── (a) Family-scoped read: parent can read the child's paused-session row ──
+  const { data: seenByParent, error: parentReadErr } = await familyAParentClient
+    .from('review_session_progress')
+    .select('id, user_id')
+    .eq('id', progressRowId);
+
+  if (parentReadErr) {
+    fail('family-scoped read: parent JWT SELECT review_session_progress failed', parentReadErr.message);
+  } else if (!seenByParent || seenByParent.length === 0) {
+    fail(
+      'family-scoped read: parent JWT cannot see child\'s progress row — expected read-only visibility'
+    );
+  } else {
+    pass('family-scoped read: parent JWT can read child\'s paused-session progress row');
+  }
+
+  // ── (b) Cross-family isolation: Family B cannot read Family A's progress row ──
+  if (familyBParentClient) {
+    const { data: seenByFamilyB, error: familyBReadErr } = await familyBParentClient
+      .from('review_session_progress')
+      .select('id')
+      .eq('id', progressRowId);
+
+    if (familyBReadErr) {
+      pass(`cross-family isolation: Family B JWT SELECT blocked by RLS error: "${familyBReadErr.message}"`);
+    } else if (!seenByFamilyB || seenByFamilyB.length === 0) {
+      pass('cross-family isolation: Family B JWT cannot read Family A progress row');
+    } else {
+      fail(
+        'cross-family isolation: Family B JWT can read Family A progress row — RLS not enforcing!',
+        `Row id ${progressRowId} is visible to Family B client`
+      );
+    }
+  } else {
+    fail('cross-family isolation check skipped — Family B client was not created');
+  }
+
+  // ── (c) User-scoped write: another Family A user cannot write the child's row ──
+
+  // Parent (different user, same family) attempts to UPDATE the child's row.
+  const { data: parentUpdateData, error: parentUpdateErr } = await familyAParentClient
+    .from('review_session_progress')
+    .update({ progress_data: { quizIndex: 999 } })
+    .eq('id', progressRowId)
+    .select('id');
+
+  if (parentUpdateErr) {
+    pass(`user-scoped write: parent JWT UPDATE of child's row rejected by RLS: "${parentUpdateErr.message}"`);
+  } else if (!parentUpdateData || parentUpdateData.length === 0) {
+    pass('user-scoped write: parent JWT UPDATE of child\'s row silently affected 0 rows');
+  } else {
+    const { data: mutated } = await admin
+      .from('review_session_progress')
+      .select('progress_data')
+      .eq('id', progressRowId)
+      .single();
+    const mutatedData = (mutated as { progress_data: { quizIndex?: number } } | null)?.progress_data;
+    if (mutatedData && mutatedData.quizIndex === 999) {
+      fail('user-scoped write: parent JWT UPDATE of child\'s row SUCCEEDED — user-scoped policy not enforced!');
+    } else {
+      pass('user-scoped write: parent JWT UPDATE of child\'s row silently affected 0 rows');
+    }
+  }
+
+  // Parent (different user, same family) attempts to DELETE the child's row.
+  const { data: parentDeleteData, error: parentDeleteErr } = await familyAParentClient
+    .from('review_session_progress')
+    .delete()
+    .eq('id', progressRowId)
+    .select('id');
+
+  if (parentDeleteErr) {
+    pass(`user-scoped write: parent JWT DELETE of child's row rejected by RLS: "${parentDeleteErr.message}"`);
+  } else if (!parentDeleteData || parentDeleteData.length === 0) {
+    pass('user-scoped write: parent JWT DELETE of child\'s row silently affected 0 rows');
+  } else {
+    const { data: stillThere } = await admin
+      .from('review_session_progress')
+      .select('id')
+      .eq('id', progressRowId)
+      .maybeSingle();
+    if (!stillThere) {
+      fail('user-scoped write: parent JWT DELETE of child\'s row SUCCEEDED — user-scoped policy not enforced!');
+    } else {
+      pass('user-scoped write: parent JWT DELETE of child\'s row silently affected 0 rows');
+    }
+  }
+
+  // Child attempts to INSERT a row claiming to belong to the parent (different user_id, same family).
+  const { error: childForgedInsertErr } = await familyAChildClient
+    .from('review_session_progress')
+    .insert({
+      user_id: testParentAUserId,
+      family_id: testFamilyAId,
+      client_session_key: `${TEST_TAG}_progress_forged`,
+      source_type: 'due_review',
+      packaged_session_id: null,
+      progress_data: {},
+    });
+
+  if (childForgedInsertErr) {
+    pass(`user-scoped write: child JWT INSERT with another user's user_id rejected by RLS: "${childForgedInsertErr.message}"`);
+  } else {
+    const { data: leaked } = await admin
+      .from('review_session_progress')
+      .select('id')
+      .eq('client_session_key', `${TEST_TAG}_progress_forged`);
+    if (leaked && leaked.length > 0) {
+      fail('user-scoped write: child JWT INSERT with another user\'s user_id SUCCEEDED — user-scoped policy not enforced!');
+      await admin.from('review_session_progress').delete().eq('client_session_key', `${TEST_TAG}_progress_forged`);
+    } else {
+      pass('user-scoped write: child JWT INSERT with another user\'s user_id rejected by RLS (0 rows written)');
+    }
+  }
+}
+
 // ─── Cleanup ───────────────────────────────────────────────────────────────
 async function cleanup(): Promise<void> {
   console.log('\n■ Cleanup: Removing synthetic test data');
@@ -516,8 +725,10 @@ async function cleanup(): Promise<void> {
     pass('synthetic test data deleted (cascade removed words, users, wallets)');
   }
 
-  // Delete test auth users created in Section 4
-  const authIds = [testAuthUserParentId, testAuthUserChildId].filter((id): id is string => id !== null);
+  // Delete test auth users created in Sections 4 and 5
+  const authIds = [testAuthUserParentId, testAuthUserChildId, testAuthUserParentBId].filter(
+    (id): id is string => id !== null
+  );
   for (const authId of authIds) {
     const { error: authDelErr } = await admin.auth.admin.deleteUser(authId);
     if (authDelErr) {
@@ -539,6 +750,7 @@ async function main(): Promise<void> {
     await section2_adminBypass();
     await section3_unenrichedIsolation();
     await section4_enrichedTests();
+    await section5_reviewSessionProgress();
   } finally {
     await cleanup();
   }

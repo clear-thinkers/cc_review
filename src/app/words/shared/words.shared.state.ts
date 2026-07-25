@@ -31,6 +31,10 @@ import {
   completeReviewTestSession,
   deleteAdminTargetRow,
   restoreHiddenAdminTargetsForHanzi,
+  saveReviewSessionProgress,
+  loadReviewSessionProgress,
+  listReviewSessionProgress,
+  deleteReviewSessionProgress,
 } from "@/lib/supabase-service";
 import { gradeBundledFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -44,6 +48,10 @@ import { makeId } from "@/lib/id";
 import { calculateNextState, type Grade } from "@/lib/scheduler";
 import { calculateSessionCoins } from "@/lib/coins";
 import type { Word } from "@/lib/types";
+import type {
+  ReviewSessionProgress,
+  ReviewSessionProgressSourceType,
+} from "@/lib/reviewSessionProgress.types";
 import type { QuizSession } from "@/app/words/results/results.types";
 import { getXinhuaFlashcardInfo } from "@/lib/xinhua";
 import { supabase } from "@/lib/supabaseClient";
@@ -54,6 +62,7 @@ import {
   SLOT_INDICES,
   buildAdminMeaningKey,
   buildBundledFillTestPlan,
+  buildDueReviewAutosavePayload,
   buildFillTestFromSavedContent,
   applyAdminMeaningEdit,
   cloneFillTest,
@@ -83,6 +92,8 @@ import {
   parseQuizPhraseIndex,
   renderPhraseWithPinyin,
   renderSentenceWithPinyin,
+  resolveDueReviewResume,
+  resolvePackagedReviewResume,
   shouldShowManualEditPopup,
 } from "./words.shared.utils";
 import type {
@@ -174,6 +185,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setAllFlashcardContents,
     reviewTestSessions,
     setReviewTestSessions,
+    pausedSessions,
+    setPausedSessions,
     loading,
     setLoading,
     loadError,
@@ -319,6 +332,25 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
   const requestedReviewTestSessionId = searchParams.get("reviewTestSessionId");
   const reviewTestSessionStatus = searchParams.get("reviewTestSessionStatus");
   const reviewTestSessionName = searchParams.get("reviewTestSessionName");
+  const resumeProgressKey = searchParams.get("resumeProgressKey");
+  // Holds the client_session_key for the ACTIVE fill-test runtime session
+  // currently autosaving -- for an ad-hoc due-review session this is a
+  // client-minted UUID; for a packaged session this IS the
+  // review_test_sessions.id (requestedReviewTestSessionId). Null whenever no
+  // autosave should occur (no session in progress, or a session that hasn't
+  // resolved fresh-vs-resume yet).
+  const activeProgressKeyRef = useRef<string | null>(null);
+  // Companion to activeProgressKeyRef: which source_type/packaged_session_id
+  // to autosave under. Always set together with activeProgressKeyRef so
+  // submitCurrentQuizWord's saveReviewSessionProgress call never has to
+  // guess which source type is active. The default value is never read on
+  // its own -- callers only consult this ref when activeProgressKeyRef.current
+  // is truthy.
+  const activeProgressSourceRef = useRef<{
+    sourceType: ReviewSessionProgressSourceType;
+    packagedSessionId: string | null;
+  }>({ sourceType: "due_review", packagedSessionId: null });
+  const resumeLoadInFlightRef = useRef(false);
 
 const gradeLabels = getGradeLabels(str);
   const fillTestDueWords = useMemo(() => dueWords.filter(hasFillTest), [dueWords]);
@@ -1024,6 +1056,12 @@ const gradeLabels = getGradeLabels(str);
     setQuizIndex(0);
     setQuizSessionStartTime(null);
     resetQuizWordState();
+    // Clear the runtime pointer only -- this does NOT delete the saved
+    // review_session_progress row. Stopping mid-session (the "Stop quiz"
+    // button) must leave the child's saved progress intact so they can
+    // resume later; only explicit Discard and normal completion delete it.
+    activeProgressKeyRef.current = null;
+    activeProgressSourceRef.current = { sourceType: "due_review", packagedSessionId: null };
   }
 
   async function performStopQuizSession() {
@@ -1100,8 +1138,12 @@ const gradeLabels = getGradeLabels(str);
     await refreshWords();
     await refreshDueWords();
     await listReviewTestSessions().then(setReviewTestSessions);
+    // No sourceType filter -- Due Review's Paused Sessions list now shows
+    // both ad-hoc due-review AND packaged paused sessions in one unified
+    // table (see DueReviewSection.tsx).
+    await listReviewSessionProgress().then(setPausedSessions).catch(() => setPausedSessions([]));
     await getWordLessonTagsForFamily().then(setWordTagsMap).catch(() => setWordTagsMap(new Map()));
-  }, [refreshDueWords, refreshWords, setReviewTestSessions, setWordTagsMap]);
+  }, [refreshDueWords, refreshWords, setPausedSessions, setReviewTestSessions, setWordTagsMap]);
 
   useEffect(() => {
     (async () => {
@@ -2828,6 +2870,31 @@ const gradeLabels = getGradeLabels(str);
     return result;
   }
 
+  function resumePausedSession(clientSessionKey: string) {
+    // Branch by source type: a packaged paused session resumes through the
+    // SAME entry point as continueReviewTestSessionToQuiz
+    // (?reviewTestSessionId=...), deliberately skipping the flashcard phase
+    // -- flashcard review is non-graded, so re-doing it isn't needed to
+    // resume grading. An ad-hoc due-review session keeps using the
+    // ?resumeProgressKey= entry point. Falls back to the ad-hoc path
+    // defensively if the row can't be found (shouldn't happen -- the caller
+    // always passes a key from the same pausedSessions list this looks up).
+    const row = pausedSessions.find((item) => item.clientSessionKey === clientSessionKey);
+    if (row?.sourceType === "packaged" && row.packagedSessionId) {
+      router.push(
+        `/words/review/fill-test?reviewTestSessionId=${encodeURIComponent(row.packagedSessionId)}`
+      );
+      return;
+    }
+
+    router.push(`/words/review/fill-test?resumeProgressKey=${encodeURIComponent(clientSessionKey)}`);
+  }
+
+  async function handleDiscardPausedSession(clientSessionKey: string): Promise<void> {
+    await deleteReviewSessionProgress(clientSessionKey);
+    await refreshAll();
+  }
+
   // Stable key: only changes when the set of hanzi characters changes.
   // Prevents the admin effect from re-running on every refreshAll() call that
   // produces a new `words` array reference without changing which characters exist.
@@ -3517,39 +3584,228 @@ const gradeLabels = getGradeLabels(str);
         return;
       }
 
-      setFlashcardInProgress(false);
-      setFlashcardQueue([]);
-      setFlashcardIndex(0);
-      setFlashcardRevealed(false);
-      setFlashcardLlmLoading(false);
-      setFlashcardLlmError(null);
-      const plan = buildBundledFillTestPlan(activeReviewTestSessionRuntime.quizWords);
-      if (plan.quizWords.length === 0) {
-        router.replace("/words/review?reviewTestSessionStatus=no_quiz_ready");
+      // Look for saved progress on this packaged session before building a
+      // fresh plan. client_session_key for a packaged session IS the
+      // review_test_sessions.id, so this is a direct point lookup (unlike
+      // the resumeProgressKey path below, which resolves an ad-hoc key from
+      // the URL). Reuses resumeLoadInFlightRef as a re-entrancy guard --
+      // this branch and the resumeProgressKey branch below are mutually
+      // exclusive within a single effect run, so sharing the ref is safe.
+      if (resumeLoadInFlightRef.current) {
         return;
       }
-      setQuizQueue(
-        plan.quizWords.map((word) => ({
-          ...word,
-          fillTest: cloneFillTest(word.fillTest),
-        }))
-      );
-      setQuizIndex(0);
-      resetQuizWordState(plan.quizWords[0]);
-      setQuizResult(null);
-      setQuizActivePhraseIndex(null);
-      setQuizDraggingPhraseIndex(null);
-      setQuizDropSentenceIndex(null);
-      setQuizHistory([]);
-      setQuizCompleted(false);
-      setQuizInProgress(true);
-      setQuizSessionStartTime(Date.now());
-      setCompletedReviewTestSessionName(null);
-      setQuizNotice(
-        str.fillTest.reviewTestSession.activeSession
-          .replace("{name}", activeReviewTestSession.name)
-          .replace("{count}", String(plan.quizWords.length))
-      );
+      resumeLoadInFlightRef.current = true;
+      const runtimeQuizWords = activeReviewTestSessionRuntime;
+      const activeSession = activeReviewTestSession;
+
+      (async () => {
+        try {
+          let progress: ReviewSessionProgress | null = null;
+          try {
+            progress = await loadReviewSessionProgress(requestedReviewTestSessionId);
+          } catch (error) {
+            console.error("Failed to load saved packaged review session progress", error);
+          }
+
+          setFlashcardInProgress(false);
+          setFlashcardQueue([]);
+          setFlashcardIndex(0);
+          setFlashcardRevealed(false);
+          setFlashcardLlmLoading(false);
+          setFlashcardLlmError(null);
+
+          // Defensive: client_session_key for a packaged session IS its id,
+          // so a row found by this lookup should always be sourceType
+          // "packaged" -- but fall through to a fresh plan rather than
+          // resuming from a differently-shaped row if that ever isn't true.
+          if (progress && progress.sourceType === "packaged") {
+            const resolved = resolvePackagedReviewResume({
+              progressData: progress.progressData,
+              currentWords: words,
+              allFlashcardContents,
+              quizWordIds: new Set(runtimeQuizWords.quizWords.map((word) => word.id)),
+            });
+
+            if (resolved.status === "invalid") {
+              // Corrupted/unreadable saved payload -- mirror the existing
+              // packaged "invalid" redirect (not resume_missing, which is
+              // specifically for the ad-hoc resumeProgressKey path).
+              try {
+                await deleteReviewSessionProgress(requestedReviewTestSessionId);
+              } catch (error) {
+                console.error("Failed to clean up invalid packaged review session progress", error);
+              }
+              router.replace("/words/review?reviewTestSessionStatus=invalid");
+              return;
+            }
+
+            if (resolved.status === "empty") {
+              // Every remaining queued item lost fill-test eligibility or
+              // dropped out of the session's current quiz-ready targets
+              // since this session was paused -- mirror the existing
+              // packaged "no_quiz_ready" empty state and drop the
+              // now-useless saved row.
+              try {
+                await deleteReviewSessionProgress(requestedReviewTestSessionId);
+              } catch (error) {
+                console.error("Failed to clean up empty packaged review session progress", error);
+              }
+              router.replace("/words/review?reviewTestSessionStatus=no_quiz_ready");
+              return;
+            }
+
+            activeProgressKeyRef.current = requestedReviewTestSessionId;
+            activeProgressSourceRef.current = {
+              sourceType: "packaged",
+              packagedSessionId: requestedReviewTestSessionId,
+            };
+            setQuizQueue(resolved.quizQueue);
+            setQuizIndex(0);
+            resetQuizWordState(resolved.quizQueue[0]);
+            setQuizResult(null);
+            setQuizActivePhraseIndex(null);
+            setQuizDraggingPhraseIndex(null);
+            setQuizDropSentenceIndex(null);
+            setQuizHistory(resolved.quizHistory);
+            setQuizSelectionMode(resolved.quizSelectionMode);
+            setQuizCompleted(false);
+            setQuizInProgress(true);
+            setQuizSessionStartTime(resolved.quizSessionStartTime ?? Date.now());
+            setCompletedReviewTestSessionName(null);
+            setQuizNotice(
+              str.fillTest.reviewTestSession.activeSession
+                .replace("{name}", activeSession.name)
+                .replace("{count}", String(resolved.quizQueue.length))
+            );
+            return;
+          }
+
+          // No saved progress for this packaged session (or a defensive
+          // fallback) -- build a fresh plan, same as before this task.
+          const plan = buildBundledFillTestPlan(runtimeQuizWords.quizWords);
+          if (plan.quizWords.length === 0) {
+            router.replace("/words/review?reviewTestSessionStatus=no_quiz_ready");
+            return;
+          }
+          activeProgressKeyRef.current = requestedReviewTestSessionId;
+          activeProgressSourceRef.current = {
+            sourceType: "packaged",
+            packagedSessionId: requestedReviewTestSessionId,
+          };
+          setQuizQueue(
+            plan.quizWords.map((word) => ({
+              ...word,
+              fillTest: cloneFillTest(word.fillTest),
+            }))
+          );
+          setQuizIndex(0);
+          resetQuizWordState(plan.quizWords[0]);
+          setQuizResult(null);
+          setQuizActivePhraseIndex(null);
+          setQuizDraggingPhraseIndex(null);
+          setQuizDropSentenceIndex(null);
+          setQuizHistory([]);
+          setQuizCompleted(false);
+          setQuizInProgress(true);
+          setQuizSessionStartTime(Date.now());
+          setCompletedReviewTestSessionName(null);
+          setQuizNotice(
+            str.fillTest.reviewTestSession.activeSession
+              .replace("{name}", activeSession.name)
+              .replace("{count}", String(plan.quizWords.length))
+          );
+        } finally {
+          resumeLoadInFlightRef.current = false;
+        }
+      })();
+      return;
+    }
+
+    if (resumeProgressKey) {
+      if (resumeLoadInFlightRef.current) {
+        return;
+      }
+      resumeLoadInFlightRef.current = true;
+
+      (async () => {
+        try {
+          let progress: ReviewSessionProgress | null = null;
+          try {
+            progress = await loadReviewSessionProgress(resumeProgressKey);
+          } catch (error) {
+            console.error("Failed to load saved review session progress", error);
+          }
+
+          // Row missing (already discarded/completed elsewhere) or points at a
+          // packaged-session row (packaged sessions resume via
+          // ?reviewTestSessionId=, never ?resumeProgressKey=, so a
+          // "packaged" row here would be an unexpected mismatch) -- nothing
+          // safe to resume, send the child back to Due Review.
+          if (!progress || progress.sourceType !== "due_review") {
+            router.replace("/words/review?reviewTestSessionStatus=resume_missing");
+            return;
+          }
+
+          const resolved = resolveDueReviewResume({
+            progressData: progress.progressData,
+            currentWords: words,
+            allFlashcardContents,
+          });
+
+          if (resolved.status === "invalid") {
+            // Corrupted/unreadable saved payload -- best-effort cleanup so it
+            // doesn't linger in the Paused Sessions list, same as any other
+            // "nothing safe to resume" case.
+            try {
+              await deleteReviewSessionProgress(resumeProgressKey);
+            } catch (error) {
+              console.error("Failed to clean up invalid review session progress", error);
+            }
+            router.replace("/words/review?reviewTestSessionStatus=resume_missing");
+            return;
+          }
+
+          setFlashcardInProgress(false);
+          setFlashcardQueue([]);
+          setFlashcardIndex(0);
+          setFlashcardRevealed(false);
+          setFlashcardLlmLoading(false);
+          setFlashcardLlmError(null);
+
+          if (resolved.status === "empty") {
+            // Every remaining queued item lost fill-test eligibility since
+            // this session was paused. Mirror the existing "no eligible
+            // targets" empty state rather than resuming into a blank quiz,
+            // and drop the now-useless saved row.
+            try {
+              await deleteReviewSessionProgress(resumeProgressKey);
+            } catch (error) {
+              console.error("Failed to clean up empty review session progress", error);
+            }
+            setQuizNotice(str.fillTest.notices.noQuizReady);
+            return;
+          }
+
+          activeProgressKeyRef.current = resumeProgressKey;
+          activeProgressSourceRef.current = { sourceType: "due_review", packagedSessionId: null };
+          setQuizQueue(resolved.quizQueue);
+          setQuizIndex(0);
+          resetQuizWordState(resolved.quizQueue[0]);
+          setQuizResult(null);
+          setQuizActivePhraseIndex(null);
+          setQuizDraggingPhraseIndex(null);
+          setQuizDropSentenceIndex(null);
+          setQuizHistory(resolved.quizHistory);
+          setQuizSelectionMode(resolved.quizSelectionMode);
+          setQuizCompleted(false);
+          setQuizInProgress(true);
+          setQuizSessionStartTime(resolved.quizSessionStartTime ?? Date.now());
+          setCompletedReviewTestSessionName(null);
+          setQuizNotice(null);
+        } finally {
+          resumeLoadInFlightRef.current = false;
+        }
+      })();
       return;
     }
 
@@ -3573,6 +3829,11 @@ const gradeLabels = getGradeLabels(str);
       setQuizNotice(str.fillTest.notices.noQuizReady);
       return;
     }
+    // New ad-hoc due-review session: mint a fresh client-side session key and
+    // hold it for the life of this runtime session so every autosave call
+    // upserts the same review_session_progress row.
+    activeProgressKeyRef.current = crypto.randomUUID();
+    activeProgressSourceRef.current = { sourceType: "due_review", packagedSessionId: null };
     setQuizQueue(plan.quizWords.map((word) => ({ ...word, fillTest: cloneFillTest(word.fillTest) })));
     setQuizIndex(0);
     resetQuizWordState(plan.quizWords[0]);
@@ -3593,6 +3854,7 @@ const gradeLabels = getGradeLabels(str);
   }, [
     activeReviewTestSession,
     activeReviewTestSessionRuntime,
+    allFlashcardContents,
     fillTestDueWords,
     isFillTestReviewPage,
     loading,
@@ -3600,12 +3862,14 @@ const gradeLabels = getGradeLabels(str);
     quizInProgress,
     requestedReviewWordId,
     requestedReviewTestSessionId,
+    resumeProgressKey,
     router,
     session?.isPlatformAdmin,
     session?.role,
     str.fillTest.notices.noQuizReady,
     str.fillTest.notices.skippedBundledCharacters,
     str.fillTest.reviewTestSession.activeSession,
+    words,
   ]);
 
   async function submitCurrentQuizWord() {
@@ -3636,8 +3900,13 @@ const gradeLabels = getGradeLabels(str);
       for (const memberResult of result.memberResults) {
         await gradeWord(memberResult.wordId, { grade: memberResult.tier, source: "fillTest" });
       }
-      setQuizHistory((previous) => [
-        ...previous,
+
+      // Computed directly (not via functional setState) because the autosave
+      // call below needs the up-to-date array synchronously -- setQuizHistory
+      // is async, so reading the `quizHistory` state variable right after
+      // calling it would still see the stale pre-update value.
+      const updatedHistory = [
+        ...quizHistory,
         ...result.memberResults.map((memberResult) => ({
           wordId: memberResult.wordId,
           hanzi: memberResult.hanzi,
@@ -3645,7 +3914,39 @@ const gradeLabels = getGradeLabels(str);
           correctCount: memberResult.correctCount,
           totalCount: memberResult.totalCount,
         })),
-      ]);
+      ];
+      setQuizHistory(updatedHistory);
+
+      // Autosave the active session after every graded word -- both ad-hoc
+      // due-review AND packaged sessions, per activeProgressSourceRef (kept
+      // in sync with activeProgressKeyRef wherever a session starts/resumes).
+      // Fire-and-forget per the spec: a failed autosave is logged but must
+      // never block quiz interaction or surface an error toast -- the
+      // session keeps going in-memory and the next successful autosave
+      // catches the state up. activeProgressKeyRef is null while no session
+      // has resolved fresh-vs-resume yet, so this is a no-op until then.
+      if (activeProgressKeyRef.current) {
+        const progressKey = activeProgressKeyRef.current;
+        const progressSource = activeProgressSourceRef.current;
+        const autosavePayload = buildDueReviewAutosavePayload({
+          quizQueue,
+          quizIndex,
+          quizHistory: updatedHistory,
+          quizSelectionMode,
+          quizSessionStartTime,
+        });
+        if (autosavePayload) {
+          saveReviewSessionProgress({
+            clientSessionKey: progressKey,
+            sourceType: progressSource.sourceType,
+            packagedSessionId: progressSource.packagedSessionId,
+            progressData: autosavePayload,
+            startedAt: quizSessionStartTime ?? undefined,
+          }).catch((error) => {
+            console.error("Failed to autosave review session progress", error);
+          });
+        }
+      }
 
       // Trigger celebration only when the whole quiz item is correct.
       if (result.correctCount === result.sentenceResults.length) {
@@ -3748,6 +4049,19 @@ const gradeLabels = getGradeLabels(str);
               )
             );
           }
+        } else if (activeProgressKeyRef.current) {
+          // Ad-hoc due-review completion: the session finished normally via
+          // the quiz_sessions insert above, so the saved progress row is now
+          // stale -- delete it. Packaged-session cleanup is handled
+          // server-side by complete_review_test_session (E1), not here, so
+          // this branch only ever runs for ad-hoc sessions.
+          try {
+            await deleteReviewSessionProgress(activeProgressKeyRef.current);
+          } catch (error) {
+            console.error("Failed to delete review session progress after completion:", error);
+            // Don't block quiz completion if cleanup fails -- matches the
+            // recordQuizSession failure-tolerance pattern above.
+          }
         }
 
         stopQuizSession();
@@ -3812,6 +4126,7 @@ const gradeLabels = getGradeLabels(str);
     fillTestDueWords,
     reviewTestSessionRows,
     reviewTestSessions,
+    pausedSessions,
     loading,
     sortedDueWords,
     openFlashcardReview,
@@ -3824,6 +4139,8 @@ const gradeLabels = getGradeLabels(str);
     hasFillTest,
     handleDeleteReviewTestSession,
     handleDeleteReviewTestSessionTarget,
+    resumePausedSession,
+    handleDiscardPausedSession,
     reviewTestSessionStatus,
     reviewTestSessionName,
     isFlashcardReviewPage,

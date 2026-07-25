@@ -6,6 +6,7 @@ import type {
   QuizSelections,
   QuizSummary,
   FillTestCandidateRow,
+  DueReviewProgressData,
 } from "./fillTest.types";
 
 describe("Fill-Test Types", () => {
@@ -48,5 +49,26 @@ describe("Fill-Test Types", () => {
       example: "你的好朋友在哪里？",
     };
     expect(row.phrase).toBe("好朋友");
+  });
+
+  it("should allow creating DueReviewProgressData objects with resumeIndex pointing past the last-graded item", () => {
+    const word: TestableWord = {
+      id: "w1",
+      hanzi: "中",
+      createdAt: 1,
+      repetitions: 0,
+      intervalDays: 0,
+      ease: 0,
+      nextReviewAt: 0,
+      fillTest: { phrases: ["中文"], sentences: [{ text: "___文", answerIndex: 0 }] },
+    };
+    const progress: DueReviewProgressData = {
+      quizQueue: [word],
+      resumeIndex: 1,
+      quizHistory: [],
+      quizSelectionMode: "all",
+      quizSessionStartTime: 1000,
+    };
+    expect(progress.resumeIndex).toBe(progress.quizQueue.length);
   });
 });

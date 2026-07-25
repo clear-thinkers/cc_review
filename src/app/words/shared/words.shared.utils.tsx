@@ -15,7 +15,9 @@ import type {
   FlashcardPhraseGenerationResponse,
 } from "../admin/admin.types";
 import type {
+  DueReviewProgressData,
   FillTestCandidateRow,
+  QuizHistoryItem,
   QuizSelectionMode,
   TestableWord,
 } from "../review/fill-test/fillTest.types";
@@ -23,6 +25,8 @@ import type { NavItem } from "./shell.types";
 import type { WordsLocaleStrings } from "./words.shared.types";
 import { canAccessRoute } from "@/lib/permissions";
 import type { UserRole } from "@/lib/auth.types";
+import type { FlashcardContentEntry } from "@/lib/supabase-service";
+import type { ReviewSessionProgress } from "@/lib/reviewSessionProgress.types";
 
 export const SLOT_INDICES: Array<0 | 1 | 2> = [0, 1, 2];
 export const QUIZ_SELECTION_MODES = ["all", "10", "20", "30", "manual"] as const;
@@ -814,6 +818,283 @@ export function buildBundledFillTestPlan(words: TestableWord[]): BundledFillTest
     quizWords: [...bundledQuizWords, ...ordinaryQuizWords],
     skippedCharacters,
   };
+}
+
+// ─── Review Session Progress (save/resume) ─────────────────────────────────
+//
+// These helpers live alongside buildBundledFillTestPlan/buildFillTestFromSavedContent
+// (rather than in the domain module src/lib/fillTest.ts) because re-validating a
+// saved quiz queue against current content requires buildFillTestFromSavedContent,
+// which already lives in this UI-adjacent module. Keeping src/lib/fillTest.ts free
+// of FlashcardLlmResponse/content-shape dependencies preserves the domain/UI layer
+// boundary described in 0_ARCHITECTURE.md §2.
+//
+// Shared by both ad-hoc due-review sessions and packaged review test
+// sessions (E3 extends E2's original ad-hoc-only helpers) -- see
+// resolvePackagedReviewResume for the one packaged-only extra check.
+
+export function buildContentByCharacterMap(
+  entries: FlashcardContentEntry[]
+): Map<string, FlashcardLlmResponse[]> {
+  const contentByCharacter = new Map<string, FlashcardLlmResponse[]>();
+  for (const entry of entries) {
+    const list = contentByCharacter.get(entry.character) ?? [];
+    list.push(entry.content);
+    contentByCharacter.set(entry.character, list);
+  }
+  return contentByCharacter;
+}
+
+/**
+ * Drops any queued fill-test item whose underlying word (or, for bundled
+ * items, any member word) no longer exists or is no longer fill-test
+ * eligible against CURRENT word/content state. Mirrors the existing
+ * skip-invalid-silently precedent used by "Send Failed to Test Session"
+ * (see src/lib/resultsReviewTestSession.ts) rather than erroring.
+ *
+ * `allowedWordIds`, when provided, adds ONE extra check on top of the
+ * word-exists/content-eligible checks above: every member word's id must
+ * also be present in the set, or the whole item is dropped. This is the
+ * packaged-session-only check ("is this word still one of the session's
+ * CURRENT quiz-ready targets") layered onto the same generic validation --
+ * see resolvePackagedReviewResume, which passes the packaged session's
+ * `activeReviewTestSessionRuntime.quizWords` ids here. Omitted (the
+ * ad-hoc due-review path) it is a no-op, matching the pre-existing behavior.
+ */
+export function revalidateSavedQuizQueue(
+  savedQueue: TestableWord[],
+  currentWords: Word[],
+  contentByCharacter: Map<string, FlashcardLlmResponse[]>,
+  allowedWordIds?: Set<string>
+): TestableWord[] {
+  const wordsById = new Map(currentWords.map((word) => [word.id, word]));
+
+  return savedQueue.filter((queuedWord) => {
+    const members = queuedWord.fillTest.members?.length
+      ? queuedWord.fillTest.members
+      : [
+          {
+            wordId: queuedWord.id,
+            hanzi: queuedWord.hanzi,
+            phraseCount: queuedWord.fillTest.sentences.length,
+          },
+        ];
+
+    return members.every((member) => {
+      if (!wordsById.has(member.wordId)) {
+        return false;
+      }
+
+      if (allowedWordIds && !allowedWordIds.has(member.wordId)) {
+        return false;
+      }
+
+      return Boolean(buildFillTestFromSavedContent(contentByCharacter.get(member.hanzi) ?? []));
+    });
+  });
+}
+
+function isDueReviewProgressData(value: unknown): value is DueReviewProgressData {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const source = value as Record<string, unknown>;
+  return (
+    Array.isArray(source.quizQueue) &&
+    typeof source.resumeIndex === "number" &&
+    Number.isInteger(source.resumeIndex) &&
+    Array.isArray(source.quizHistory) &&
+    typeof source.quizSelectionMode === "string" &&
+    (QUIZ_SELECTION_MODES as readonly string[]).includes(source.quizSelectionMode) &&
+    (source.quizSessionStartTime === null || typeof source.quizSessionStartTime === "number")
+  );
+}
+
+export type DueReviewResumeResolution =
+  | {
+      status: "ready";
+      quizQueue: TestableWord[];
+      quizHistory: QuizHistoryItem[];
+      quizSelectionMode: QuizSelectionMode;
+      quizSessionStartTime: number | null;
+    }
+  | { status: "empty" }
+  | { status: "invalid" };
+
+/**
+ * Shared resolution core for both resolveDueReviewResume (ad-hoc due-review)
+ * and resolvePackagedReviewResume (packaged sessions) below: re-validates
+ * the not-yet-answered TAIL of a saved queue (from resumeIndex onward)
+ * against current word/content state. Items before resumeIndex were already
+ * graded before the session was paused and are intentionally never
+ * replayed here -- see buildDueReviewAutosavePayload for why that would
+ * double-grade them. `allowedWordIds`, when passed through, is forwarded to
+ * revalidateSavedQuizQueue for the packaged-only "still a current quiz-ready
+ * target" check.
+ */
+function resolveReviewResume(params: {
+  progressData: unknown;
+  currentWords: Word[];
+  allFlashcardContents: FlashcardContentEntry[];
+  allowedWordIds?: Set<string>;
+}): DueReviewResumeResolution {
+  if (!isDueReviewProgressData(params.progressData)) {
+    return { status: "invalid" };
+  }
+
+  const parsed = params.progressData;
+  const boundedResumeIndex = Math.min(Math.max(0, parsed.resumeIndex), parsed.quizQueue.length);
+  const remainingQueue = parsed.quizQueue.slice(boundedResumeIndex);
+  if (remainingQueue.length === 0) {
+    return { status: "empty" };
+  }
+
+  const contentByCharacter = buildContentByCharacterMap(params.allFlashcardContents);
+  const validatedQueue = revalidateSavedQuizQueue(
+    remainingQueue,
+    params.currentWords,
+    contentByCharacter,
+    params.allowedWordIds
+  );
+  if (validatedQueue.length === 0) {
+    return { status: "empty" };
+  }
+
+  return {
+    status: "ready",
+    quizQueue: validatedQueue,
+    quizHistory: parsed.quizHistory,
+    quizSelectionMode: parsed.quizSelectionMode,
+    quizSessionStartTime: parsed.quizSessionStartTime,
+  };
+}
+
+/**
+ * Resolves a saved ad-hoc due-review review_session_progress row's
+ * progress_data into runtime state ready to resume. See resolveReviewResume
+ * for the shared re-validation core.
+ */
+export function resolveDueReviewResume(params: {
+  progressData: unknown;
+  currentWords: Word[];
+  allFlashcardContents: FlashcardContentEntry[];
+}): DueReviewResumeResolution {
+  return resolveReviewResume(params);
+}
+
+/**
+ * Packaged-session flavor of resolveDueReviewResume. Adds ONE extra
+ * re-validation check beyond the ad-hoc path: every member word of each
+ * queued item must still be present in `quizWordIds` (pass
+ * `activeReviewTestSessionRuntime.quizWords.map((word) => word.id)` for the
+ * packaged session being resumed) -- a parent may have removed a target (or
+ * its content) while the child had the session paused. Composes with
+ * resolveReviewResume/revalidateSavedQuizQueue rather than duplicating the
+ * resumeIndex-slicing or per-item validation logic.
+ */
+export function resolvePackagedReviewResume(params: {
+  progressData: unknown;
+  currentWords: Word[];
+  allFlashcardContents: FlashcardContentEntry[];
+  quizWordIds: Set<string>;
+}): DueReviewResumeResolution {
+  return resolveReviewResume({
+    progressData: params.progressData,
+    currentWords: params.currentWords,
+    allFlashcardContents: params.allFlashcardContents,
+    allowedWordIds: params.quizWordIds,
+  });
+}
+
+/**
+ * Builds the autosave payload for a fill-test session immediately after a
+ * word has been graded. Despite the name, this is now shared by BOTH ad-hoc
+ * due-review sessions and packaged review test sessions -- it only touches
+ * `quizQueue`/`quizIndex`/`quizHistory`/`quizSelectionMode`/
+ * `quizSessionStartTime`, none of which differ by source type. Kept under
+ * its original name to avoid an unrelated rename across call sites; the
+ * `source_type`/`packaged_session_id` distinction lives one layer up, in
+ * the `saveReviewSessionProgress` call site (see
+ * `activeProgressSourceRef` in words.shared.state.ts).
+ *
+ * `resumeIndex` is deliberately `quizIndex + 1` (the NEXT unanswered word),
+ * never the just-graded `quizIndex`: `gradeWord()` has already mutated the
+ * scheduler for that word the moment it was graded, independent of whether
+ * the user later clicks "Next" -- if resume replayed the same word again it
+ * would double-grade it. Returns null when the just-graded word was the
+ * last item in the queue, since a session that is about to complete should
+ * not get a saved-progress row (the normal completion-cleanup path handles
+ * that word instead).
+ */
+export function buildDueReviewAutosavePayload(params: {
+  quizQueue: TestableWord[];
+  quizIndex: number;
+  quizHistory: QuizHistoryItem[];
+  quizSelectionMode: QuizSelectionMode;
+  quizSessionStartTime: number | null;
+}): DueReviewProgressData | null {
+  const resumeIndex = params.quizIndex + 1;
+  if (resumeIndex >= params.quizQueue.length) {
+    return null;
+  }
+
+  return {
+    quizQueue: params.quizQueue,
+    resumeIndex,
+    quizHistory: params.quizHistory,
+    quizSelectionMode: params.quizSelectionMode,
+    quizSessionStartTime: params.quizSessionStartTime,
+  };
+}
+
+/**
+ * The "characters remaining" count for a paused-session row. `progressData`
+ * (as saved by buildDueReviewAutosavePayload) stores the FULL original
+ * `quizQueue` plus a separate `resumeIndex` pointer to the next unanswered
+ * item -- the true remaining count is the tail length (quizQueue.length -
+ * resumeIndex), not the raw queue length, which would still count words
+ * already graded before the session was paused.
+ */
+export function getPausedSessionRemainingCount(progressData: unknown): number {
+  if (
+    !progressData ||
+    typeof progressData !== "object" ||
+    !Array.isArray((progressData as { quizQueue?: unknown }).quizQueue)
+  ) {
+    return 0;
+  }
+
+  const { quizQueue, resumeIndex } = progressData as {
+    quizQueue: unknown[];
+    resumeIndex?: unknown;
+  };
+  const boundedResumeIndex =
+    typeof resumeIndex === "number" && Number.isInteger(resumeIndex)
+      ? Math.min(Math.max(0, resumeIndex), quizQueue.length)
+      : 0;
+  return quizQueue.length - boundedResumeIndex;
+}
+
+/**
+ * Filters family-scoped paused-session rows (from listReviewSessionProgress,
+ * which returns every family member's rows under the family-scoped read RLS
+ * policy) for display. Child/platform-admin viewers only ever see and act on
+ * their OWN rows -- one child must never resume or discard a sibling's
+ * in-progress quiz, even though RLS would independently reject the write.
+ * Parents get the full unfiltered family list (read-only visibility, per the
+ * feature spec).
+ */
+export function filterPausedSessionsForViewer(
+  rows: ReviewSessionProgress[],
+  viewerUserId: string | undefined,
+  isActionableViewer: boolean
+): ReviewSessionProgress[] {
+  if (!isActionableViewer) {
+    return rows;
+  }
+
+  return rows.filter((row) => row.userId === viewerUserId);
 }
 
 export function normalizeAdminDraftResponse(raw: unknown, request: FlashcardLlmRequest): FlashcardLlmResponse {

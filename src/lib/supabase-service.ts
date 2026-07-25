@@ -47,6 +47,10 @@ import type {
   ReviewTestSession,
   ReviewTestSessionTargetDraft,
 } from "./reviewTestSession.types";
+import type {
+  ReviewSessionProgress,
+  ReviewSessionProgressSourceType,
+} from "./reviewSessionProgress.types";
 
 // ─── Exported types (moved from db.ts) ─────────────────────────────────────
 
@@ -867,6 +871,108 @@ export async function completeReviewTestSession(sessionId: string): Promise<void
     p_session_id: sessionId,
   });
   if (error) throw new Error(`completeReviewTestSession: ${error.message}`);
+}
+
+// ─── Review Session Progress ───────────────────────────────────────────────
+
+interface SupabaseReviewSessionProgressRow {
+  id: string;
+  user_id: string;
+  client_session_key: string;
+  source_type: ReviewSessionProgressSourceType;
+  packaged_session_id: string | null;
+  progress_data: unknown;
+  started_at: string;
+  last_saved_at: string;
+}
+
+function toReviewSessionProgress(
+  row: SupabaseReviewSessionProgressRow
+): ReviewSessionProgress {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    clientSessionKey: row.client_session_key,
+    sourceType: row.source_type,
+    packagedSessionId: row.packaged_session_id,
+    progressData: row.progress_data,
+    startedAt: new Date(row.started_at).getTime(),
+    lastSavedAt: new Date(row.last_saved_at).getTime(),
+  };
+}
+
+export async function saveReviewSessionProgress(input: {
+  clientSessionKey: string;
+  sourceType: ReviewSessionProgressSourceType;
+  packagedSessionId: string | null;
+  progressData: unknown;
+  startedAt?: number;
+}): Promise<void> {
+  const { familyId, userId } = await getSessionMetadata();
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    family_id: familyId,
+    client_session_key: input.clientSessionKey,
+    source_type: input.sourceType,
+    packaged_session_id: input.packagedSessionId,
+    progress_data: input.progressData,
+    last_saved_at: new Date().toISOString(),
+  };
+  if (input.startedAt !== undefined) {
+    row.started_at = new Date(input.startedAt).toISOString();
+  }
+
+  const { error } = await supabase
+    .from("review_session_progress")
+    .upsert(row, { onConflict: "user_id,client_session_key" });
+  if (error) throw new Error(`saveReviewSessionProgress: ${error.message}`);
+}
+
+export async function loadReviewSessionProgress(
+  clientSessionKey: string
+): Promise<ReviewSessionProgress | null> {
+  const { userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("review_session_progress")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("client_session_key", clientSessionKey)
+    .maybeSingle();
+  if (error) throw new Error(`loadReviewSessionProgress: ${error.message}`);
+  if (!data) return null;
+  return toReviewSessionProgress(data as SupabaseReviewSessionProgressRow);
+}
+
+export async function listReviewSessionProgress(
+  sourceType?: ReviewSessionProgressSourceType
+): Promise<ReviewSessionProgress[]> {
+  // Intentionally scoped by family_id, not user_id: the SELECT RLS policy on
+  // review_session_progress is family-scoped (not user-scoped), so parents can
+  // see their children's paused sessions (read-only visibility per the spec).
+  // This function returns whatever RLS allows for the current session; the UI
+  // layer decides how to render own-vs-others' rows for parent vs child.
+  const { familyId } = await getSessionMetadata();
+  let query = supabase
+    .from("review_session_progress")
+    .select("*")
+    .eq("family_id", familyId);
+  if (sourceType) {
+    query = query.eq("source_type", sourceType);
+  }
+
+  const { data, error } = await query.order("last_saved_at", { ascending: false });
+  if (error) throw new Error(`listReviewSessionProgress: ${error.message}`);
+  return ((data as SupabaseReviewSessionProgressRow[]) ?? []).map(toReviewSessionProgress);
+}
+
+export async function deleteReviewSessionProgress(clientSessionKey: string): Promise<void> {
+  const { userId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("review_session_progress")
+    .delete()
+    .eq("user_id", userId)
+    .eq("client_session_key", clientSessionKey);
+  if (error) throw new Error(`deleteReviewSessionProgress: ${error.message}`);
 }
 
 // ─── Quiz Sessions ──────────────────────────────────────────────────────────

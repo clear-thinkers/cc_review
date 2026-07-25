@@ -21,6 +21,7 @@ Tier 2 is blocked until all Tier 1 gates close.
 | E | Pilot feedback triage | Collect and triage structured feedback from pilot families | — | 🔄 In Progress |
 | F | Ingredient shopping for kids | Add shopping controls to the ingredient detail page so kids can mark/add ingredients while viewing a recipe's ingredients | `docs/feature-specs/2026-03-30-shop-ingredient-shopping.md` | 📋 Planned |
 | G | Coin cash-out (redemption) | Kids draw real-dollar value from usable coin balance at 100 coins = $1; each redemption is documented with a child-supplied note and signature; usable balance decreases but quiz results (coins earned from sessions) are unaffected; lives on `/words/shop` | `docs/feature-specs/2026-05-11-coin-redemption.md` | ✅ Shipped 2026-05-11 |
+| H | Save & resume test session progress | Child can pause any test session (due-review or packaged) and resume later; autosave after each answer, multiple paused sessions allowed, parent read-only visibility; new `review_session_progress` table, authorized 2026-07-24 | `docs/feature-specs/2026-07-24-save-resume-test-session-progress.md` | ✅ Shipped 2026-07-25 |
 
 > Planned features with a `TBD` spec require a feature spec before build. See `AI_CONTRACT.md §2` for scope confirmation rules.
 
@@ -60,3 +61,5 @@ Note that specs may not reflect the current implementation — the codebase has 
   Spec: `docs/feature-specs/2026-05-11-coin-redemption.md`
 - 2026-07-23: Parents can delete a single packaged character from an active review test session on Due Review without deleting the whole session; deleting the last remaining character deletes the session. No new RLS, RPC, or schema — reuses the existing parent-scoped delete policy on `review_test_session_targets`.
   Spec: `docs/feature-specs/2026-07-23-delete-target-from-review-test-session.md`
+- 2026-07-25: Save & resume test session progress — children can pause any fill-test session (ad-hoc due-review or packaged) and resume later from Due Review's unified "Paused Sessions" list. Autosave fires after every graded word; resume re-validates the unanswered tail against current content (and, for packaged sessions, current packaged targets) and never re-grades an already-graded word. New `review_session_progress` table with family-scoped read (parent read-only visibility) / user-scoped write RLS; packaged-session cleanup happens server-side in `complete_review_test_session`.
+  Spec: `docs/feature-specs/2026-07-24-save-resume-test-session-progress.md`
