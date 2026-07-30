@@ -99,6 +99,7 @@ import {
   renderSentenceWithPinyin,
   resolveDueReviewResume,
   resolvePackagedReviewResume,
+  resolveQuizCompletionNotice,
   shouldShowManualEditPopup,
 } from "./words.shared.utils";
 import type {
@@ -4090,12 +4091,18 @@ const gradeLabels = getGradeLabels(str);
           // Don't block quiz completion if session save fails
         }
 
+        // Tracks whether completeReviewTestSession actually succeeded, so the
+        // unconditional notice below never clobbers a real error with a false
+        // "completed" message -- see build-fix-log-2026-07-30-packaged-session-limbo.md.
+        let reviewTestSessionCompletionFailed = false;
+
         if (completedReviewTestSession) {
           try {
             await completeReviewTestSession(completedReviewTestSession.id);
             setCompletedReviewTestSessionName(completedReviewTestSession.name);
           } catch (error) {
             console.error("Failed to complete review test session:", error);
+            reviewTestSessionCompletionFailed = true;
             setQuizNotice(
               str.fillTest.reviewTestSession.completeError.replace(
                 "{name}",
@@ -4120,14 +4127,15 @@ const gradeLabels = getGradeLabels(str);
 
         stopQuizSession();
         setQuizCompleted(true);
-        setQuizNotice(
-          completedReviewTestSession
-            ? str.fillTest.reviewTestSession.completed.replace(
-                "{name}",
-                completedReviewTestSession.name
-              )
-            : str.fillTest.completionMessage
-        );
+        const completionNotice = resolveQuizCompletionNotice({
+          reviewTestSessionCompletionFailed,
+          completedReviewTestSessionName: completedReviewTestSession?.name ?? null,
+          completedNoticeTemplate: str.fillTest.reviewTestSession.completed,
+          adHocNoticeMessage: str.fillTest.completionMessage,
+        });
+        if (completionNotice !== null) {
+          setQuizNotice(completionNotice);
+        }
         await refreshAll();
       } finally {
         quizFinishInFlightRef.current = false;

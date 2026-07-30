@@ -1271,6 +1271,31 @@ export function filterPausedSessionsForViewer(
   return rows.filter((row) => row.userId === viewerUserId);
 }
 
+/**
+ * Resolves the quiz-notice text to show once a fill-test run finishes.
+ * Returns `null` when `completeReviewTestSession` failed -- in that case the
+ * caller must leave the error notice already set by the failed-completion
+ * catch block in place, rather than overwriting it with a false "completed"
+ * message. Before this helper existed, moveQuizForward unconditionally called
+ * setQuizNotice with a success message after the completion try/catch,
+ * clobbering the real error notice on every packaged-completion failure --
+ * see build-fix-log-2026-07-30-packaged-session-limbo.md.
+ */
+export function resolveQuizCompletionNotice(params: {
+  reviewTestSessionCompletionFailed: boolean;
+  completedReviewTestSessionName: string | null;
+  completedNoticeTemplate: string;
+  adHocNoticeMessage: string;
+}): string | null {
+  if (params.reviewTestSessionCompletionFailed) {
+    return null;
+  }
+
+  return params.completedReviewTestSessionName
+    ? params.completedNoticeTemplate.replace("{name}", params.completedReviewTestSessionName)
+    : params.adHocNoticeMessage;
+}
+
 export function normalizeAdminDraftResponse(raw: unknown, request: FlashcardLlmRequest): FlashcardLlmResponse {
   const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const rawMeanings = Array.isArray(source.meanings) ? source.meanings : [];

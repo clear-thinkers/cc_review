@@ -13,6 +13,7 @@ import {
   renderSentenceWithPinyin,
   resolveDueReviewResume,
   resolvePackagedReviewResume,
+  resolveQuizCompletionNotice,
   revalidateSavedQuizQueue,
   tokenizePinyinSyllables,
   VOCAB_PHRASE_ROUND_ID_PREFIX,
@@ -892,5 +893,48 @@ describe("filterPausedSessionsForViewer", () => {
     const result = filterPausedSessionsForViewer(rows, "child-a", true);
 
     expect(result.map((row) => row.clientSessionKey).sort()).toEqual(["due-key", "packaged-key"]);
+  });
+});
+
+describe("resolveQuizCompletionNotice", () => {
+  const completedNoticeTemplate = "Completed session {name}!";
+  const adHocNoticeMessage = "Quiz complete!";
+
+  it("returns null instead of a success message when review test session completion failed", () => {
+    // Regression test: moveQuizForward used to call setQuizNotice
+    // unconditionally after this decision, clobbering the real error notice
+    // set by the completeReviewTestSession catch block with a false
+    // "completed" message -- see
+    // build-fix-log-2026-07-30-packaged-session-limbo.md.
+    const result = resolveQuizCompletionNotice({
+      reviewTestSessionCompletionFailed: true,
+      completedReviewTestSessionName: "2.3.543",
+      completedNoticeTemplate,
+      adHocNoticeMessage,
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it("returns the packaged-session completed message, with the name interpolated, on success", () => {
+    const result = resolveQuizCompletionNotice({
+      reviewTestSessionCompletionFailed: false,
+      completedReviewTestSessionName: "2.3.543",
+      completedNoticeTemplate,
+      adHocNoticeMessage,
+    });
+
+    expect(result).toBe("Completed session 2.3.543!");
+  });
+
+  it("returns the ad-hoc completion message when there is no review test session", () => {
+    const result = resolveQuizCompletionNotice({
+      reviewTestSessionCompletionFailed: false,
+      completedReviewTestSessionName: null,
+      completedNoticeTemplate,
+      adHocNoticeMessage,
+    });
+
+    expect(result).toBe(adHocNoticeMessage);
   });
 });
