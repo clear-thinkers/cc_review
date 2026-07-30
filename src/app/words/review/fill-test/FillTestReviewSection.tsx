@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
+import type { TestableWord } from "./fillTest.types";
 import { CoinAnimation } from "./coins.animation";
 import { playCelebrationSound } from "../../shared/coins.sound";
 
@@ -80,16 +81,22 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     return () => clearInterval(pollInterval);
   }, []);
 
-  const quizCharacterTotal = quizQueue.reduce(
-    (total, word) => total + (word.fillTest.members?.length ?? 1),
-    0
-  );
+  // Phrase-only rounds report their member count via vocabPhraseMembers
+  // instead of members (mutually exclusive per round) -- fall back to that
+  // before the generic "1" so a 3-phrase round counts as 3, not 1.
+  function roundMemberCount(word: TestableWord): number {
+    return word.fillTest.members?.length ?? word.fillTest.vocabPhraseMembers?.length ?? 1;
+  }
+
+  const quizCharacterTotal = quizQueue.reduce((total, word) => total + roundMemberCount(word), 0);
   const quizCharacterProgress = quizQueue
     .slice(0, quizIndex + 1)
-    .reduce((total, word) => total + (word.fillTest.members?.length ?? 1), 0);
+    .reduce((total, word) => total + roundMemberCount(word), 0);
   const currentQuizHanzi = currentQuizWord?.fillTest.members
     ? currentQuizWord.fillTest.members.map((member) => member.hanzi).join(", ")
-    : currentQuizWord?.hanzi;
+    : currentQuizWord?.fillTest.vocabPhraseMembers
+      ? currentQuizWord.fillTest.vocabPhraseMembers.map((member) => member.phrase).join("、")
+      : currentQuizWord?.hanzi;
 
   if (!isFillTestReviewPage) {
     return null;
@@ -307,6 +314,20 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                           .replace("{correct}", String(memberResult.correctCount))
                           .replace("{total}", String(memberResult.totalCount))
                           .replace("{grade}", gradeLabels[memberResult.tier])}
+                      </li>
+                    ))}
+                    {/* Phrase-only rounds report through vocabPhraseMemberResults instead
+                        of memberResults (mutually exclusive per round) -- reuses the same
+                        label format, substituting the phrase text for {hanzi}. */}
+                    {quizResult.vocabPhraseMemberResults.map((vocabPhraseMemberResult) => (
+                      <li
+                        key={`${currentQuizWord.id}-vocab-phrase-member-result-${vocabPhraseMemberResult.vocabPhraseId}`}
+                      >
+                        {str.fillTest.results.memberGradeLabel
+                          .replace("{hanzi}", vocabPhraseMemberResult.phrase)
+                          .replace("{correct}", String(vocabPhraseMemberResult.correctCount))
+                          .replace("{total}", String(vocabPhraseMemberResult.totalCount))
+                          .replace("{grade}", gradeLabels[vocabPhraseMemberResult.tier])}
                       </li>
                     ))}
                   </ul>

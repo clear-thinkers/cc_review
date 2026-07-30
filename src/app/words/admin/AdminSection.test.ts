@@ -1,4 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// AdminSection.tsx now imports VocabPhraseAdminSection.tsx, which pulls in
+// the real supabase-service/supabaseClient modules -- those throw at import
+// time when Supabase env vars aren't set. This test only exercises a pure
+// exported function and never touches Supabase, so a bare mock is enough
+// (same pattern as supabase-service.tagging.test.ts).
+vi.mock("@/lib/supabaseClient", () => ({ supabase: {} }));
+
 import { paginateAdminRowsByCharacter } from "./AdminSection";
 import type { AdminTableRow } from "./admin.types";
 

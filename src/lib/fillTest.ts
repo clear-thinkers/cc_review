@@ -2,6 +2,7 @@ export type FillSentence = {
   text: string;
   answerIndex: number;
   characterId?: string;
+  vocabPhraseId?: string;
 };
 
 export type FillTestMember = {
@@ -10,10 +11,17 @@ export type FillTestMember = {
   phraseCount: number;
 };
 
+export type FillTestVocabPhraseMember = {
+  vocabPhraseId: string;
+  phrase: string;
+  phraseCount: number;
+};
+
 export type FillTest = {
   phrases: string[];
   sentences: FillSentence[];
   members?: FillTestMember[];
+  vocabPhraseMembers?: FillTestVocabPhraseMember[];
 };
 
 export type Placement = {
@@ -31,6 +39,7 @@ export type FillResult = {
     expectedPhraseIndex: number;
     chosenPhraseIndex: number | null;
     characterId?: string;
+    vocabPhraseId?: string;
     isCorrect: boolean;
   }>;
   placements: Placement[];
@@ -44,8 +53,17 @@ export type BundledFillTestMemberResult = {
   tier: Tier;
 };
 
+export type BundledFillTestVocabPhraseMemberResult = {
+  vocabPhraseId: string;
+  phrase: string;
+  correctCount: number;
+  totalCount: number;
+  tier: Tier;
+};
+
 export type BundledFillTestResult = FillResult & {
   memberResults: BundledFillTestMemberResult[];
+  vocabPhraseMemberResults: BundledFillTestVocabPhraseMemberResult[];
 };
 
 function isIndex(value: unknown, length: number): value is number {
@@ -98,6 +116,7 @@ export function gradeFillTest(fillTest: FillTest, placements: Placement[]): Fill
       expectedPhraseIndex,
       chosenPhraseIndex,
       ...(sentence.characterId ? { characterId: sentence.characterId } : {}),
+      ...(sentence.vocabPhraseId ? { vocabPhraseId: sentence.vocabPhraseId } : {}),
       isCorrect,
     };
   });
@@ -132,8 +151,26 @@ export function gradeBundledFillTest(fillTest: FillTest, placements: Placement[]
     };
   });
 
+  const vocabPhraseMembers = fillTest.vocabPhraseMembers ?? [];
+  const vocabPhraseMemberResults = vocabPhraseMembers.map((member) => {
+    const sentenceResults = result.sentenceResults.filter(
+      (sentenceResult) => sentenceResult.vocabPhraseId === member.vocabPhraseId
+    );
+    const correctCount = sentenceResults.filter((sentenceResult) => sentenceResult.isCorrect).length;
+    const totalCount = sentenceResults.length;
+
+    return {
+      vocabPhraseId: member.vocabPhraseId,
+      phrase: member.phrase,
+      correctCount,
+      totalCount,
+      tier: tierFromCorrectRate(correctCount, totalCount),
+    };
+  });
+
   return {
     ...result,
     memberResults,
+    vocabPhraseMemberResults,
   };
 }

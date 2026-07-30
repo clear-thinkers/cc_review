@@ -97,6 +97,7 @@ describe("Review Queue Types", () => {
           },
         },
       ],
+      vocabPhrases: [],
       packagedPronunciationsByCharacter: {
         hao: ["hao3"],
       },

@@ -5,20 +5,24 @@ import {
   buildBundledFillTestPlan,
   buildContentByCharacterMap,
   buildDueReviewAutosavePayload,
+  buildFillTestPlanForVocabPhrases,
   filterPausedSessionsForViewer,
   getPausedSessionRemainingCount,
+  isVocabPhraseRoundQuizWord,
   renderPhraseWithPinyin,
   renderSentenceWithPinyin,
   resolveDueReviewResume,
   resolvePackagedReviewResume,
   revalidateSavedQuizQueue,
   tokenizePinyinSyllables,
+  VOCAB_PHRASE_ROUND_ID_PREFIX,
+  wrapVocabPhraseRoundAsQuizWord,
 } from "./words.shared.utils";
-import type { TestableWord } from "../review/fill-test/fillTest.types";
+import type { TestableVocabPhrase, TestableWord } from "../review/fill-test/fillTest.types";
 import type { FlashcardContentEntry } from "@/lib/supabase-service";
 import type { FlashcardLlmResponse } from "@/lib/flashcardLlm";
 import type { ReviewSessionProgress } from "@/lib/reviewSessionProgress.types";
-import type { Word } from "@/lib/types";
+import type { VocabPhrase, Word } from "@/lib/types";
 import { wordsStrings } from "../words.strings";
 
 type NodeWithChildren = {
@@ -256,6 +260,104 @@ describe("buildBundledFillTestPlan", () => {
   });
 });
 
+function makeVocabPhrase(
+  id: string,
+  phrase: string,
+  exampleTexts: string[],
+  options?: { includeInFillTest?: boolean }
+): VocabPhrase {
+  return {
+    id,
+    phrase,
+    examples: exampleTexts.map((zh) => ({
+      zh,
+      pinyin: "py",
+      includeInFillTest: options?.includeInFillTest ?? true,
+    })),
+    testCount: 0,
+    createdAt: 1,
+  };
+}
+
+function makeVocabPhraseRound(
+  members: Array<{ vocabPhraseId: string; phrase: string }>
+): TestableVocabPhrase {
+  return {
+    id: members.map((member) => member.vocabPhraseId).join("|"),
+    phrase: members.map((member) => member.phrase).join("、"),
+    examples: [],
+    testCount: 0,
+    createdAt: 1,
+    fillTest: {
+      phrases: members.map((member) => member.phrase),
+      sentences: members.map((member, index) => ({
+        text: `___sentence${index}`,
+        answerIndex: index,
+        vocabPhraseId: member.vocabPhraseId,
+      })),
+      vocabPhraseMembers: members.map((member) => ({
+        vocabPhraseId: member.vocabPhraseId,
+        phrase: member.phrase,
+        phraseCount: 1,
+      })),
+    },
+  };
+}
+
+describe("buildFillTestPlanForVocabPhrases", () => {
+  it("chunks phrases into rounds of up to 3, each row tagged with its own vocabPhraseId", () => {
+    const phrases = [
+      makeVocabPhrase("p1", "谢谢", ["谢谢你。"]),
+      makeVocabPhrase("p2", "对不起", ["对不起，我错了。"]),
+      makeVocabPhrase("p3", "没关系", ["没关系，别担心。"]),
+      makeVocabPhrase("p4", "你好", ["你好，很高兴认识你。"]),
+    ];
+
+    const plan = buildFillTestPlanForVocabPhrases(phrases);
+
+    expect(plan.skippedPhrases).toEqual([]);
+    expect(plan.quizPhrases.map((round) => round.fillTest.sentences.length)).toEqual([3, 1]);
+
+    const firstRound = plan.quizPhrases[0];
+    expect(firstRound?.fillTest.vocabPhraseMembers?.map((member) => member.vocabPhraseId)).toEqual([
+      "p1",
+      "p2",
+      "p3",
+    ]);
+    // Each sentence's own vocabPhraseId must resolve back to the correct bank phrase.
+    for (const sentence of firstRound?.fillTest.sentences ?? []) {
+      const answerPhrase = firstRound?.fillTest.phrases[sentence.answerIndex];
+      const member = phrases.find((phrase) => phrase.id === sentence.vocabPhraseId);
+      expect(answerPhrase).toBe(member?.phrase);
+    }
+    // Three distinct phrases in the round means three distinct bank options.
+    expect(new Set(firstRound?.fillTest.phrases).size).toBe(3);
+
+    const secondRound = plan.quizPhrases[1];
+    expect(secondRound?.fillTest.vocabPhraseMembers?.map((member) => member.vocabPhraseId)).toEqual(["p4"]);
+  });
+
+  it("skips a phrase with no fill-test-eligible example and reports it back", () => {
+    const eligible = makeVocabPhrase("p1", "谢谢", ["谢谢你。"]);
+    const noExamples = makeVocabPhrase("p2", "对不起", []);
+    const allExcluded = makeVocabPhrase("p3", "没关系", ["没关系。"], { includeInFillTest: false });
+
+    const plan = buildFillTestPlanForVocabPhrases([eligible, noExamples, allExcluded]);
+
+    expect(plan.skippedPhrases.sort()).toEqual(["对不起", "没关系"]);
+    expect(plan.quizPhrases).toHaveLength(1);
+    expect(plan.quizPhrases[0]?.fillTest.vocabPhraseMembers?.map((member) => member.vocabPhraseId)).toEqual([
+      "p1",
+    ]);
+  });
+
+  it("returns no rounds and no skips for an empty input", () => {
+    const plan = buildFillTestPlanForVocabPhrases([]);
+    expect(plan.quizPhrases).toEqual([]);
+    expect(plan.skippedPhrases).toEqual([]);
+  });
+});
+
 function makeWord(id: string, hanzi: string): Word {
   return {
     id,
@@ -453,6 +555,51 @@ describe("revalidateSavedQuizQueue", () => {
 
     expect(result).toHaveLength(0);
   });
+
+  it("keeps a wrapped phrase round when every member phrase is still current", () => {
+    const round = wrapVocabPhraseRoundAsQuizWord(
+      makeVocabPhraseRound([
+        { vocabPhraseId: "p1", phrase: "谢谢" },
+        { vocabPhraseId: "p2", phrase: "对不起" },
+      ])
+    );
+
+    const result = revalidateSavedQuizQueue([round], [], new Map(), undefined, new Set(["p1", "p2"]));
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe(round.id);
+  });
+
+  it("drops a wrapped phrase round when any member phrase was deleted", () => {
+    const round = wrapVocabPhraseRoundAsQuizWord(
+      makeVocabPhraseRound([
+        { vocabPhraseId: "p1", phrase: "谢谢" },
+        { vocabPhraseId: "p2", phrase: "对不起" },
+      ])
+    );
+
+    // p2 was deleted by the parent while the session was paused.
+    const result = revalidateSavedQuizQueue([round], [], new Map(), undefined, new Set(["p1"]));
+
+    expect(result).toHaveLength(0);
+  });
+
+  it("drops a wrapped phrase round when no currentVocabPhraseIds set is supplied at all", () => {
+    const round = wrapVocabPhraseRoundAsQuizWord(makeVocabPhraseRound([{ vocabPhraseId: "p1", phrase: "谢谢" }]));
+
+    // The ad-hoc due-review path never passes currentVocabPhraseIds since it
+    // never produces phrase rounds -- a phrase round showing up there is
+    // treated as stale rather than trusted blindly.
+    const result = revalidateSavedQuizQueue([round], [], new Map());
+
+    expect(result).toHaveLength(0);
+  });
+
+  it("never confuses a wrapped phrase round's synthetic id with a real word id", () => {
+    const round = wrapVocabPhraseRoundAsQuizWord(makeVocabPhraseRound([{ vocabPhraseId: "p1", phrase: "谢谢" }]));
+    expect(isVocabPhraseRoundQuizWord(round)).toBe(true);
+    expect(round.id.startsWith(VOCAB_PHRASE_ROUND_ID_PREFIX)).toBe(true);
+  });
 });
 
 describe("resolveDueReviewResume", () => {
@@ -548,6 +695,7 @@ describe("resolvePackagedReviewResume", () => {
         currentWords,
         allFlashcardContents,
         quizWordIds: new Set(["w1", "w2"]),
+        vocabPhraseIds: new Set(),
       })
     ).toEqual({ status: "invalid" });
   });
@@ -566,6 +714,7 @@ describe("resolvePackagedReviewResume", () => {
       currentWords,
       allFlashcardContents,
       quizWordIds: new Set(["w1", "w2"]),
+      vocabPhraseIds: new Set(),
     });
 
     expect(resolved.status).toBe("ready");
@@ -591,6 +740,7 @@ describe("resolvePackagedReviewResume", () => {
       // session's current quiz-ready set, even though the word and its
       // content are both still otherwise valid.
       quizWordIds: new Set(["w2"]),
+      vocabPhraseIds: new Set(),
     });
 
     expect(resolved).toEqual({ status: "empty" });
@@ -615,6 +765,7 @@ describe("resolvePackagedReviewResume", () => {
       // "gone" is not a current quiz-ready target, but it's before
       // resumeIndex so it must never be re-validated or replayed.
       quizWordIds: new Set(["w1"]),
+      vocabPhraseIds: new Set(),
     });
 
     expect(resolved.status).toBe("ready");

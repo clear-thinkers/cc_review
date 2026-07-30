@@ -10,10 +10,17 @@ import {
 import { promptsStrings } from "./prompts.strings";
 
 describe("prompts.types", () => {
-  it("PROMPT_TYPES contains all five configurable types", () => {
-    const expected: PromptType[] = ["full", "phrase", "example", "phrase_details", "meaning_details"];
+  it("PROMPT_TYPES contains all six configurable types", () => {
+    const expected: PromptType[] = [
+      "full",
+      "phrase",
+      "example",
+      "phrase_details",
+      "meaning_details",
+      "vocab_phrase",
+    ];
     expect(PROMPT_TYPES).toEqual(expected);
-    expect(PROMPT_TYPES).toHaveLength(5);
+    expect(PROMPT_TYPES).toHaveLength(6);
   });
 
   it("PROMPT_CHAR_LIMITS defines min and max for each type", () => {
@@ -71,7 +78,7 @@ describe("prompts.strings parity", () => {
     expect(enTabKeys).toEqual(zhTabKeys);
   });
 
-  it("EN tabs cover all five prompt types", () => {
+  it("EN tabs cover all six prompt types", () => {
     const tabKeys = Object.keys(promptsStrings.en.tabs);
     for (const type of PROMPT_TYPES) {
       expect(tabKeys).toContain(type);

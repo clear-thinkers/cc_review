@@ -6,6 +6,7 @@ import { listTextbooks, listLessonTags, createTextbook } from "@/lib/supabase-se
 import type { Textbook, LessonTag } from "../shared/tagging.types";
 import { useLocale } from "@/app/shared/locale";
 import { taggingStrings } from "../shared/tagging.strings";
+import AddVocabPhraseSection from "./AddVocabPhraseSection";
 
 function appendSelectedOption(options: string[], selectedValue: string | null): string[] {
   const trimmedValue = selectedValue?.trim();
@@ -463,6 +464,8 @@ export default function AddSection({ vm }: { vm: WordsWorkspaceVM }) {
           {str.add.submitButton}
         </button>
       </form>
+
+      <AddVocabPhraseSection vm={vm} />
     </section>
   );
 }

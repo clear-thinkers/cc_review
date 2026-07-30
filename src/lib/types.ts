@@ -15,3 +15,20 @@ export type Word = {
   reviewCount?: number;
   testCount?: number;
 };
+
+export type VocabPhraseExample = {
+  zh: string;
+  pinyin: string;
+  includeInFillTest: boolean;
+};
+
+export type VocabPhrase = {
+  id: string;
+  phrase: string;
+  pinyin?: string;
+  meaningZh?: string;
+  meaningEn?: string;
+  examples: VocabPhraseExample[];
+  testCount: number;
+  createdAt: number;
+};

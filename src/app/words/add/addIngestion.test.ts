@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import { extractUniqueHanzi } from "@/app/words/shared/words.shared.utils";
 import {
   computeIngestionResult,
+  computePhraseIngestionResult,
   isTagFormComplete,
+  isValidPhraseLength,
+  parseCommaSeparatedPhrases,
   resolveAddNoticeType,
 } from "./addIngestion";
 
@@ -186,5 +189,106 @@ describe("isTagFormComplete", () => {
   it("returns false when section is open and multiple fields are missing", () => {
     expect(isTagFormComplete(true, null, null, null, null)).toBe(false);
     expect(isTagFormComplete(true, "tb-1", null, "Unit 2", null)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseCommaSeparatedPhrases
+// ---------------------------------------------------------------------------
+
+describe("parseCommaSeparatedPhrases", () => {
+  it("splits on ASCII commas and trims each entry", () => {
+    expect(parseCommaSeparatedPhrases("你好, 谢谢, 对不起")).toEqual(["你好", "谢谢", "对不起"]);
+  });
+
+  it("splits on full-width commas too", () => {
+    expect(parseCommaSeparatedPhrases("你好，谢谢，对不起")).toEqual(["你好", "谢谢", "对不起"]);
+  });
+
+  it("handles a mix of ASCII and full-width commas", () => {
+    expect(parseCommaSeparatedPhrases("你好,谢谢，对不起")).toEqual(["你好", "谢谢", "对不起"]);
+  });
+
+  it("drops empty entries from leading/trailing/double commas", () => {
+    expect(parseCommaSeparatedPhrases(",你好,,谢谢,")).toEqual(["你好", "谢谢"]);
+  });
+
+  it("dedupes repeated phrases, preserving first-seen order", () => {
+    expect(parseCommaSeparatedPhrases("你好, 谢谢, 你好")).toEqual(["你好", "谢谢"]);
+  });
+
+  it("returns an empty array for blank input", () => {
+    expect(parseCommaSeparatedPhrases("   ")).toEqual([]);
+    expect(parseCommaSeparatedPhrases("")).toEqual([]);
+  });
+
+  it("does not split a single multi-character phrase into individual characters", () => {
+    expect(parseCommaSeparatedPhrases("你好")).toEqual(["你好"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isValidPhraseLength
+// ---------------------------------------------------------------------------
+
+describe("isValidPhraseLength", () => {
+  it("rejects a single character (below the 2-character minimum)", () => {
+    expect(isValidPhraseLength("你")).toBe(false);
+  });
+
+  it("accepts exactly 2 characters", () => {
+    expect(isValidPhraseLength("你好")).toBe(true);
+  });
+
+  it("accepts exactly 10 characters", () => {
+    expect(isValidPhraseLength("一二三四五六七八九十")).toBe(true);
+  });
+
+  it("rejects 11 characters (above the 10-character maximum)", () => {
+    expect(isValidPhraseLength("一二三四五六七八九十一")).toBe(false);
+  });
+
+  it("rejects an empty string", () => {
+    expect(isValidPhraseLength("")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computePhraseIngestionResult
+// ---------------------------------------------------------------------------
+
+describe("computePhraseIngestionResult", () => {
+  it("returns all valid phrases as phrasesToAdd when none exist yet", () => {
+    const result = computePhraseIngestionResult(["你好", "谢谢"], []);
+    expect(result.phrasesToAdd).toEqual(["你好", "谢谢"]);
+    expect(result.invalidPhrases).toEqual([]);
+    expect(result.skippedCount).toBe(0);
+  });
+
+  it("skips phrases already in the existing set", () => {
+    const result = computePhraseIngestionResult(["你好", "谢谢"], ["谢谢"]);
+    expect(result.phrasesToAdd).toEqual(["你好"]);
+    expect(result.skippedCount).toBe(1);
+  });
+
+  it("reports invalid-length entries separately, never in phrasesToAdd or skippedCount", () => {
+    const result = computePhraseIngestionResult(["你", "你好", "一二三四五六七八九十一"], []);
+    expect(result.phrasesToAdd).toEqual(["你好"]);
+    expect(result.invalidPhrases).toEqual(["你", "一二三四五六七八九十一"]);
+    expect(result.skippedCount).toBe(0);
+  });
+
+  it("handles a mix of invalid, already-added, and net-new phrases in one batch", () => {
+    const result = computePhraseIngestionResult(["你", "你好", "谢谢", "对不起"], ["谢谢"]);
+    expect(result.phrasesToAdd).toEqual(["你好", "对不起"]);
+    expect(result.invalidPhrases).toEqual(["你"]);
+    expect(result.skippedCount).toBe(1);
+  });
+
+  it("returns an empty result for empty input", () => {
+    const result = computePhraseIngestionResult([], ["你好"]);
+    expect(result.phrasesToAdd).toEqual([]);
+    expect(result.invalidPhrases).toEqual([]);
+    expect(result.skippedCount).toBe(0);
   });
 });

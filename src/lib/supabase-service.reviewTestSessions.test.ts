@@ -198,6 +198,7 @@ describe("supabase-service review test sessions", () => {
         character: "beta",
         pronunciation: "xue2",
         display_order: 1,
+        vocab_phrase_id: null,
       },
     ]);
   });

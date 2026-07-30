@@ -6,7 +6,7 @@ import {
   type FlashcardLlmResponse,
   type FlashcardMeaningPhrase,
 } from "@/lib/flashcardLlm";
-import type { FillTest, Word } from "@/lib/types";
+import type { FillTest, VocabPhrase, Word } from "@/lib/types";
 import type {
   FlashcardExampleGenerationResponse,
   FlashcardExamplePinyinGenerationResponse,
@@ -19,6 +19,7 @@ import type {
   FillTestCandidateRow,
   QuizHistoryItem,
   QuizSelectionMode,
+  TestableVocabPhrase,
   TestableWord,
 } from "../review/fill-test/fillTest.types";
 import type { NavItem } from "./shell.types";
@@ -820,6 +821,157 @@ export function buildBundledFillTestPlan(words: TestableWord[]): BundledFillTest
   };
 }
 
+// ─── Vocab Phrase Fill-Test Rounds ──────────────────────────────────────────
+//
+// Standalone from buildBundledFillTestPlan above by design (per the resolved
+// "phrases always form their own round" gate — see
+// docs/feature-specs/2026-07-26-phrase-keyed-input.md) — the character
+// bundler is never touched. Structurally simpler than the character path,
+// too: a character can have 1-3+ of its own phrases, so bundling has to
+// pair "low content" characters together to reach a usable round size. A
+// vocab phrase always contributes exactly ONE row per round no matter how
+// many examples it has (only one is shown per presentation, and every
+// example for a given phrase shares the same answer, so a phrase can never
+// supply its own distractors) — so phrases are simply chunked into
+// same-size groups; there is no low/standard split to reconcile.
+
+const VOCAB_PHRASE_ROUND_SIZE = 3;
+
+type VocabPhraseCandidateRow = {
+  phrase: string;
+  text: string;
+  vocabPhraseId: string;
+};
+
+function pickRandomEligibleExample(phrase: VocabPhrase): string | null {
+  const eligible = phrase.examples.filter(
+    (example) => example.includeInFillTest && example.zh.includes(phrase.phrase)
+  );
+  if (eligible.length === 0) {
+    return null;
+  }
+  const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+  return chosen ? chosen.zh : null;
+}
+
+function rowFromVocabPhrase(phrase: VocabPhrase): VocabPhraseCandidateRow | null {
+  const example = pickRandomEligibleExample(phrase);
+  if (!example) {
+    return null;
+  }
+  return {
+    phrase: phrase.phrase,
+    text: buildBlankedSentence(example, phrase.phrase),
+    vocabPhraseId: phrase.id,
+  };
+}
+
+function createVocabPhraseQuizBundle(rows: VocabPhraseCandidateRow[]): TestableVocabPhrase | null {
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const optionPhrases = shuffleArray(rows.map((row) => row.phrase));
+  const answerIndexByPhrase = new Map<string, number>();
+  optionPhrases.forEach((phrase, index) => {
+    answerIndexByPhrase.set(phrase, index);
+  });
+
+  return {
+    id: rows.map((row) => row.vocabPhraseId).join("|"),
+    phrase: rows.map((row) => row.phrase).join("、"),
+    examples: [],
+    testCount: 0,
+    createdAt: Date.now(),
+    fillTest: {
+      phrases: optionPhrases,
+      sentences: rows.map((row) => ({
+        text: row.text,
+        answerIndex: answerIndexByPhrase.get(row.phrase) ?? 0,
+        vocabPhraseId: row.vocabPhraseId,
+      })),
+      vocabPhraseMembers: rows.map((row) => ({
+        vocabPhraseId: row.vocabPhraseId,
+        phrase: row.phrase,
+        phraseCount: 1,
+      })),
+    },
+  };
+}
+
+export type VocabPhraseFillTestPlan = {
+  quizPhrases: TestableVocabPhrase[];
+  skippedPhrases: string[];
+};
+
+/**
+ * Builds one or more phrase-only quiz rounds from a set of packaged vocab
+ * phrases. Each round bundles up to VOCAB_PHRASE_ROUND_SIZE phrases
+ * together so each has other phrases' text to serve as drag-and-match
+ * distractors — mirroring the round-size convention already used for
+ * characters (buildFillTestFromSavedContent's own slice(0, 3)), not a new
+ * number. A phrase with no fill-test-eligible example is skipped and
+ * reported back rather than silently dropped.
+ */
+export function buildFillTestPlanForVocabPhrases(phrases: VocabPhrase[]): VocabPhraseFillTestPlan {
+  const skippedPhrases: string[] = [];
+  const rows: VocabPhraseCandidateRow[] = [];
+
+  for (const phrase of phrases) {
+    const row = rowFromVocabPhrase(phrase);
+    if (!row) {
+      skippedPhrases.push(phrase.phrase);
+      continue;
+    }
+    rows.push(row);
+  }
+
+  const quizPhrases: TestableVocabPhrase[] = [];
+  for (let index = 0; index < rows.length; index += VOCAB_PHRASE_ROUND_SIZE) {
+    const bundle = createVocabPhraseQuizBundle(rows.slice(index, index + VOCAB_PHRASE_ROUND_SIZE));
+    if (bundle) {
+      quizPhrases.push(bundle);
+    }
+  }
+
+  return { quizPhrases, skippedPhrases };
+}
+
+/**
+ * A phrase-only round has to travel through the SAME quiz queue as
+ * character rounds (`quizQueue: TestableWord[]`) — rendering, history,
+ * autosave, and resume all iterate that one list. Rather than turning that
+ * list into a union type across every call site, a phrase round is wrapped
+ * as a `TestableWord`-shaped placeholder: its `fillTest` is the real,
+ * already-built phrase round (tagged with `vocabPhraseId`, never
+ * `characterId`), and its SRS fields are inert zeros that are never read —
+ * grading for a wrapped round always dispatches to gradeVocabPhrase/
+ * nudgeWordFamiliarity, never gradeWord, so those zeros never reach
+ * `words`. The id is prefixed distinctively so it can never collide with a
+ * real word id and so downstream code (grading dispatch, resume
+ * revalidation) can recognize it without inspecting fillTest shape.
+ */
+export const VOCAB_PHRASE_ROUND_ID_PREFIX = "vocab-phrase-round:";
+
+export function wrapVocabPhraseRoundAsQuizWord(round: TestableVocabPhrase): TestableWord {
+  return {
+    id: `${VOCAB_PHRASE_ROUND_ID_PREFIX}${round.id}`,
+    hanzi: round.phrase,
+    fillTest: round.fillTest,
+    createdAt: round.createdAt,
+    repetitions: 0,
+    intervalDays: 0,
+    ease: 0,
+    nextReviewAt: 0,
+    reviewCount: 0,
+    testCount: 0,
+  };
+}
+
+export function isVocabPhraseRoundQuizWord(word: TestableWord): boolean {
+  return word.id.startsWith(VOCAB_PHRASE_ROUND_ID_PREFIX);
+}
+
 // ─── Review Session Progress (save/resume) ─────────────────────────────────
 //
 // These helpers live alongside buildBundledFillTestPlan/buildFillTestFromSavedContent
@@ -865,11 +1017,26 @@ export function revalidateSavedQuizQueue(
   savedQueue: TestableWord[],
   currentWords: Word[],
   contentByCharacter: Map<string, FlashcardLlmResponse[]>,
-  allowedWordIds?: Set<string>
+  allowedWordIds?: Set<string>,
+  currentVocabPhraseIds?: Set<string>
 ): TestableWord[] {
   const wordsById = new Map(currentWords.map((word) => [word.id, word]));
 
   return savedQueue.filter((queuedWord) => {
+    if (isVocabPhraseRoundQuizWord(queuedWord)) {
+      // A phrase round's "members" live under vocabPhraseMembers, not
+      // members, and each must still exist as a current vocab_phrases row
+      // (a parent may have deleted a packaged phrase while it was paused,
+      // same reasoning as a deleted character target). No id set at all
+      // (e.g. the ad-hoc due-review path, which never produces phrase
+      // rounds) means treat as stale rather than trust a saved round blind.
+      const vocabPhraseMembers = queuedWord.fillTest.vocabPhraseMembers ?? [];
+      if (vocabPhraseMembers.length === 0 || !currentVocabPhraseIds) {
+        return false;
+      }
+      return vocabPhraseMembers.every((member) => currentVocabPhraseIds.has(member.vocabPhraseId));
+    }
+
     const members = queuedWord.fillTest.members?.length
       ? queuedWord.fillTest.members
       : [
@@ -938,6 +1105,7 @@ function resolveReviewResume(params: {
   currentWords: Word[];
   allFlashcardContents: FlashcardContentEntry[];
   allowedWordIds?: Set<string>;
+  currentVocabPhraseIds?: Set<string>;
 }): DueReviewResumeResolution {
   if (!isDueReviewProgressData(params.progressData)) {
     return { status: "invalid" };
@@ -955,7 +1123,8 @@ function resolveReviewResume(params: {
     remainingQueue,
     params.currentWords,
     contentByCharacter,
-    params.allowedWordIds
+    params.allowedWordIds,
+    params.currentVocabPhraseIds
   );
   if (validatedQueue.length === 0) {
     return { status: "empty" };
@@ -984,12 +1153,15 @@ export function resolveDueReviewResume(params: {
 }
 
 /**
- * Packaged-session flavor of resolveDueReviewResume. Adds ONE extra
- * re-validation check beyond the ad-hoc path: every member word of each
- * queued item must still be present in `quizWordIds` (pass
+ * Packaged-session flavor of resolveDueReviewResume. Adds TWO extra
+ * re-validation checks beyond the ad-hoc path: every member word of each
+ * queued character item must still be present in `quizWordIds` (pass
  * `activeReviewTestSessionRuntime.quizWords.map((word) => word.id)` for the
- * packaged session being resumed) -- a parent may have removed a target (or
- * its content) while the child had the session paused. Composes with
+ * packaged session being resumed), and every member phrase of each queued
+ * phrase round must still be present in `vocabPhraseIds` (pass
+ * `activeReviewTestSessionRuntime.vocabPhrases.map((phrase) => phrase.id)`)
+ * -- a parent may have removed a target (or a whole phrase) while the
+ * child had the session paused. Composes with
  * resolveReviewResume/revalidateSavedQuizQueue rather than duplicating the
  * resumeIndex-slicing or per-item validation logic.
  */
@@ -998,12 +1170,14 @@ export function resolvePackagedReviewResume(params: {
   currentWords: Word[];
   allFlashcardContents: FlashcardContentEntry[];
   quizWordIds: Set<string>;
+  vocabPhraseIds: Set<string>;
 }): DueReviewResumeResolution {
   return resolveReviewResume({
     progressData: params.progressData,
     currentWords: params.currentWords,
     allFlashcardContents: params.allFlashcardContents,
     allowedWordIds: params.quizWordIds,
+    currentVocabPhraseIds: params.vocabPhraseIds,
   });
 }
 

@@ -35,6 +35,9 @@ import {
   loadReviewSessionProgress,
   listReviewSessionProgress,
   deleteReviewSessionProgress,
+  listVocabPhrases,
+  gradeVocabPhrase,
+  nudgeWordFamiliarity,
 } from "@/lib/supabase-service";
 import { gradeBundledFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -64,6 +67,8 @@ import {
   buildBundledFillTestPlan,
   buildDueReviewAutosavePayload,
   buildFillTestFromSavedContent,
+  buildFillTestPlanForVocabPhrases,
+  wrapVocabPhraseRoundAsQuizWord,
   applyAdminMeaningEdit,
   cloneFillTest,
   cloneFlashcardLlmResponse,
@@ -183,6 +188,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setDueWords,
     allFlashcardContents,
     setAllFlashcardContents,
+    vocabPhrases,
+    setVocabPhrases,
     reviewTestSessions,
     setReviewTestSessions,
     pausedSessions,
@@ -374,10 +381,10 @@ const gradeLabels = getGradeLabels(str);
     return new Map<string, ReviewTestSessionRuntime>(
       reviewTestSessions.map((sessionItem) => [
         sessionItem.id,
-        buildReviewTestSessionRuntime(sessionItem, words, allFlashcardContents),
+        buildReviewTestSessionRuntime(sessionItem, words, allFlashcardContents, vocabPhrases),
       ])
     );
-  }, [allFlashcardContents, reviewTestSessions, words]);
+  }, [allFlashcardContents, reviewTestSessions, vocabPhrases, words]);
 
   const activeReviewTestSession = useMemo(
     () =>
@@ -1143,7 +1150,12 @@ const gradeLabels = getGradeLabels(str);
     // table (see DueReviewSection.tsx).
     await listReviewSessionProgress().then(setPausedSessions).catch(() => setPausedSessions([]));
     await getWordLessonTagsForFamily().then(setWordTagsMap).catch(() => setWordTagsMap(new Map()));
-  }, [refreshDueWords, refreshWords, setPausedSessions, setReviewTestSessions, setWordTagsMap]);
+    // Phrases never auto-surface via due-review, but the packaged-session
+    // runtime (buildReviewTestSessionRuntime) needs the full family list to
+    // resolve phrase targets -- same reason allFlashcardContents is loaded
+    // unconditionally rather than only when a packaged session exists.
+    await listVocabPhrases().then(setVocabPhrases).catch(() => setVocabPhrases([]));
+  }, [refreshDueWords, refreshWords, setPausedSessions, setReviewTestSessions, setVocabPhrases, setWordTagsMap]);
 
   useEffect(() => {
     (async () => {
@@ -3624,6 +3636,7 @@ const gradeLabels = getGradeLabels(str);
               currentWords: words,
               allFlashcardContents,
               quizWordIds: new Set(runtimeQuizWords.quizWords.map((word) => word.id)),
+              vocabPhraseIds: new Set(runtimeQuizWords.vocabPhrases.map((phrase) => phrase.id)),
             });
 
             if (resolved.status === "invalid") {
@@ -3682,8 +3695,17 @@ const gradeLabels = getGradeLabels(str);
 
           // No saved progress for this packaged session (or a defensive
           // fallback) -- build a fresh plan, same as before this task.
+          // Phrase rounds are built and appended separately: they never go
+          // through buildBundledFillTestPlan (character-only, untouched by
+          // this feature) and always form their own round(s), never mixed
+          // with character rounds -- see buildFillTestPlanForVocabPhrases.
           const plan = buildBundledFillTestPlan(runtimeQuizWords.quizWords);
-          if (plan.quizWords.length === 0) {
+          const phrasePlan = buildFillTestPlanForVocabPhrases(runtimeQuizWords.vocabPhrases);
+          const combinedQuizWords = [
+            ...plan.quizWords,
+            ...phrasePlan.quizPhrases.map(wrapVocabPhraseRoundAsQuizWord),
+          ];
+          if (combinedQuizWords.length === 0) {
             router.replace("/words/review?reviewTestSessionStatus=no_quiz_ready");
             return;
           }
@@ -3693,13 +3715,13 @@ const gradeLabels = getGradeLabels(str);
             packagedSessionId: requestedReviewTestSessionId,
           };
           setQuizQueue(
-            plan.quizWords.map((word) => ({
+            combinedQuizWords.map((word) => ({
               ...word,
               fillTest: cloneFillTest(word.fillTest),
             }))
           );
           setQuizIndex(0);
-          resetQuizWordState(plan.quizWords[0]);
+          resetQuizWordState(combinedQuizWords[0]);
           setQuizResult(null);
           setQuizActivePhraseIndex(null);
           setQuizDraggingPhraseIndex(null);
@@ -3712,7 +3734,7 @@ const gradeLabels = getGradeLabels(str);
           setQuizNotice(
             str.fillTest.reviewTestSession.activeSession
               .replace("{name}", activeSession.name)
-              .replace("{count}", String(plan.quizWords.length))
+              .replace("{count}", String(combinedQuizWords.length))
           );
         } finally {
           resumeLoadInFlightRef.current = false;
@@ -3901,6 +3923,28 @@ const gradeLabels = getGradeLabels(str);
         await gradeWord(memberResult.wordId, { grade: memberResult.tier, source: "fillTest" });
       }
 
+      // Phrase rounds grade through gradeVocabPhrase, never gradeWord --
+      // memberResults and vocabPhraseMemberResults are mutually exclusive
+      // per round (a round is always all-character or all-phrase, never
+      // mixed). On a correct phrase answer only, nudge the familiarity of
+      // the phrase's own component characters that already exist as
+      // standalone words -- a wrong answer touches no character state, and
+      // a character the parent never added standalone is silently skipped
+      // (nothing to nudge). See docs/feature-specs/2026-07-26-phrase-keyed-input.md.
+      for (const vocabPhraseMemberResult of result.vocabPhraseMemberResults) {
+        await gradeVocabPhrase(vocabPhraseMemberResult.vocabPhraseId);
+
+        if (vocabPhraseMemberResult.tier === "easy") {
+          const componentHanzi = extractUniqueHanzi(vocabPhraseMemberResult.phrase);
+          for (const hanzi of componentHanzi) {
+            const matchingWord = words.find((word) => word.hanzi === hanzi);
+            if (matchingWord) {
+              await nudgeWordFamiliarity(matchingWord.id);
+            }
+          }
+        }
+      }
+
       // Computed directly (not via functional setState) because the autosave
       // call below needs the up-to-date array synchronously -- setQuizHistory
       // is async, so reading the `quizHistory` state variable right after
@@ -3913,6 +3957,16 @@ const gradeLabels = getGradeLabels(str);
           tier: memberResult.tier,
           correctCount: memberResult.correctCount,
           totalCount: memberResult.totalCount,
+        })),
+        // Reuses the same QuizHistoryItem shape for phrase rounds -- the
+        // history list only ever displays hanzi/tier/counts, it doesn't
+        // care whether the id belongs to a word or a vocab phrase.
+        ...result.vocabPhraseMemberResults.map((vocabPhraseMemberResult) => ({
+          wordId: vocabPhraseMemberResult.vocabPhraseId,
+          hanzi: vocabPhraseMemberResult.phrase,
+          tier: vocabPhraseMemberResult.tier,
+          correctCount: vocabPhraseMemberResult.correctCount,
+          totalCount: vocabPhraseMemberResult.totalCount,
         })),
       ];
       setQuizHistory(updatedHistory);

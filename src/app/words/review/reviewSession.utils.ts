@@ -1,5 +1,5 @@
 import type { FlashcardContentEntry } from "@/lib/supabase-service";
-import type { Word } from "@/lib/types";
+import type { VocabPhrase, Word } from "@/lib/types";
 import type {
   ReviewTestSession,
   ReviewTestSessionRuntime,
@@ -37,7 +37,8 @@ export function sortReviewTestSessionTargets(
 export function buildReviewTestSessionRuntime(
   session: ReviewTestSession,
   words: Word[],
-  allFlashcardContents: FlashcardContentEntry[]
+  allFlashcardContents: FlashcardContentEntry[],
+  vocabPhrases: VocabPhrase[] = []
 ): ReviewTestSessionRuntime {
   const wordsByCharacter = new Map<string, Word[]>();
   const contentByKey = new Map<string, FlashcardContentEntry>();
@@ -59,7 +60,32 @@ export function buildReviewTestSessionRuntime(
     (left, right) => left.displayOrder - right.displayOrder
   );
 
-  for (const target of orderedTargets) {
+  // Vocab-phrase targets are resolved separately from character targets —
+  // a phrase target maps 1:1 to a vocab_phrases row via vocabPhraseId, so
+  // there is no "group by character, then multiple pronunciations" step
+  // for them the way there is for characters.
+  const characterTargets = orderedTargets.filter((target) => !target.vocabPhraseId);
+  const phraseTargets = orderedTargets.filter((target) => target.vocabPhraseId);
+  const vocabPhrasesById = new Map(vocabPhrases.map((phrase) => [phrase.id, phrase]));
+  const resolvedVocabPhrases: VocabPhrase[] = [];
+
+  for (const target of phraseTargets) {
+    const phrase = target.vocabPhraseId ? vocabPhrasesById.get(target.vocabPhraseId) : undefined;
+    if (!phrase) {
+      return {
+        orderedWords: [],
+        quizWords: [],
+        vocabPhrases: [],
+        packagedPronunciationsByCharacter: {},
+        skippedQuizCharacters: [],
+        errorCode: "missing_vocab_phrase",
+        errorCharacter: target.character,
+      };
+    }
+    resolvedVocabPhrases.push(phrase);
+  }
+
+  for (const target of characterTargets) {
     const list = groupedTargets.get(target.character) ?? [];
     list.push(target);
     groupedTargets.set(target.character, list);
@@ -74,6 +100,7 @@ export function buildReviewTestSessionRuntime(
       return {
         orderedWords: [],
         quizWords: [],
+        vocabPhrases: [],
         packagedPronunciationsByCharacter: {},
         skippedQuizCharacters: [],
         errorCode: "missing_word",
@@ -85,6 +112,7 @@ export function buildReviewTestSessionRuntime(
       return {
         orderedWords: [],
         quizWords: [],
+        vocabPhrases: [],
         packagedPronunciationsByCharacter: {},
         skippedQuizCharacters: [],
         errorCode: "duplicate_word",
@@ -122,6 +150,7 @@ export function buildReviewTestSessionRuntime(
   return {
     orderedWords,
     quizWords,
+    vocabPhrases: resolvedVocabPhrases,
     packagedPronunciationsByCharacter,
     skippedQuizCharacters,
     errorCode: null,

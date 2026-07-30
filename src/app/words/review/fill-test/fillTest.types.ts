@@ -1,5 +1,5 @@
 import type { BundledFillTestResult, FillTest, Tier } from "@/lib/fillTest";
-import type { Word } from "@/lib/types";
+import type { VocabPhrase, Word } from "@/lib/types";
 
 /**
  * Fill-Test Review Types
@@ -9,6 +9,15 @@ import type { Word } from "@/lib/types";
 export type QuizSelectionMode = "all" | "10" | "20" | "30" | "manual";
 
 export type TestableWord = Word & { fillTest: FillTest };
+
+/**
+ * A vocab phrase with its own mini fill-test already built (mirrors
+ * TestableWord). Phrase-only rounds are built from these — see
+ * buildFillTestFromVocabPhrase / buildFillTestPlanForVocabPhrases in
+ * words.shared.utils.tsx. Never mixed into the same round as TestableWord
+ * (the character bundler is untouched by this feature).
+ */
+export type TestableVocabPhrase = VocabPhrase & { fillTest: FillTest };
 
 export type QuizHistoryItem = {
   wordId: string;

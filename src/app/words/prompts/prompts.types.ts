@@ -4,7 +4,7 @@
  * Last updated: 2026-03-09
  */
 
-export type PromptType = "full" | "phrase" | "example" | "phrase_details" | "meaning_details";
+export type PromptType = "full" | "phrase" | "example" | "phrase_details" | "meaning_details" | "vocab_phrase";
 
 /** All configurable prompt types in display order. */
 export const PROMPT_TYPES: PromptType[] = [
@@ -13,6 +13,7 @@ export const PROMPT_TYPES: PromptType[] = [
   "example",
   "phrase_details",
   "meaning_details",
+  "vocab_phrase",
 ];
 
 /** Maximum number of user-owned slots per prompt type per family. */
@@ -33,6 +34,7 @@ export const PROMPT_CHAR_LIMITS: Record<PromptType, { min: number; max: number }
   example: { min: 30, max: 500 },
   phrase_details: { min: 30, max: 600 },
   meaning_details: { min: 20, max: 400 },
+  vocab_phrase: { min: 30, max: 600 },
 };
 
 /** Validation errors for the inline edit form. */

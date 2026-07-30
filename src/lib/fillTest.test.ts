@@ -53,4 +53,21 @@ describe("gradeBundledFillTest", () => {
     expect(gradeBundledFillTest(fillTest, placementsFor(fillTest, [0])).memberResults[0]?.tier).toBe("hard");
     expect(gradeBundledFillTest(fillTest, placementsFor(fillTest, [])).memberResults[0]?.tier).toBe("again");
   });
+
+  it("grades a vocab-phrase-only round via vocabPhraseMemberResults, independent of memberResults", () => {
+    const fillTest: FillTest = {
+      phrases: ["\u8c22\u8c22"],
+      sentences: [{ text: "___\uff0c\u4f60\u5e2e\u4e86\u6211\u5927\u5fd9\u3002", answerIndex: 0, vocabPhraseId: "phrase-1" }],
+      vocabPhraseMembers: [{ vocabPhraseId: "phrase-1", phrase: "\u8c22\u8c22", phraseCount: 1 }],
+    };
+
+    const correct = gradeBundledFillTest(fillTest, [{ sentenceIndex: 0, chosenPhraseIndex: 0 }]);
+    expect(correct.memberResults).toEqual([]);
+    expect(correct.vocabPhraseMemberResults).toEqual([
+      { vocabPhraseId: "phrase-1", phrase: "\u8c22\u8c22", correctCount: 1, totalCount: 1, tier: "easy" },
+    ]);
+
+    const wrong = gradeBundledFillTest(fillTest, [{ sentenceIndex: 0, chosenPhraseIndex: null as unknown as number }]);
+    expect(wrong.vocabPhraseMemberResults[0]?.tier).toBe("again");
+  });
 });

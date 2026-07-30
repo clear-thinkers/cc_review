@@ -12,6 +12,7 @@ import type {
 } from "./admin.types";
 import { getAllTagFilterOptionIds, toggleTagFilterId } from "../shared/tagFilter.utils";
 import { matchesCharacterSearchFilter, renderPhraseWithPinyin, renderSentenceWithPinyin } from "../shared/words.shared.utils";
+import VocabPhraseAdminSection from "./VocabPhraseAdminSection";
 
 type AdminBatchWarningKind = "content_all" | "pinyin_all";
 
@@ -713,6 +714,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [filterTagGrades, setFilterTagGrades] = useState<string[]>([]);
   const [filterTagUnits, setFilterTagUnits] = useState<string[]>([]);
   const [filterTagLessons, setFilterTagLessons] = useState<string[]>([]);
+  const [adminViewMode, setAdminViewMode] = useState<"characters" | "phrases">("characters");
   const [filterCharacterSearch, setFilterCharacterSearch] = useState("");
   const [filterSectionOpen, setFilterSectionOpen] = useState(false);
   const [reviewTestSessionFormOpen, setReviewTestSessionFormOpen] = useState(false);
@@ -1142,10 +1144,61 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     return null;
   }
 
+  const adminViewToggle = (
+    <div className="flex gap-1 rounded-md border p-1 text-sm" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={adminViewMode === "characters"}
+        className={
+          adminViewMode === "characters"
+            ? "rounded px-3 py-1 btn-toggle-on"
+            : "rounded px-3 py-1 text-gray-600 hover:bg-gray-50"
+        }
+        onClick={() => setAdminViewMode("characters")}
+      >
+        {str.admin.viewToggle.characters}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={adminViewMode === "phrases"}
+        className={
+          adminViewMode === "phrases"
+            ? "rounded px-3 py-1 btn-toggle-on"
+            : "rounded px-3 py-1 text-gray-600 hover:bg-gray-50"
+        }
+        onClick={() => setAdminViewMode("phrases")}
+      >
+        {str.admin.viewToggle.phrases}
+      </button>
+    </div>
+  );
+
+  if (adminViewMode === "phrases") {
+    return (
+      <section className="space-y-3 rounded-lg border p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="font-medium">{str.admin.pageTitle}</h2>
+            <p className="text-sm text-gray-700">{str.admin.pageDescription}</p>
+          </div>
+          {adminViewToggle}
+        </div>
+        <VocabPhraseAdminSection vm={vm} />
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-3 rounded-lg border p-4">
-      <h2 className="font-medium">{str.admin.pageTitle}</h2>
-      <p className="text-sm text-gray-700">{str.admin.pageDescription}</p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="font-medium">{str.admin.pageTitle}</h2>
+          <p className="text-sm text-gray-700">{str.admin.pageDescription}</p>
+        </div>
+        {adminViewToggle}
+      </div>
 
       <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <button

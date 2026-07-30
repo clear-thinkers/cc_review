@@ -62,3 +62,67 @@ export function isTagFormComplete(
   if (!sectionOpen) return true;
   return !!(textbookId && grade && unit && lesson);
 }
+
+/**
+ * Batch Phrase Entry — Ingestion Decision Helpers
+ *
+ * Parallel to computeIngestionResult above, but for /words/add's
+ * comma-separated phrase entry mode. A phrase stays intact as one
+ * multi-character unit — deliberately NOT extractUniqueHanzi, which
+ * explodes text into individual Han characters.
+ */
+
+/**
+ * Split a comma-separated phrase list into distinct entries: splits on
+ * both the ASCII and full-width comma, trims each entry, drops empties,
+ * and dedupes while preserving first-seen order.
+ */
+export function parseCommaSeparatedPhrases(input: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of input.split(/[,，]/)) {
+    const trimmed = raw.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+/** Mirrors the vocab_phrases DB check constraint: 2-10 Chinese characters. */
+export function isValidPhraseLength(phrase: string): boolean {
+  const length = Array.from(phrase).length;
+  return length >= 2 && length <= 10;
+}
+
+export type PhraseIngestionResult = {
+  phrasesToAdd: string[];
+  invalidPhrases: string[];
+  skippedCount: number;
+};
+
+/**
+ * Three-way split of a parsed phrase batch against the family's existing
+ * vocab_phrases: invalid-length entries (reported, never inserted),
+ * already-added entries (skipped, not re-inserted), and net-new phrasesToAdd.
+ */
+export function computePhraseIngestionResult(
+  parsedPhrases: string[],
+  existingPhrases: string[]
+): PhraseIngestionResult {
+  const existingSet = new Set(existingPhrases);
+  const invalidPhrases: string[] = [];
+  const validPhrases: string[] = [];
+
+  for (const phrase of parsedPhrases) {
+    if (isValidPhraseLength(phrase)) {
+      validPhrases.push(phrase);
+    } else {
+      invalidPhrases.push(phrase);
+    }
+  }
+
+  const phrasesToAdd = validPhrases.filter((phrase) => !existingSet.has(phrase));
+  const skippedCount = validPhrases.length - phrasesToAdd.length;
+  return { phrasesToAdd, invalidPhrases, skippedCount };
+}

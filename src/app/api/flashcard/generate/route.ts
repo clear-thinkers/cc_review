@@ -7,6 +7,11 @@ import {
 import { supabase, getServerSupabaseClient } from "@/lib/supabaseClient";
 import type { PromptType } from "@/lib/supabase-service";
 
+// This route only ever generates character content — vocab-phrase generation
+// lives in the separate src/app/api/vocab-phrase/generate/route.ts, which is
+// why the prompt type used here deliberately excludes 'vocab_phrase'.
+type CharacterPromptType = Exclude<PromptType, "vocab_phrase">;
+
 const DEFAULT_DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 const MAX_EXAMPLE_LENGTH = 50;
@@ -48,7 +53,7 @@ const MEANING_DETAIL_FORMAT_SUFFIX = `Return JSON only:
 {"definition_en":"..."}
 Do not return any extra fields.`;
 
-const PROMPT_FORMAT_SUFFIXES: Record<PromptType, string> = {
+const PROMPT_FORMAT_SUFFIXES: Record<CharacterPromptType, string> = {
   full: FULL_FORMAT_SUFFIX,
   phrase: PHRASE_FORMAT_SUFFIX,
   example: EXAMPLE_FORMAT_SUFFIX,
@@ -111,7 +116,7 @@ Rules:
  * Uses service-role client (bypasses RLS) since this runs server-side.
  */
 async function resolveSystemPrompt(
-  mode: PromptType,
+  mode: CharacterPromptType,
   familyId: string | null,
   hardcodedFallback: string
 ): Promise<string> {

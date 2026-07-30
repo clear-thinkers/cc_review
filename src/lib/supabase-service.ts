@@ -9,7 +9,7 @@
  */
 
 import { supabase } from "./supabaseClient";
-import type { Word } from "./types";
+import type { Word, VocabPhrase, VocabPhraseExample } from "./types";
 import type { FlashcardLlmResponse } from "./flashcardLlm";
 import type { QuizSession } from "./quiz.types";
 import type { Wallet } from "./wallet.types";
@@ -198,6 +198,7 @@ interface SupabaseReviewTestSessionTargetRow {
   character: string;
   pronunciation: string;
   display_order: number;
+  vocab_phrase_id: string | null;
 }
 
 function normalizeReviewTestSessionDraftTargets(
@@ -219,6 +220,7 @@ function normalizeReviewTestSessionDraftTargets(
       character,
       pronunciation,
       key,
+      ...(target.vocabPhraseId ? { vocabPhraseId: target.vocabPhraseId } : {}),
     });
   }
 
@@ -236,6 +238,7 @@ function toReviewTestSessionTarget(
     pronunciation,
     key: `${character}|${pronunciation}`,
     displayOrder: row.display_order,
+    ...(row.vocab_phrase_id ? { vocabPhraseId: row.vocab_phrase_id } : {}),
   };
 }
 
@@ -501,6 +504,204 @@ export async function gradeWord(
   return updated;
 }
 
+// ─── Internal: VocabPhrase row converters ───────────────────────────────────
+
+interface SupabaseVocabPhraseRow {
+  id: string;
+  family_id: string;
+  phrase: string;
+  pinyin: string | null;
+  meaning_zh: string | null;
+  meaning_en: string | null;
+  examples: unknown;
+  test_count: number;
+  created_at: string;
+}
+
+function normalizeVocabPhraseExamples(value: unknown): VocabPhraseExample[] {
+  if (!Array.isArray(value)) return [];
+  const result: VocabPhraseExample[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const source = item as Record<string, unknown>;
+    const zh = typeof source.zh === "string" ? source.zh : "";
+    if (!zh) continue;
+    result.push({
+      zh,
+      pinyin: typeof source.pinyin === "string" ? source.pinyin : "",
+      includeInFillTest: source.include_in_fill_test !== false,
+    });
+  }
+  return result;
+}
+
+function fromVocabPhraseExamples(examples: VocabPhraseExample[]): unknown {
+  return examples.map((example) => ({
+    zh: example.zh,
+    pinyin: example.pinyin,
+    include_in_fill_test: example.includeInFillTest,
+  }));
+}
+
+function toVocabPhrase(row: SupabaseVocabPhraseRow): VocabPhrase {
+  return {
+    id: row.id,
+    phrase: row.phrase,
+    pinyin: row.pinyin ?? undefined,
+    meaningZh: row.meaning_zh ?? undefined,
+    meaningEn: row.meaning_en ?? undefined,
+    examples: normalizeVocabPhraseExamples(row.examples),
+    testCount: row.test_count,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+// ─── Vocab Phrases ───────────────────────────────────────────────────────────
+//
+// Standalone multi-character phrase entity, parallel to `words` but flat (no
+// nested meanings) and packaged-only (no SRS scheduling — see
+// docs/feature-specs/2026-07-26-phrase-keyed-input.md). "Grading" here only
+// ever means bumping test_count bookkeeping; the SRS-adjacent familiarity
+// nudge this feature applies to a phrase's own component *characters* lives
+// in nudgeWordFamiliarity below and writes to `words`, not `vocab_phrases`.
+
+export async function listVocabPhrases(): Promise<VocabPhrase[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("vocab_phrases")
+    .select("*")
+    .eq("family_id", familyId);
+  if (error) throw new Error(`listVocabPhrases: ${error.message}`);
+  return (data as SupabaseVocabPhraseRow[]).map(toVocabPhrase);
+}
+
+export async function getExistingVocabPhrasesByText(phrases: string[]): Promise<VocabPhrase[]> {
+  if (phrases.length === 0) return [];
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("vocab_phrases")
+    .select("*")
+    .eq("family_id", familyId)
+    .in("phrase", phrases);
+  if (error) throw new Error(`getExistingVocabPhrasesByText: ${error.message}`);
+  return (data as SupabaseVocabPhraseRow[]).map(toVocabPhrase);
+}
+
+/** Single-phrase create, used by Content Admin's inline "+ New Phrase" row. */
+export async function addVocabPhrase(phrase: string): Promise<VocabPhrase> {
+  const trimmed = phrase.trim();
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("vocab_phrases")
+    .insert({ family_id: familyId, phrase: trimmed })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`addVocabPhrase: ${error?.message ?? "insert failed"}`);
+  return toVocabPhrase(data as SupabaseVocabPhraseRow);
+}
+
+/**
+ * Batch create, used by /words/add's comma-separated phrase entry. Skips
+ * phrases already present for the family (ON CONFLICT DO NOTHING on
+ * (family_id, phrase)) and returns only the newly-inserted rows — the
+ * caller needs their ids to batch-assign tags to just the new phrases.
+ */
+export async function addVocabPhrases(phrases: string[]): Promise<VocabPhrase[]> {
+  if (phrases.length === 0) return [];
+  const { familyId } = await getSessionMetadata();
+  const rows = phrases.map((phrase) => ({ family_id: familyId, phrase: phrase.trim() }));
+  const { data, error } = await supabase
+    .from("vocab_phrases")
+    .upsert(rows, { onConflict: "family_id,phrase", ignoreDuplicates: true })
+    .select("*");
+  if (error) throw new Error(`addVocabPhrases: ${error.message}`);
+  return ((data as SupabaseVocabPhraseRow[] | null) ?? []).map(toVocabPhrase);
+}
+
+export async function updateVocabPhrase(
+  id: string,
+  fields: Partial<Pick<VocabPhrase, "pinyin" | "meaningZh" | "meaningEn" | "examples">>
+): Promise<void> {
+  const row: Record<string, unknown> = {};
+  if ("pinyin" in fields) row.pinyin = fields.pinyin ?? null;
+  if ("meaningZh" in fields) row.meaning_zh = fields.meaningZh ?? null;
+  if ("meaningEn" in fields) row.meaning_en = fields.meaningEn ?? null;
+  if ("examples" in fields) row.examples = fromVocabPhraseExamples(fields.examples ?? []);
+  if (Object.keys(row).length === 0) return;
+
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("vocab_phrases")
+    .update(row)
+    .eq("id", id)
+    .eq("family_id", familyId);
+  if (error) throw new Error(`updateVocabPhrase: ${error.message}`);
+}
+
+export async function deleteVocabPhrase(id: string): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("vocab_phrases")
+    .delete()
+    .eq("id", id)
+    .eq("family_id", familyId);
+  if (error) throw new Error(`deleteVocabPhrase: ${error.message}`);
+}
+
+/**
+ * Bumps test_count only — vocab_phrases carries no SRS state, so unlike
+ * gradeWord there is no calculateNextState call here regardless of whether
+ * the fill-test answer was right or wrong (packaged-only, no auto SRS).
+ */
+export async function gradeVocabPhrase(id: string): Promise<VocabPhrase> {
+  const { data, error: readErr } = await supabase
+    .from("vocab_phrases")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (readErr || !data) throw new Error(`gradeVocabPhrase read: ${readErr?.message ?? "not found"}`);
+
+  const phrase = toVocabPhrase(data as SupabaseVocabPhraseRow);
+  const nextTestCount = phrase.testCount + 1;
+  const { error: writeErr } = await supabase
+    .from("vocab_phrases")
+    .update({ test_count: nextTestCount })
+    .eq("id", id);
+  if (writeErr) throw new Error(`gradeVocabPhrase write: ${writeErr.message}`);
+  return { ...phrase, testCount: nextTestCount };
+}
+
+/**
+ * Correct-phrase-answer familiarity nudge for one of the phrase's own
+ * component characters, if it already exists as a standalone `words` row.
+ * Silently no-ops if the character was never added standalone — nothing to
+ * nudge. Reuses the existing, unmodified calculateNextState with a "good"
+ * grade (moderate strength — recognizing a character inside an
+ * already-familiar phrase is weaker evidence than a direct cold-recall
+ * test of that character alone). Deliberately does not increment
+ * testCount, which is reserved for direct standalone tests of the
+ * character, not incidental exposure via a phrase.
+ */
+export async function nudgeWordFamiliarity(wordId: string, now = Date.now()): Promise<void> {
+  const { data, error: readErr } = await supabase
+    .from("words")
+    .select("*")
+    .eq("id", wordId)
+    .maybeSingle();
+  if (readErr) throw new Error(`nudgeWordFamiliarity read: ${readErr.message}`);
+  if (!data) return;
+
+  const word = toWord(data as SupabaseWordRow);
+  const updated = calculateNextState(word, "good", now);
+  updated.reviewCount = (word.reviewCount ?? 0) + 1;
+  updated.testCount = word.testCount ?? 0;
+
+  const { familyId } = await getSessionMetadata();
+  const row = fromWord(updated, familyId);
+  const { error: writeErr } = await supabase.from("words").update(row).eq("id", wordId);
+  if (writeErr) throw new Error(`nudgeWordFamiliarity write: ${writeErr.message}`);
+}
+
 // ─── Flashcard Contents ─────────────────────────────────────────────────────
 
 function makeFlashcardContentKey(
@@ -690,7 +891,7 @@ export async function listReviewTestSessions(): Promise<ReviewTestSession[]> {
   const sessionIds = sessions.map((row) => row.id);
   const { data: targetRows, error: targetError } = await supabase
     .from("review_test_session_targets")
-    .select("session_id, character, pronunciation, display_order")
+    .select("session_id, character, pronunciation, display_order, vocab_phrase_id")
     .eq("family_id", familyId)
     .in("session_id", sessionIds)
     .order("display_order", { ascending: true });
@@ -742,6 +943,7 @@ export async function createReviewTestSession(
     character: target.character,
     pronunciation: target.pronunciation,
     display_order: index,
+    vocab_phrase_id: target.vocabPhraseId ?? null,
   }));
   const { error: targetError } = await supabase
     .from("review_test_session_targets")
@@ -761,6 +963,7 @@ export async function createReviewTestSession(
       pronunciation: target.pronunciation,
       key: target.key,
       displayOrder: index,
+      ...(target.vocabPhraseId ? { vocabPhraseId: target.vocabPhraseId } : {}),
     })),
   };
 }
@@ -777,7 +980,7 @@ export async function appendTargetsToReviewTestSession(
   const { familyId } = await getSessionMetadata();
   const { data: existingTargetRows, error: existingTargetsError } = await supabase
     .from("review_test_session_targets")
-    .select("session_id, character, pronunciation, display_order")
+    .select("session_id, character, pronunciation, display_order, vocab_phrase_id")
     .eq("family_id", familyId)
     .eq("session_id", sessionId)
     .order("display_order", { ascending: true });
@@ -799,6 +1002,7 @@ export async function appendTargetsToReviewTestSession(
       character: target.character,
       pronunciation: target.pronunciation,
       display_order: nextDisplayOrder + index,
+      vocab_phrase_id: target.vocabPhraseId ?? null,
     }));
 
   if (targetRows.length === 0) {
@@ -1294,7 +1498,7 @@ export async function getCoinBreakdown(
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
-export type PromptType = "full" | "phrase" | "example" | "phrase_details" | "meaning_details";
+export type PromptType = "full" | "phrase" | "example" | "phrase_details" | "meaning_details" | "vocab_phrase";
 
 export type PromptTemplate = {
   id: string;
@@ -1687,6 +1891,23 @@ export async function assignWordLessonTags(
     .from("word_lesson_tags")
     .upsert(rows, { onConflict: "word_id,lesson_tag_id,family_id", ignoreDuplicates: true });
   if (error) throw new Error(`assignWordLessonTags: ${error.message}`);
+}
+
+export async function assignVocabPhraseLessonTags(
+  vocabPhraseIds: string[],
+  lessonTagId: string
+): Promise<void> {
+  if (vocabPhraseIds.length === 0) return;
+  const { familyId } = await getSessionMetadata();
+  const rows = vocabPhraseIds.map((vocabPhraseId) => ({
+    vocab_phrase_id: vocabPhraseId,
+    lesson_tag_id: lessonTagId,
+    family_id: familyId,
+  }));
+  const { error } = await supabase
+    .from("vocab_phrase_lesson_tags")
+    .upsert(rows, { onConflict: "vocab_phrase_id,lesson_tag_id,family_id", ignoreDuplicates: true });
+  if (error) throw new Error(`assignVocabPhraseLessonTags: ${error.message}`);
 }
 
 /**

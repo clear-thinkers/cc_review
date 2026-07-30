@@ -187,6 +187,8 @@ async function section1_tableAccessibility(): Promise<void> {
     'textbooks',
     'lesson_tags',
     'word_lesson_tags',
+    'vocab_phrases',
+    'vocab_phrase_lesson_tags',
   ];
 
   for (const table of tables) {
@@ -703,6 +705,137 @@ async function section5_reviewSessionProgress(): Promise<void> {
   }
 }
 
+// ─── Section 6: vocab_phrases / vocab_phrase_lesson_tags RLS ───────────────
+//
+// vocab_phrases mirrors the `words` posture exactly: INSERT/DELETE are
+// parent-only, UPDATE is family-scoped (children grade phrases during
+// fill-test the same way gradeWord() updates `words`). vocab_phrase_lesson_tags
+// mirrors word_lesson_tags: full CRUD is family-scoped, no role restriction.
+async function section6_vocabPhrases(): Promise<void> {
+  console.log('\n■ Section 6: vocab_phrases / vocab_phrase_lesson_tags RLS');
+
+  if (!testFamilyAId || !testFamilyBId || !familyAParentClient || !familyAChildClient) {
+    fail(
+      'section6 setup incomplete — Section 2/4 must have succeeded',
+      'testFamilyAId, testFamilyBId, and Section 4 clients must all be set'
+    );
+    return;
+  }
+
+  // ── Child cannot INSERT a vocab_phrase (parent-only, like words) ──
+  const { error: childInsertErr } = await familyAChildClient.from('vocab_phrases').insert({
+    family_id: testFamilyAId,
+    phrase: `${TEST_TAG}_child`.slice(0, 10),
+  });
+
+  if (childInsertErr) {
+    pass(`vocab_phrases child write scope: child JWT INSERT rejected by RLS: "${childInsertErr.message}"`);
+  } else {
+    fail('vocab_phrases child write scope: child JWT INSERT SUCCEEDED — parent-only policy not enforced!');
+  }
+
+  // ── Parent CAN INSERT a vocab_phrase ──
+  const { data: phraseRow, error: parentInsertErr } = await familyAParentClient
+    .from('vocab_phrases')
+    .insert({ family_id: testFamilyAId, phrase: '谢谢' })
+    .select('id')
+    .single();
+
+  if (parentInsertErr || !phraseRow) {
+    fail('vocab_phrases parent scoped insert: parent JWT INSERT failed', parentInsertErr?.message);
+    return;
+  }
+  pass('vocab_phrases parent scoped insert: parent JWT INSERT succeeded');
+  const phraseId = (phraseRow as { id: string }).id;
+
+  // ── Cross-family isolation: Family B cannot read Family A's phrase ──
+  const { data: familyBPhrase, error: familyBReadErr } = await anon
+    .from('vocab_phrases')
+    .select('id')
+    .eq('id', phraseId);
+  // (anon has no JWT claims at all — reuses the unenriched-isolation posture from Section 3)
+  if (familyBReadErr) {
+    pass(`vocab_phrases isolation: unenriched SELECT blocked by RLS error: "${familyBReadErr.message}"`);
+  } else if (!familyBPhrase || familyBPhrase.length === 0) {
+    pass('vocab_phrases isolation: unenriched session cannot read the phrase');
+  } else {
+    fail('vocab_phrases isolation: unenriched session can read the phrase — RLS not enforcing!');
+  }
+
+  // ── Child CAN UPDATE (grading a phrase during fill-test) ──
+  const { data: childUpdateData, error: childUpdateErr } = await familyAChildClient
+    .from('vocab_phrases')
+    .update({ test_count: 1 })
+    .eq('id', phraseId)
+    .select('id');
+
+  if (childUpdateErr) {
+    fail('vocab_phrases family-scoped update: child JWT UPDATE (grading) rejected', childUpdateErr.message);
+  } else if (!childUpdateData || childUpdateData.length === 0) {
+    fail('vocab_phrases family-scoped update: child JWT UPDATE (grading) affected 0 rows — grading would silently fail');
+  } else {
+    pass('vocab_phrases family-scoped update: child JWT UPDATE (grading) succeeded');
+  }
+
+  // ── Child cannot DELETE a vocab_phrase (parent-only, like words) ──
+  const { data: childDeleteData, error: childDeleteErr } = await familyAChildClient
+    .from('vocab_phrases')
+    .delete()
+    .eq('id', phraseId)
+    .select('id');
+
+  if (childDeleteErr) {
+    pass(`vocab_phrases child write scope: child JWT DELETE rejected by RLS: "${childDeleteErr.message}"`);
+  } else if (!childDeleteData || childDeleteData.length === 0) {
+    pass('vocab_phrases child write scope: child JWT DELETE silently affected 0 rows');
+  } else {
+    fail('vocab_phrases child write scope: child JWT DELETE SUCCEEDED — parent-only policy not enforced!');
+  }
+
+  // ── vocab_phrase_lesson_tags: family-scoped write (any family role, like word_lesson_tags) ──
+  const { data: textbookRow } = await admin
+    .from('textbooks')
+    .select('id')
+    .eq('is_shared', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (!textbookRow) {
+    fail('vocab_phrase_lesson_tags setup skipped — no shared textbook found for lesson_tags FK');
+  } else {
+    const { data: lessonTagRow, error: lessonTagErr } = await admin
+      .from('lesson_tags')
+      .insert({
+        textbook_id: (textbookRow as { id: string }).id,
+        grade: `${TEST_TAG}_grade`,
+        unit: `${TEST_TAG}_unit`,
+        lesson: `${TEST_TAG}_lesson`,
+      })
+      .select('id')
+      .single();
+
+    if (lessonTagErr || !lessonTagRow) {
+      fail('vocab_phrase_lesson_tags setup: service role INSERT lesson_tag failed', lessonTagErr?.message);
+    } else {
+      const lessonTagId = (lessonTagRow as { id: string }).id;
+      const { error: tagAssignErr } = await familyAChildClient.from('vocab_phrase_lesson_tags').insert({
+        vocab_phrase_id: phraseId,
+        lesson_tag_id: lessonTagId,
+        family_id: testFamilyAId,
+      });
+
+      if (tagAssignErr) {
+        fail(
+          'vocab_phrase_lesson_tags family-scoped insert: child JWT INSERT rejected',
+          tagAssignErr.message
+        );
+      } else {
+        pass('vocab_phrase_lesson_tags family-scoped insert: child JWT INSERT succeeded');
+      }
+    }
+  }
+}
+
 // ─── Cleanup ───────────────────────────────────────────────────────────────
 async function cleanup(): Promise<void> {
   console.log('\n■ Cleanup: Removing synthetic test data');
@@ -751,6 +884,7 @@ async function main(): Promise<void> {
     await section3_unenrichedIsolation();
     await section4_enrichedTests();
     await section5_reviewSessionProgress();
+    await section6_vocabPhrases();
   } finally {
     await cleanup();
   }
