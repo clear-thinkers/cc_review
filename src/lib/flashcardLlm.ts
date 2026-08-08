@@ -114,6 +114,10 @@ function normalizePhrase(raw: unknown, character: string): FlashcardMeaningPhras
     return null;
   }
 
+  if (!example.includes(phrase)) {
+    return null;
+  }
+
   if (
     hasUnsafeContent(phrase) ||
     hasUnsafeContent(example) ||

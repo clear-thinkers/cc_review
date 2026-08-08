@@ -111,6 +111,74 @@ describe("POST /api/flashcard/generate", () => {
     expect(payload.detail).toContain("DeepSeek API request failed");
   });
 
+  it("retries phrase_details generation when the example omits the exact phrase", async () => {
+    let callCount = 0;
+    global.fetch = vi.fn(async () => {
+      callCount += 1;
+      const content =
+        callCount === 1
+          ? JSON.stringify({
+              pinyin: "cāng lǎo",
+              example: "爷爷虽然头发苍白，但精神很好。",
+              example_pinyin: "yé ye suī rán tóu fa cāng bái",
+            })
+          : JSON.stringify({
+              pinyin: "cāng lǎo",
+              example: "爷爷虽然苍老，但精神很好。",
+              example_pinyin: "yé ye suī rán cāng lǎo",
+            });
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const response = await POST(
+      buildRequest({
+        mode: "phrase_details",
+        character: "苍",
+        pronunciation: "cāng",
+        meaning: "灰白色",
+        phrase: "苍老",
+      })
+    );
+
+    expect(callCount).toBe(2);
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as { example: string };
+    expect(payload.example).toContain("苍老");
+  });
+
+  it("fails phrase_details generation after retries if the example never contains the exact phrase", async () => {
+    global.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  pinyin: "cāng lǎo",
+                  example: "爷爷虽然头发苍白，但精神很好。",
+                  example_pinyin: "yé ye suī rán tóu fa cāng bái",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+
+    const response = await POST(
+      buildRequest({
+        mode: "phrase_details",
+        character: "苍",
+        pronunciation: "cāng",
+        meaning: "灰白色",
+        phrase: "苍老",
+      })
+    );
+
+    expect(response.status).toBe(502);
+  });
+
   it("returns 503 when DEEPSEEK_API_KEY is missing", async () => {
     delete process.env.DEEPSEEK_API_KEY;
 

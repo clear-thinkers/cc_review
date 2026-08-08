@@ -452,6 +452,10 @@ function isValidPhraseResponse(payload: unknown, request: GenerateRequest): payl
     return false;
   }
 
+  if (!example.includes(phrase)) {
+    return false;
+  }
+
   const phraseKey = normalizeComparableText(phrase);
   const existingPhraseKeys = request.existingPhrases.map(normalizeComparableText);
   if (existingPhraseKeys.includes(phraseKey)) {
@@ -508,6 +512,10 @@ function isValidPhraseDetailResponse(
   }
 
   if (request.existingExamples.includes(example)) {
+    return false;
+  }
+
+  if (request.phrase && !example.includes(request.phrase)) {
     return false;
   }
 

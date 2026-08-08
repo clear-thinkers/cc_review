@@ -167,6 +167,38 @@ describe("normalizeFlashcardLlmResponse", () => {
     expect(response.meanings).toEqual([]);
   });
 
+  it("rejects a phrase whose example does not contain the exact phrase", () => {
+    const cangRequest: FlashcardLlmRequest = {
+      character: "苍",
+      pronunciation: "cāng",
+    };
+
+    const response = normalizeFlashcardLlmResponse(
+      {
+        meanings: [
+          {
+            definition: "灰白色",
+            phrases: [
+              {
+                phrase: "苍老",
+                pinyin: "cāng lǎo",
+                example: "爷爷虽然头发苍白，但精神很好。",
+              },
+              {
+                phrase: "苍白",
+                pinyin: "cāng bái",
+                example: "他生病了，脸色很苍白。",
+              },
+            ],
+          },
+        ],
+      },
+      cangRequest
+    );
+
+    expect(response.meanings).toEqual([]);
+  });
+
   it("accepts examples longer than 15 chars when within 30-char limit", () => {
     const longExampleRequest: FlashcardLlmRequest = {
       character: "假",
