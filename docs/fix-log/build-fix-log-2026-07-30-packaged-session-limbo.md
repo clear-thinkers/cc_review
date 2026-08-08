@@ -123,3 +123,92 @@ remain visibly surfaced, not silently overwritten.
   existing §10 pattern; no convention changed.
 - 0_PRODUCT_ROADMAP.md: no -- bug fix within an already-shipped feature
   (item H, Save & resume test session progress), not a scope change.
+
+---
+
+## Retry Attempt — 2026-08-08
+
+### Why the Prior Attempt Failed
+
+It didn't fail so much as it was scoped narrower than the actual defect: the
+2026-07-30 fix corrected the client-side symptom (the notice-clobbering bug)
+and repaired the one reported incident's data, but explicitly deferred the
+deeper root cause -- *why* the JWT resolves to the parent's identity during
+what should be a child-driven session. That root cause was still live, so
+the same misattribution recurred.
+
+### Revised Root Cause
+
+Same as before: `record_quiz_session` has no role gate and silently
+succeeds under whichever identity the JWT resolves to at call time. A second
+incident was found in the same family (`d7ee29e1-8666-49fb-9b71-603913595a18`):
+quiz session `w_793808c5_1785886010797` (2026-08-04T23:26:50Z, 8 grades, 32
+coins) was recorded under the parent's `user_id` instead of the child's.
+
+This instance differed from the first in a way worth recording: at
+investigation time there were no leftover `review_session_progress` rows
+anywhere in the system, and none of the 19 currently-open (uncompleted)
+packaged sessions in that family could be conclusively matched to the 8
+graded characters (best match was a partial 5/8 overlap with session "2.1";
+the other 3 graded characters weren't in "2.1"'s target list, and content
+for the overlapping targets had since been edited, making retroactive
+verification unreliable). Separately, the child successfully completed two
+other sessions ("2.2" and "复习") the next day (2026-08-05), which is
+consistent with the family retrying and succeeding under the correct
+identity rather than the original attempt ever resolving itself -- this is
+also why the user reported "I no longer see the in-limbo session": nothing
+was left visibly stuck in the UI, only the orphaned parent-owned
+`quiz_sessions` row and its misattributed coins remained.
+
+Given the ambiguity, this repair was intentionally scoped to **only** the
+`quiz_sessions` ownership + wallet rebalance for the one identified orphaned
+row -- no `review_test_sessions` or `review_session_progress` rows were
+touched, since none could be reliably tied to this specific record. Marking
+an unrelated packaged session "complete" on a guess would have hidden its
+other un-reviewed characters from the child.
+
+### Changes Applied
+
+- No code changes this round -- the notice-clobbering fix from the prior
+  attempt already covers the client-side symptom; this recurrence is a data
+  incident, not a new code defect.
+- Applied a scoped one-off repair to prod: reattributed `quiz_sessions` row
+  `w_793808c5_1785886010797` and its 32 coins from the parent
+  (`9f878502-9e97-4bfe-aabd-8320692a4a31`) to the child
+  (`55793185-3e1a-4efe-ab8d-8fc73e773901`). Verified post-repair: the quiz
+  session's `user_id` is the child, and both wallets rebalanced correctly
+  (the parent's wallet netted back to its pre-incident value since the
+  original bug's erroneous +32 credit and this repair's -32 correction
+  cancelled out; the child gained +32 on top of her normal activity in the
+  interim). SQL saved at
+  `supabase/manual/2026-08-08-quiz-session-w_793808c5-reattribution.sql`.
+  Did not reuse the existing `generate-packaged-session-reattribution-fix.ts`
+  script, since it always stamps a specific packaged session's
+  `completed_at` and deletes its progress row -- neither applies here, and
+  forcing a fake `--session-id` through it would have produced misleading
+  generated-SQL comments claiming to touch a packaged session that isn't
+  actually implicated.
+
+### Architectural Impact
+
+None -- data-only repair, no schema/RLS/code changes.
+
+### Preventative Rule
+
+The underlying identity-resolution root cause (flagged but deferred in the
+original attempt) remains open and is the actual preventative fix needed:
+until `record_quiz_session` and the broader completion flow can guarantee
+the JWT's `user_id`/`role` claims reflect the profile the UI is actually
+displaying (see the original Context section's note on shared
+`auth.users.app_metadata` across concurrent device/profile switches), this
+class of incident will keep recurring and each instance will need to be
+found and repaired manually. Recommend prioritizing that investigation
+before the next recurrence rather than continuing to patch data after the
+fact.
+
+### Docs Updated
+
+- AI_CONTRACT.md: no -- no hard-stop or scope-boundary rule changed.
+- 0_ARCHITECTURE.md: no -- no schema, RLS, or system-guarantee change.
+- 0_BUILD_CONVENTIONS.md: no -- no new script or convention introduced.
+- 0_PRODUCT_ROADMAP.md: no -- data repair, not a scope change.
