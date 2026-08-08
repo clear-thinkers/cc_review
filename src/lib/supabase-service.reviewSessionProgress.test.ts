@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { makeFakeAccessToken } from "./testHelpers/fakeJwt";
 
 const { getSessionMock, fromMock, rpcMock } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
@@ -27,6 +28,7 @@ function mockSession() {
   getSessionMock.mockResolvedValue({
     data: {
       session: {
+        access_token: makeFakeAccessToken({ app_metadata: { family_id: "family-1", user_id: "user-1" } }),
         user: {
           id: "auth-user-1",
           app_metadata: {
@@ -43,6 +45,51 @@ describe("supabase-service review session progress", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSession();
+  });
+
+  it("resolves user_id/family_id from the access token's own claims, not the stale session.user.app_metadata (regression: packaged-session-limbo autosave RLS failure)", async () => {
+    // session.user.app_metadata reflects the auth.users DB row, which
+    // session-scoped profile claims (2026-08-08) stopped keeping in sync
+    // with the active Layer 2 profile -- it can be frozen showing a
+    // DIFFERENT profile (e.g. the parent) than the one actually active (a
+    // child), which is exactly what caused a live RLS rejection on this
+    // exact insert. The access token's own app_metadata claim (what Postgres
+    // RLS reads server-side) must be the source of truth instead.
+    getSessionMock.mockResolvedValue({
+      data: {
+        session: {
+          access_token: makeFakeAccessToken({
+            app_metadata: { family_id: "family-1", user_id: "child-1" },
+          }),
+          user: {
+            id: "auth-user-1",
+            // Stale: frozen at the parent's identity from before the
+            // session-scoped-claims migration, even though a child is the
+            // one actually playing per the access token above.
+            app_metadata: { family_id: "family-1", user_id: "parent-1" },
+          },
+        },
+      },
+    });
+
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    fromMock.mockImplementation((table: string) => {
+      if (table === "review_session_progress") {
+        return { upsert };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    await saveReviewSessionProgress({
+      clientSessionKey: "session-key-1",
+      sourceType: "packaged",
+      packagedSessionId: "review-test-session-1",
+      progressData: {},
+    });
+
+    const [row] = upsert.mock.calls[0];
+    expect(row.user_id).toBe("child-1");
+    expect(row.family_id).toBe("family-1");
   });
 
   it("upserts progress on save with the (user_id, client_session_key) conflict target", async () => {

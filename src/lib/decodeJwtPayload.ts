@@ -8,18 +8,27 @@
  * session-scoped profile claims replaces -- see
  * docs/feature-specs/2026-08-08-session-scoped-profile-claims.md.
  */
+// Uses atob/TextDecoder rather than Node's Buffer -- this runs both
+// server-side (pin-verify, update-avatar routes) and client-side
+// (supabase-service.ts's getSessionMetadata, in the browser), and atob is
+// the one base64 primitive both environments share.
+function base64UrlDecodeToString(segment: string): string {
+  const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
 export function decodeJwtPayload(token: string): Record<string, unknown> {
   const parts = token.split(".");
   if (parts.length !== 3) {
     throw new Error("decodeJwtPayload: malformed token");
   }
 
-  const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
-
   let json: string;
   try {
-    json = Buffer.from(padded, "base64").toString("utf8");
+    json = base64UrlDecodeToString(parts[1]);
   } catch {
     throw new Error("decodeJwtPayload: payload is not valid base64");
   }
@@ -50,4 +59,19 @@ export function getJwtAppMetadataUserId(token: string): string | undefined {
   }
   const userId = (appMetadata as Record<string, unknown>).user_id;
   return typeof userId === "string" && userId ? userId : undefined;
+}
+
+// Returns the token's own app_metadata claim -- the same claim
+// current_family_id()/current_user_id() read server-side via
+// request.jwt.claims. Deliberately NOT the same thing as the Supabase JS
+// client's `session.user.app_metadata`: that field is populated from the
+// /token response body's `user` object, i.e. the auth.users DB row, which
+// session-scoped profile claims (2026-08-08) stopped keeping in sync with
+// the active Layer 2 profile -- it is frozen at whatever it was before that
+// migration and must never be used to resolve the CURRENT family_id/user_id.
+export function getJwtAppMetadata(token: string): Record<string, unknown> | undefined {
+  const appMetadata = decodeJwtPayload(token).app_metadata;
+  return appMetadata && typeof appMetadata === "object"
+    ? (appMetadata as Record<string, unknown>)
+    : undefined;
 }

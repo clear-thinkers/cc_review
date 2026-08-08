@@ -843,10 +843,21 @@ type VocabPhraseCandidateRow = {
   vocabPhraseId: string;
 };
 
-function pickRandomEligibleExample(phrase: VocabPhrase): string | null {
-  const eligible = phrase.examples.filter(
+function eligibleVocabPhraseExamples(phrase: VocabPhrase) {
+  return phrase.examples.filter(
     (example) => example.includeInFillTest && example.zh.includes(phrase.phrase)
   );
+}
+
+// Exported so callers that only need a ready/not-ready check (e.g. the Due
+// Review "quiz-ready" count) don't have to duplicate this eligibility rule
+// or pull in the full round-building path just to count.
+export function isVocabPhraseFillTestReady(phrase: VocabPhrase): boolean {
+  return eligibleVocabPhraseExamples(phrase).length > 0;
+}
+
+function pickRandomEligibleExample(phrase: VocabPhrase): string | null {
+  const eligible = eligibleVocabPhraseExamples(phrase);
   if (eligible.length === 0) {
     return null;
   }

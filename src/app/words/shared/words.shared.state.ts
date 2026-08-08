@@ -68,6 +68,7 @@ import {
   buildDueReviewAutosavePayload,
   buildFillTestFromSavedContent,
   buildFillTestPlanForVocabPhrases,
+  isVocabPhraseFillTestReady,
   wrapVocabPhraseRoundAsQuizWord,
   applyAdminMeaningEdit,
   cloneFillTest,
@@ -648,11 +649,18 @@ const gradeLabels = getGradeLabels(str);
   const reviewTestSessionRows = useMemo(() => {
     return reviewTestSessions.map((sessionItem) => {
       const runtime = reviewTestSessionRuntimeById.get(sessionItem.id) ?? null;
+      // Packaged targets can be characters or vocab phrases (see
+      // buildReviewTestSessionRuntime) -- both count toward the total and
+      // toward readiness, or a phrase-only session always reads as 0/0 and
+      // its Start button stays disabled even when its phrases are fully
+      // quiz-ready.
+      const readyPhraseCount =
+        runtime?.vocabPhrases.filter(isVocabPhraseFillTestReady).length ?? 0;
       return {
         session: sessionItem,
         runtime,
-        characterCount: runtime?.orderedWords.length ?? 0,
-        quizReadyCount: runtime?.quizWords.length ?? 0,
+        characterCount: (runtime?.orderedWords.length ?? 0) + (runtime?.vocabPhrases.length ?? 0),
+        quizReadyCount: (runtime?.quizWords.length ?? 0) + readyPhraseCount,
       };
     });
   }, [reviewTestSessionRuntimeById, reviewTestSessions]);
@@ -3366,7 +3374,18 @@ const gradeLabels = getGradeLabels(str);
   }
 
   function openReviewTestSession(sessionId: string) {
-    router.push(`/words/review/flashcard?reviewTestSessionId=${encodeURIComponent(sessionId)}`);
+    // Vocab phrases have no flashcard entity -- FlashcardReviewSection only
+    // ever renders `words` rows (see orderedWords, populated exclusively
+    // from character targets in buildReviewTestSessionRuntime). A
+    // phrase-only packaged session therefore has an unavoidably empty
+    // flashcard queue; routing it through the flashcard phase first trips
+    // the "orderedWords.length === 0" empty-session guard there and bounces
+    // the child straight back out. Skip directly to the fill-test phase
+    // when the session has no character targets to flashcard-review.
+    const runtime = reviewTestSessionRuntimeById.get(sessionId);
+    const hasCharacterTargets = (runtime?.orderedWords.length ?? 0) > 0;
+    const path = hasCharacterTargets ? "/words/review/flashcard" : "/words/review/fill-test";
+    router.push(`${path}?reviewTestSessionId=${encodeURIComponent(sessionId)}`);
   }
 
   function continueReviewTestSessionToQuiz() {
@@ -3592,7 +3611,16 @@ const gradeLabels = getGradeLabels(str);
         return;
       }
 
-      if (activeReviewTestSessionRuntime.quizWords.length === 0) {
+      // Coarse pre-check only -- a session with packaged phrase targets but
+      // no eligible examples still passes here and is caught later, either
+      // by resolvePackagedReviewResume's "empty" status (resume path) or by
+      // the combinedQuizWords.length === 0 check below (fresh-plan path).
+      // Checking quizWords alone would wrongly redirect a phrase-only
+      // session away before either of those checks ever runs.
+      if (
+        activeReviewTestSessionRuntime.quizWords.length === 0 &&
+        activeReviewTestSessionRuntime.vocabPhrases.length === 0
+      ) {
         router.replace("/words/review?reviewTestSessionStatus=no_quiz_ready");
         return;
       }

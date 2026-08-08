@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { makeFakeAccessToken } from "./testHelpers/fakeJwt";
 
 const { getSessionMock, fromMock, rpcMock } = vi.hoisted(() => ({
   getSessionMock: vi.fn(),
@@ -28,6 +29,7 @@ function mockSession() {
   getSessionMock.mockResolvedValue({
     data: {
       session: {
+        access_token: makeFakeAccessToken({ app_metadata: { family_id: "family-1", user_id: "user-1" } }),
         user: {
           id: "auth-user-1",
           app_metadata: {

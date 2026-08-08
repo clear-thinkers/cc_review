@@ -8,6 +8,7 @@ import {
   buildFillTestPlanForVocabPhrases,
   filterPausedSessionsForViewer,
   getPausedSessionRemainingCount,
+  isVocabPhraseFillTestReady,
   isVocabPhraseRoundQuizWord,
   renderPhraseWithPinyin,
   renderSentenceWithPinyin,
@@ -356,6 +357,23 @@ describe("buildFillTestPlanForVocabPhrases", () => {
     const plan = buildFillTestPlanForVocabPhrases([]);
     expect(plan.quizPhrases).toEqual([]);
     expect(plan.skippedPhrases).toEqual([]);
+  });
+});
+
+describe("isVocabPhraseFillTestReady", () => {
+  it("is true when at least one example is fill-test-eligible", () => {
+    const phrase = makeVocabPhrase("p1", "谢谢", ["谢谢你。"]);
+    expect(isVocabPhraseFillTestReady(phrase)).toBe(true);
+  });
+
+  it("is false when the phrase has no examples", () => {
+    const phrase = makeVocabPhrase("p2", "对不起", []);
+    expect(isVocabPhraseFillTestReady(phrase)).toBe(false);
+  });
+
+  it("is false when every example is excluded from fill-test", () => {
+    const phrase = makeVocabPhrase("p3", "没关系", ["没关系。"], { includeInFillTest: false });
+    expect(isVocabPhraseFillTestReady(phrase)).toBe(false);
   });
 });
 

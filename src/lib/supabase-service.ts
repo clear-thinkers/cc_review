@@ -9,6 +9,7 @@
  */
 
 import { supabase } from "./supabaseClient";
+import { getJwtAppMetadata } from "./decodeJwtPayload";
 import type { Word, VocabPhrase, VocabPhraseExample } from "./types";
 import type { FlashcardLlmResponse } from "./flashcardLlm";
 import type { QuizSession } from "./quiz.types";
@@ -76,7 +77,16 @@ async function getSessionMetadata(): Promise<SessionMetadata> {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session) throw new Error("No active Supabase session");
-  const meta = session.user.app_metadata;
+  // Deliberately NOT session.user.app_metadata -- that field comes from the
+  // auth.users DB row (GoTrue's /token response `user` object), which
+  // session-scoped profile claims (2026-08-08) stopped writing on every PIN
+  // switch. It is frozen at whatever it was before that migration and does
+  // not reflect the currently active Layer 2 profile. The access token's OWN
+  // app_metadata claim is what the custom_access_token_hook keeps
+  // session-scoped and correct -- the same claim Postgres RLS reads via
+  // current_family_id()/current_user_id(). See
+  // docs/fix-log/build-fix-log-2026-07-30-packaged-session-limbo.md.
+  const meta = getJwtAppMetadata(session.access_token);
   if (!meta?.family_id || !meta?.user_id) {
     throw new Error("JWT missing family_id or user_id in app_metadata");
   }
