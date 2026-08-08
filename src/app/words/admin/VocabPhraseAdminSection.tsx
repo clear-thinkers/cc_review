@@ -1,25 +1,41 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/app/shared/locale";
 import { supabase } from "@/lib/supabaseClient";
 import {
-  addVocabPhrase,
   appendTargetsToReviewTestSession,
   assignVocabPhraseLessonTags,
   createReviewTestSession,
   deleteVocabPhrase,
+  getVocabPhraseLessonTagsForFamily,
   listReviewTestSessions,
   listVocabPhrases,
   updateVocabPhrase,
 } from "@/lib/supabase-service";
 import type { ReviewTestSession, ReviewTestSessionTargetDraft } from "@/lib/reviewTestSession.types";
 import type { VocabPhrase, VocabPhraseExample } from "@/lib/types";
+import type { VocabPhraseLessonTagsMap } from "@/lib/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
-import { isValidPhraseLength } from "../add/addIngestion";
 import TagCascadePicker from "../shared/TagCascadePicker";
 import { taggingStrings } from "../shared/tagging.strings";
 import { renderPhraseWithPinyin, renderSentenceWithPinyin } from "../shared/words.shared.utils";
+import {
+  getAllTagFilterOptionIds,
+  hasActivePartialTagFilter,
+  matchesPartialTagFilter,
+  matchesSelectedTagFilter,
+  toggleTagFilterId,
+  type PartialTagFilterSelection,
+} from "../shared/tagFilter.utils";
+import {
+  allSelectedExamplesIncluded,
+  resolveBatchPhraseTargets,
+  resolveExamplePinyinRefreshIndices,
+  vocabPhraseHasContent,
+  vocabPhraseMissingExamplePinyin,
+  type BatchPhraseScope,
+} from "./vocabPhraseAdmin.utils";
 
 type GenerateResponse = {
   meaning_zh: string;
@@ -121,11 +137,16 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
   const sharedActions = str.admin.table.actionButtons;
 
   const [phrases, setPhrases] = useState<VocabPhrase[]>([]);
+  const [phraseTagsMap, setPhraseTagsMap] = useState<VocabPhraseLessonTagsMap>(new Map());
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [newPhraseInput, setNewPhraseInput] = useState("");
-  const [addingPhrase, setAddingPhrase] = useState(false);
+  const [filterSelectedTagIds, setFilterSelectedTagIds] = useState<string[]>([]);
+  const [filterTagTextbooks, setFilterTagTextbooks] = useState<string[]>([]);
+  const [filterTagGrades, setFilterTagGrades] = useState<string[]>([]);
+  const [filterTagUnits, setFilterTagUnits] = useState<string[]>([]);
+  const [filterTagLessons, setFilterTagLessons] = useState<string[]>([]);
+  const [filterSectionOpen, setFilterSectionOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [tagSectionOpen, setTagSectionOpen] = useState(false);
@@ -134,6 +155,12 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
   const [existingSessionId, setExistingSessionId] = useState<string>("");
   const [newSessionName, setNewSessionName] = useState("");
   const [packaging, setPackaging] = useState(false);
+
+  const [openBatchMenu, setOpenBatchMenu] = useState<"content" | "pinyin" | null>(null);
+  const [batchWarningKind, setBatchWarningKind] = useState<"content_all" | "pinyin_all" | null>(null);
+  const [batchRunningKind, setBatchRunningKind] = useState<"content" | "pinyin" | null>(null);
+  const [batchProgressText, setBatchProgressText] = useState<string | null>(null);
+  const [batchFillTestBusy, setBatchFillTestBusy] = useState(false);
 
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [draftMeaningZh, setDraftMeaningZh] = useState("");
@@ -144,9 +171,14 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [phraseRows, sessions] = await Promise.all([listVocabPhrases(), listReviewTestSessions()]);
+      const [phraseRows, sessions, tagsMap] = await Promise.all([
+        listVocabPhrases(),
+        listReviewTestSessions(),
+        getVocabPhraseLessonTagsForFamily(),
+      ]);
       setPhrases(phraseRows);
       setReviewTestSessions(sessions);
+      setPhraseTagsMap(tagsMap);
     } catch {
       setNotice(phraseStr.generateError);
     } finally {
@@ -159,7 +191,104 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
     void refresh();
   }, [refresh]);
 
-  const visiblePhrases = phrases.filter((phrase) => phrase.phrase.includes(searchQuery.trim()));
+  // Extract unique tags from phraseTagsMap for filter UI
+  const availableTagsWithIds = useMemo(() => {
+    const tagMap = new Map<string, { id: string; textbookName: string; grade: string; unit: string; lesson: string }>();
+    phraseTagsMap.forEach((tags) => {
+      tags.forEach((tag) => {
+        const key = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+        if (!tagMap.has(key)) {
+          tagMap.set(key, {
+            id: tag.lessonTagId,
+            textbookName: tag.textbookName,
+            grade: tag.grade,
+            unit: tag.unit,
+            lesson: tag.lesson,
+          });
+        }
+      });
+    });
+    return Array.from(tagMap.values()).sort((a, b) =>
+      `${a.textbookName}${a.grade}${a.unit}${a.lesson}`.localeCompare(
+        `${b.textbookName}${b.grade}${b.unit}${b.lesson}`,
+        "zh-Hans-CN"
+      )
+    );
+  }, [phraseTagsMap]);
+
+  // Cascade options for partial tag filter
+  const partialFilterTextbookOptions = useMemo(
+    () => Array.from(new Set(availableTagsWithIds.map((t) => t.textbookName))),
+    [availableTagsWithIds]
+  );
+  const partialFilterGradeOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          availableTagsWithIds
+            .filter((t) => filterTagTextbooks.length === 0 || filterTagTextbooks.includes(t.textbookName))
+            .map((t) => t.grade)
+        )
+      ),
+    [availableTagsWithIds, filterTagTextbooks]
+  );
+  const partialFilterUnitOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          availableTagsWithIds
+            .filter(
+              (t) =>
+                (filterTagTextbooks.length === 0 || filterTagTextbooks.includes(t.textbookName)) &&
+                (filterTagGrades.length === 0 || filterTagGrades.includes(t.grade))
+            )
+            .map((t) => t.unit)
+        )
+      ),
+    [availableTagsWithIds, filterTagTextbooks, filterTagGrades]
+  );
+  const partialFilterLessonOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          availableTagsWithIds
+            .filter(
+              (t) =>
+                (filterTagTextbooks.length === 0 || filterTagTextbooks.includes(t.textbookName)) &&
+                (filterTagGrades.length === 0 || filterTagGrades.includes(t.grade)) &&
+                (filterTagUnits.length === 0 || filterTagUnits.includes(t.unit))
+            )
+            .map((t) => t.lesson)
+        )
+      ),
+    [availableTagsWithIds, filterTagTextbooks, filterTagGrades, filterTagUnits]
+  );
+
+  const partialTagFilterSelection: PartialTagFilterSelection = {
+    textbooks: filterTagTextbooks,
+    grades: filterTagGrades,
+    units: filterTagUnits,
+    lessons: filterTagLessons,
+  };
+  const isPartialTagFilterActive = hasActivePartialTagFilter(partialTagFilterSelection);
+
+  const visiblePhrases = phrases.filter((phrase) => {
+    if (!phrase.phrase.includes(searchQuery.trim())) return false;
+    const phraseTags = phraseTagsMap.get(phrase.id) ?? [];
+    const phraseTagIds = new Set(phraseTags.map((t) => t.lessonTagId));
+    if (!matchesSelectedTagFilter(phraseTagIds, filterSelectedTagIds)) return false;
+    if (!matchesPartialTagFilter(phraseTags, partialTagFilterSelection)) return false;
+    return true;
+  });
+
+  function clearAllFilters(): void {
+    setSearchQuery("");
+    setFilterSelectedTagIds([]);
+    setFilterTagTextbooks([]);
+    setFilterTagGrades([]);
+    setFilterTagUnits([]);
+    setFilterTagLessons([]);
+  }
 
   function updatePhraseInState(id: string, patch: Partial<VocabPhrase>) {
     setPhrases((previous) => previous.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -172,27 +301,209 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
     setDraftExampleZh("");
   }
 
-  async function handleAddPhrase() {
-    const trimmed = newPhraseInput.trim();
-    if (!isValidPhraseLength(trimmed)) {
-      setNotice(phraseStr.invalidLength);
-      return;
-    }
-    if (phrases.some((phrase) => phrase.phrase === trimmed)) {
-      setNotice(phraseStr.duplicatePhrase);
+  // ─── Selection / batch action toolbar ──────────────────────────────────────
+
+  const filteredPhraseIdSet = useMemo(() => new Set(visiblePhrases.map((p) => p.id)), [visiblePhrases]);
+  const allFilteredSelected = visiblePhrases.length > 0 && visiblePhrases.every((p) => selectedIds.has(p.id));
+  const selectedPhraseList = useMemo(
+    () => phrases.filter((p) => selectedIds.has(p.id)),
+    [phrases, selectedIds]
+  );
+  const selectedExamplesAllIncluded = allSelectedExamplesIncluded(selectedPhraseList);
+  const hasActiveFilter =
+    searchQuery.trim() !== "" || filterSelectedTagIds.length > 0 || isPartialTagFilterActive;
+  const BATCH_CONCURRENCY = 3;
+
+  function handleSelectFiltered() {
+    setSelectedIds(new Set(visiblePhrases.map((p) => p.id)));
+  }
+
+  function handleClearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function runBatchContentGeneration(scope: BatchPhraseScope) {
+    const targets = resolveBatchPhraseTargets(phrases, scope, {
+      filteredIds: filteredPhraseIdSet,
+      selectedIds,
+      isMissing: (phrase) => !vocabPhraseHasContent(phrase),
+    });
+    if (targets.length === 0) {
+      setNotice(phraseStr.noBatchContentTargets);
       return;
     }
 
-    setAddingPhrase(true);
+    setBatchRunningKind("content");
+    setBatchProgressText(null);
+    setNotice(null);
+    let generated = 0;
+    let failed = 0;
+    const total = targets.length;
+
+    try {
+      for (let start = 0; start < total; start += BATCH_CONCURRENCY) {
+        const end = Math.min(start + BATCH_CONCURRENCY, total);
+        setBatchProgressText(
+          str.admin.preloadingBatchProgress
+            .replace("{from}", String(start + 1))
+            .replace("{to}", String(end))
+            .replace("{total}", String(total))
+        );
+        const results = await Promise.allSettled(
+          targets.slice(start, end).map(async (phrase) => {
+            const result = await requestVocabPhraseGeneration(phrase.phrase, []);
+            const newExample: VocabPhraseExample = {
+              zh: result.example,
+              pinyin: result.example_pinyin,
+              includeInFillTest: true,
+            };
+            const patch = {
+              pinyin: result.pinyin,
+              meaningZh: result.meaning_zh,
+              meaningEn: result.meaning_en,
+              examples: [newExample],
+            };
+            await updateVocabPhrase(phrase.id, patch);
+            return { phraseId: phrase.id, patch };
+          })
+        );
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            generated += 1;
+            updatePhraseInState(result.value.phraseId, result.value.patch);
+          } else {
+            failed += 1;
+          }
+        }
+      }
+    } finally {
+      setBatchRunningKind(null);
+      setBatchProgressText(null);
+    }
+
+    setNotice(
+      str.admin.preloadResult
+        .replace("{generated}", String(generated))
+        .replace("{skipped}", "0")
+        .replace("{failed}", String(failed))
+    );
+  }
+
+  async function runBatchPinyinRefresh(scope: BatchPhraseScope) {
+    const resolved = resolveBatchPhraseTargets(phrases, scope, {
+      filteredIds: filteredPhraseIdSet,
+      selectedIds,
+      isMissing: vocabPhraseMissingExamplePinyin,
+    });
+    const targets = resolved.filter((phrase) => phrase.examples.length > 0);
+    if (targets.length === 0) {
+      setNotice(phraseStr.noBatchPinyinTargets);
+      return;
+    }
+
+    setBatchRunningKind("pinyin");
+    setBatchProgressText(null);
+    setNotice(null);
+    let refreshed = 0;
+    let failed = 0;
+    const mode: "missing_only" | "refresh" = scope === "missing_only" ? "missing_only" : "refresh";
+    const total = targets.length;
+
+    try {
+      for (let start = 0; start < total; start += BATCH_CONCURRENCY) {
+        const end = Math.min(start + BATCH_CONCURRENCY, total);
+        setBatchProgressText(
+          phraseStr.pinyinBatchProgress
+            .replace("{current}", String(end))
+            .replace("{total}", String(total))
+            .replace("{phrase}", targets[end - 1]?.phrase ?? "")
+        );
+        const results = await Promise.allSettled(
+          targets.slice(start, end).map(async (phrase) => {
+            const indices = resolveExamplePinyinRefreshIndices(phrase.examples, mode);
+            if (indices.length === 0) {
+              return { phraseId: phrase.id, examples: phrase.examples, changed: false };
+            }
+            const updatedExamples = [...phrase.examples];
+            for (const index of indices) {
+              const pinyin = await requestExamplePinyin(updatedExamples[index].zh);
+              updatedExamples[index] = { ...updatedExamples[index], pinyin };
+            }
+            await updateVocabPhrase(phrase.id, { examples: updatedExamples });
+            return { phraseId: phrase.id, examples: updatedExamples, changed: true };
+          })
+        );
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            if (result.value.changed) {
+              updatePhraseInState(result.value.phraseId, { examples: result.value.examples });
+            }
+            refreshed += 1;
+          } else {
+            failed += 1;
+          }
+        }
+      }
+    } finally {
+      setBatchRunningKind(null);
+      setBatchProgressText(null);
+    }
+
+    setNotice(
+      str.admin.messages.pinyinRefreshFinished
+        .replace("{refreshed}", String(refreshed))
+        .replace("{failed}", String(failed))
+    );
+  }
+
+  function handleBatchContentClick(scope: BatchPhraseScope) {
+    setOpenBatchMenu(null);
+    if (scope === "all") {
+      setBatchWarningKind("content_all");
+      return;
+    }
+    void runBatchContentGeneration(scope);
+  }
+
+  function handleBatchPinyinClick(scope: BatchPhraseScope) {
+    setOpenBatchMenu(null);
+    if (scope === "all") {
+      setBatchWarningKind("pinyin_all");
+      return;
+    }
+    void runBatchPinyinRefresh(scope);
+  }
+
+  function handleConfirmBatchWarning() {
+    const kind = batchWarningKind;
+    setBatchWarningKind(null);
+    if (kind === "content_all") void runBatchContentGeneration("all");
+    if (kind === "pinyin_all") void runBatchPinyinRefresh("all");
+  }
+
+  async function handleBatchFillTestToggle() {
+    if (selectedPhraseList.length === 0) return;
+    const nextInclude = !selectedExamplesAllIncluded;
+    setBatchFillTestBusy(true);
     setNotice(null);
     try {
-      const created = await addVocabPhrase(trimmed);
-      setPhrases((previous) => [created, ...previous]);
-      setNewPhraseInput("");
+      let updated = 0;
+      for (const phrase of selectedPhraseList) {
+        if (phrase.examples.length === 0) continue;
+        const nextExamples = phrase.examples.map((example) => ({ ...example, includeInFillTest: nextInclude }));
+        await updateVocabPhrase(phrase.id, { examples: nextExamples });
+        updatePhraseInState(phrase.id, { examples: nextExamples });
+        updated += 1;
+      }
+      setNotice(
+        str.admin.messages.batchFillTestToggleSuccess
+          .replace("{updated}", String(updated))
+          .replace("{state}", nextInclude ? sharedActions.fillTestOn : sharedActions.fillTestOff)
+      );
     } catch {
       setNotice(phraseStr.generateError);
     } finally {
-      setAddingPhrase(false);
+      setBatchFillTestBusy(false);
     }
   }
 
@@ -442,54 +753,439 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
     }
   }
 
+  const toolbarButtonBaseClass =
+    "admin-toolbar-button inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium leading-none disabled:opacity-50";
+  const toolbarSecondaryButtonClass = `${toolbarButtonBaseClass} btn-secondary`;
+  const toolbarNeutralButtonClass = `${toolbarButtonBaseClass} btn-neutral`;
+  const toolbarCautionButtonClass = `${toolbarButtonBaseClass} btn-caution`;
+  const toolbarMenuButtonClass =
+    "flex w-full items-start rounded-md px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50";
+  const toolbarFillTestButtonClass =
+    "admin-toolbar-button rounded-md border px-3 py-1.5 text-xs font-medium leading-none btn-toggle-on disabled:opacity-50";
+  const toolbarBusy = loading || batchRunningKind !== null || batchFillTestBusy || packaging;
+
   return (
     <div className="space-y-3">
       {notice ? <p className="text-sm text-blue-700">{notice}</p> : null}
 
-      <div className="flex flex-wrap gap-2">
-        <input
-          className="flex-1 rounded-md border px-3 py-2 text-sm"
-          placeholder={phraseStr.searchPlaceholder}
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <input
-          className="flex-1 rounded-md border px-3 py-2 text-sm"
-          placeholder={phraseStr.newPhrasePlaceholder}
-          value={newPhraseInput}
-          onChange={(event) => setNewPhraseInput(event.target.value)}
-          disabled={addingPhrase}
-        />
-        <button
-          type="button"
-          className="btn-primary rounded-md border-2 px-4 py-2 text-sm disabled:opacity-50"
-          onClick={handleAddPhrase}
-          disabled={addingPhrase || !newPhraseInput.trim()}
-        >
-          {phraseStr.addButton}
-        </button>
-      </div>
-
-      {selectedIds.size > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-gray-50 p-2 text-sm">
-          <span>{phraseStr.selectionCount.replace("{count}", String(selectedIds.size))}</span>
+      {/* Default Filters Bar */}
+      <div className="rounded-lg border p-4 space-y-3">
+        <div className="flex items-center justify-between">
           <button
             type="button"
-            className="btn-nav rounded-md border-2 px-3 py-1.5 text-sm"
-            onClick={() => setTagSectionOpen((open) => !open)}
+            onClick={() => setFilterSectionOpen((open) => !open)}
+            className="text-sm text-blue-600 underline"
           >
-            {phraseStr.tagSection.title}
+            {str.admin.filters.title}
           </button>
           <button
             type="button"
-            className="btn-nav rounded-md border-2 px-3 py-1.5 text-sm"
-            onClick={() => setPackageSectionOpen((open) => !open)}
+            onClick={clearAllFilters}
+            className="text-xs text-blue-600 underline disabled:opacity-50"
+            disabled={searchQuery.trim() === "" && filterSelectedTagIds.length === 0 && !isPartialTagFilterActive}
           >
-            {str.admin.buttons.addToReviewTestSession}
+            {str.admin.filters.clearButton}
           </button>
+        </div>
+
+        {filterSectionOpen && (
+          <div className="flex flex-wrap items-start gap-12">
+            {/* Phrase Search */}
+            <div className="space-y-1">
+              <label className="block text-xs text-gray-600">{phraseStr.filters.phraseSearchLabel}</label>
+              <input
+                type="text"
+                className="rounded-md border px-2 py-1 text-sm w-full max-w-xs"
+                placeholder={phraseStr.searchPlaceholder}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {/* Tag-related filters: Tags (Cascade) + Filter by Tag Part on same row */}
+            <div className="flex items-start gap-6">
+              {/* Tags Filter */}
+              <div className="space-y-1">
+                <label className="block text-xs text-gray-600">{str.admin.filters.tags.label}</label>
+                <details className="group">
+                  <summary className="cursor-pointer rounded-md border px-2 py-1 text-sm bg-gray-50 hover:bg-gray-100">
+                    {filterSelectedTagIds.length === 0
+                      ? str.admin.filters.tags.placeholder
+                      : str.admin.filters.tags.selectedCount.replace("{count}", String(filterSelectedTagIds.length))}
+                  </summary>
+                  <div className="mt-2 space-y-1 max-h-96 overflow-y-auto border rounded-md p-2 bg-white">
+                    {availableTagsWithIds.length === 0 ? (
+                      <p className="text-xs text-gray-500 py-2">{str.admin.filters.tags.placeholder}</p>
+                    ) : (
+                      <>
+                        <div className="mb-2 flex flex-wrap items-center gap-2 border-b pb-2">
+                          <button
+                            type="button"
+                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-secondary disabled:opacity-50"
+                            onClick={() => setFilterSelectedTagIds(getAllTagFilterOptionIds(availableTagsWithIds))}
+                            disabled={availableTagsWithIds.length === 0}
+                          >
+                            {str.admin.filters.tags.selectAll}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral disabled:opacity-50"
+                            onClick={() => setFilterSelectedTagIds([])}
+                            disabled={filterSelectedTagIds.length === 0}
+                          >
+                            {str.admin.filters.tags.clearAll}
+                          </button>
+                        </div>
+                        {availableTagsWithIds.map((tag) => {
+                          const tagDisplay = `${tag.textbookName} · ${tag.grade} · ${tag.unit} · ${tag.lesson}`;
+                          const isSelected = filterSelectedTagIds.includes(tag.id);
+                          return (
+                            <label key={tag.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) =>
+                                  setFilterSelectedTagIds((prev) => toggleTagFilterId(prev, tag.id, e.target.checked))
+                                }
+                              />
+                              <span>{tagDisplay}</span>
+                            </label>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                </details>
+              </div>
+
+              {/* Partial Tag Filter */}
+              <div className="space-y-2">
+                <label className="block text-xs text-gray-600">{str.admin.filters.partialTag.label}</label>
+                <div className="grid grid-cols-2 gap-2 min-w-[280px]">
+                  {/* Textbook */}
+                  <div className="space-y-0.5">
+                    <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.textbookLabel}</label>
+                    <details className="group">
+                      <summary className="cursor-pointer rounded-md border px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100">
+                        {filterTagTextbooks.length === 0
+                          ? str.admin.filters.partialTag.allOption
+                          : str.admin.filters.partialTag.selectedCount.replace("{count}", String(filterTagTextbooks.length))}
+                      </summary>
+                      <div className="mt-1 space-y-1 max-h-48 overflow-y-auto border rounded-md p-1.5 bg-white z-10 relative">
+                        {partialFilterTextbookOptions.map((tb) => (
+                          <label key={tb} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                            <input
+                              type="checkbox"
+                              checked={filterTagTextbooks.includes(tb)}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...filterTagTextbooks, tb]
+                                  : filterTagTextbooks.filter((x) => x !== tb);
+                                setFilterTagTextbooks(next);
+                                setFilterTagGrades((prev) => prev.filter((g) => partialFilterGradeOptions.includes(g)));
+                                setFilterTagUnits((prev) => prev.filter((u) => partialFilterUnitOptions.includes(u)));
+                                setFilterTagLessons((prev) => prev.filter((l) => partialFilterLessonOptions.includes(l)));
+                              }}
+                            />
+                            <span>{tb}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                  {/* Grade */}
+                  <div className="space-y-0.5">
+                    <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.gradeLabel}</label>
+                    <details className="group">
+                      <summary className="cursor-pointer rounded-md border px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100">
+                        {filterTagGrades.length === 0
+                          ? str.admin.filters.partialTag.allOption
+                          : str.admin.filters.partialTag.selectedCount.replace("{count}", String(filterTagGrades.length))}
+                      </summary>
+                      <div className="mt-1 space-y-1 max-h-48 overflow-y-auto border rounded-md p-1.5 bg-white z-10 relative">
+                        {partialFilterGradeOptions.map((g) => (
+                          <label key={g} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                            <input
+                              type="checkbox"
+                              checked={filterTagGrades.includes(g)}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...filterTagGrades, g]
+                                  : filterTagGrades.filter((x) => x !== g);
+                                setFilterTagGrades(next);
+                                setFilterTagUnits((prev) => prev.filter((u) => partialFilterUnitOptions.includes(u)));
+                                setFilterTagLessons((prev) => prev.filter((l) => partialFilterLessonOptions.includes(l)));
+                              }}
+                            />
+                            <span>{g}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                  {/* Unit */}
+                  <div className="space-y-0.5">
+                    <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.unitLabel}</label>
+                    <details className="group">
+                      <summary className="cursor-pointer rounded-md border px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100">
+                        {filterTagUnits.length === 0
+                          ? str.admin.filters.partialTag.allOption
+                          : str.admin.filters.partialTag.selectedCount.replace("{count}", String(filterTagUnits.length))}
+                      </summary>
+                      <div className="mt-1 space-y-1 max-h-48 overflow-y-auto border rounded-md p-1.5 bg-white z-10 relative">
+                        {partialFilterUnitOptions.map((u) => (
+                          <label key={u} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                            <input
+                              type="checkbox"
+                              checked={filterTagUnits.includes(u)}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...filterTagUnits, u]
+                                  : filterTagUnits.filter((x) => x !== u);
+                                setFilterTagUnits(next);
+                                setFilterTagLessons((prev) => prev.filter((l) => partialFilterLessonOptions.includes(l)));
+                              }}
+                            />
+                            <span>{u}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                  {/* Lesson */}
+                  <div className="space-y-0.5">
+                    <label className="block text-[11px] text-gray-500">{str.admin.filters.partialTag.lessonLabel}</label>
+                    <details className="group">
+                      <summary className="cursor-pointer rounded-md border px-2 py-1 text-xs bg-gray-50 hover:bg-gray-100">
+                        {filterTagLessons.length === 0
+                          ? str.admin.filters.partialTag.allOption
+                          : str.admin.filters.partialTag.selectedCount.replace("{count}", String(filterTagLessons.length))}
+                      </summary>
+                      <div className="mt-1 space-y-1 max-h-48 overflow-y-auto border rounded-md p-1.5 bg-white z-10 relative">
+                        {partialFilterLessonOptions.map((l) => (
+                          <label key={l} className="flex items-center gap-1.5 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded text-xs">
+                            <input
+                              type="checkbox"
+                              checked={filterTagLessons.includes(l)}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...filterTagLessons, l]
+                                  : filterTagLessons.filter((x) => x !== l);
+                                setFilterTagLessons(next);
+                              }}
+                            />
+                            <span>{l}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {!loading && phrases.length > 0 ? (
+        <div className="relative z-20 py-1">
+          <div className="space-y-2 text-sm text-gray-700">
+            <p className="shrink-0">
+              {hasActiveFilter ? (
+                <>
+                  {str.admin.table.summary.filteredLabel}{" "}
+                  <span className="font-semibold text-blue-600">{visiblePhrases.length}</span>
+                </>
+              ) : (
+                str.admin.table.summary.noFiltersApplied
+              )}
+              {str.admin.table.summary.separator}
+              {str.admin.table.summary.selectedLabel}{" "}
+              <span className="font-semibold text-blue-600">{selectedIds.size}</span>
+            </p>
+            <div className="space-y-2">
+              <div className="flex min-h-[2.5rem] flex-wrap items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  className={toolbarSecondaryButtonClass}
+                  disabled={visiblePhrases.length === 0 || toolbarBusy || allFilteredSelected}
+                  onClick={handleSelectFiltered}
+                >
+                  {str.admin.table.selection.selectFiltered.replace("{count}", String(visiblePhrases.length))}
+                </button>
+                <button
+                  type="button"
+                  className={toolbarNeutralButtonClass}
+                  disabled={selectedIds.size === 0 || toolbarBusy}
+                  onClick={handleClearSelection}
+                >
+                  {str.admin.table.selection.clear}
+                </button>
+                <button
+                  type="button"
+                  className={toolbarCautionButtonClass}
+                  disabled={toolbarBusy || phrases.length === 0}
+                  onClick={() => setOpenBatchMenu((previous) => (previous === "content" ? null : "content"))}
+                  title={str.admin.buttonTooltips.preload}
+                >
+                  <span>{batchRunningKind === "content" ? str.admin.buttons.preloading : str.admin.buttons.preload}</span>
+                  {batchRunningKind !== "content" ? <span aria-hidden="true">v</span> : null}
+                </button>
+                <button
+                  type="button"
+                  className={`${toolbarButtonBaseClass} border-purple-300 bg-purple-100 text-purple-700`}
+                  disabled={toolbarBusy || phrases.length === 0}
+                  onClick={() => setOpenBatchMenu((previous) => (previous === "pinyin" ? null : "pinyin"))}
+                  title={str.admin.buttonTooltips.refreshAllPinyin}
+                >
+                  <span>{batchRunningKind === "pinyin" ? str.admin.buttons.refreshingAllPinyin : str.admin.buttons.refreshAllPinyin}</span>
+                  {batchRunningKind !== "pinyin" ? <span aria-hidden="true">v</span> : null}
+                </button>
+                <button
+                  type="button"
+                  className={`${toolbarSecondaryButtonClass} admin-toolbar-button--session`}
+                  disabled={selectedIds.size === 0 || toolbarBusy}
+                  onClick={() => setPackageSectionOpen((open) => !open)}
+                >
+                  <span>{str.admin.buttons.addToReviewTestSession}</span>
+                  <span aria-hidden="true" className="text-sm leading-none">🎯</span>
+                </button>
+                <button
+                  type="button"
+                  className={toolbarFillTestButtonClass}
+                  disabled={selectedIds.size === 0 || toolbarBusy}
+                  onClick={() => void handleBatchFillTestToggle()}
+                  title={
+                    selectedExamplesAllIncluded
+                      ? str.admin.table.actionTooltips.batchFillTestOn
+                      : str.admin.table.actionTooltips.batchFillTestOff
+                  }
+                >
+                  {selectedExamplesAllIncluded ? str.admin.buttons.batchFillTestOff : str.admin.buttons.batchFillTestOn}
+                </button>
+                <button
+                  type="button"
+                  className="btn-nav rounded-md border-2 px-3 py-1.5 text-xs"
+                  disabled={selectedIds.size === 0 || toolbarBusy}
+                  onClick={() => setTagSectionOpen((open) => !open)}
+                >
+                  {phraseStr.tagSection.title}
+                </button>
+              </div>
+              {openBatchMenu === "content" ? (
+                <div className="w-full max-w-sm rounded-md border bg-white p-2 shadow-lg">
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      className={toolbarMenuButtonClass}
+                      onClick={() => handleBatchContentClick("missing_only")}
+                    >
+                      {str.admin.batchMenus.content.missingOnly}
+                    </button>
+                    <button
+                      type="button"
+                      className={toolbarMenuButtonClass}
+                      disabled={phrases.length === 0}
+                      onClick={() => handleBatchContentClick("all")}
+                    >
+                      {str.admin.batchMenus.content.all}
+                    </button>
+                    <button
+                      type="button"
+                      className={toolbarMenuButtonClass}
+                      disabled={visiblePhrases.length === 0}
+                      onClick={() => handleBatchContentClick("filtered")}
+                    >
+                      {str.admin.batchMenus.content.filtered}
+                    </button>
+                    <button
+                      type="button"
+                      className={toolbarMenuButtonClass}
+                      disabled={selectedIds.size === 0}
+                      onClick={() => handleBatchContentClick("selected")}
+                    >
+                      {str.admin.batchMenus.content.selected}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {openBatchMenu === "pinyin" ? (
+                <div className="w-full max-w-sm rounded-md border bg-white p-2 shadow-lg">
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      className={toolbarMenuButtonClass}
+                      onClick={() => handleBatchPinyinClick("missing_only")}
+                    >
+                      {phraseStr.batchMenus.pinyin.missingOnly}
+                    </button>
+                    <button
+                      type="button"
+                      className={toolbarMenuButtonClass}
+                      disabled={phrases.length === 0}
+                      onClick={() => handleBatchPinyinClick("all")}
+                    >
+                      {phraseStr.batchMenus.pinyin.all}
+                    </button>
+                    <button
+                      type="button"
+                      className={toolbarMenuButtonClass}
+                      disabled={visiblePhrases.length === 0}
+                      onClick={() => handleBatchPinyinClick("filtered")}
+                    >
+                      {phraseStr.batchMenus.pinyin.filtered}
+                    </button>
+                    <button
+                      type="button"
+                      className={toolbarMenuButtonClass}
+                      disabled={selectedIds.size === 0}
+                      onClick={() => handleBatchPinyinClick("selected")}
+                    >
+                      {phraseStr.batchMenus.pinyin.selected}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {batchProgressText ? <p className="text-xs text-amber-700">{batchProgressText}</p> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {batchWarningKind ? (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/25 px-4">
+          <div role="dialog" aria-modal="true" className="w-full max-w-md space-y-3 rounded-lg border bg-white p-4 shadow-xl">
+            <h3 className="font-medium">
+              {batchWarningKind === "content_all"
+                ? phraseStr.batchWarningDialogs.contentAll.title
+                : phraseStr.batchWarningDialogs.pinyinAll.title}
+            </h3>
+            <p className="text-sm text-gray-600">
+              {batchWarningKind === "content_all"
+                ? phraseStr.batchWarningDialogs.contentAll.message
+                : phraseStr.batchWarningDialogs.pinyinAll.message}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className={toolbarNeutralButtonClass}
+                onClick={() => setBatchWarningKind(null)}
+              >
+                {batchWarningKind === "content_all"
+                  ? phraseStr.batchWarningDialogs.contentAll.cancelButton
+                  : phraseStr.batchWarningDialogs.pinyinAll.cancelButton}
+              </button>
+              <button
+                type="button"
+                className={toolbarCautionButtonClass}
+                onClick={handleConfirmBatchWarning}
+              >
+                {batchWarningKind === "content_all"
+                  ? phraseStr.batchWarningDialogs.contentAll.confirmButton
+                  : phraseStr.batchWarningDialogs.pinyinAll.confirmButton}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -505,6 +1201,7 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
             createNewConfirm: tagStr.createNewConfirm,
             createNewCancel: tagStr.createNewCancel,
             loadingTextbooks: tagStr.loadingTextbooks,
+            customValueOption: tagStr.customValueOption,
             assignButton: phraseStr.tagSection.title,
             assigning: phraseStr.generating,
           }}
@@ -553,10 +1250,10 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
       ) : visiblePhrases.length === 0 ? (
         <p className="text-sm text-gray-600">{phraseStr.emptyState}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative z-0 overflow-x-auto rounded-md border">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b text-left">
+              <tr className="border-b bg-gray-50 text-left">
                 <th className="p-2" />
                 <th className="p-2">{phraseStr.columns.phrase}</th>
                 <th className="p-2">{phraseStr.columns.meaning}</th>

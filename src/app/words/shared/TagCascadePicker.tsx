@@ -1,19 +1,29 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { createLessonTagIfNew, createTextbook, listLessonTags, listTextbooks } from "@/lib/supabase-service";
 import type { LessonTag, Textbook } from "@/lib/tagging.types";
 
 /**
- * Compact Textbook -> Grade -> Unit -> Lesson tag picker, resolving/creating
- * the underlying lesson_tags row via createLessonTagIfNew and handing its id
- * to onAssign. Reuses the same textbook/lesson-tag services and cascade
- * concept as the character tag section on /words/add (AddSection.tsx), but
- * as a small standalone component with its own local state rather than
- * sharing that page's vm-level addTag* state -- this picker is used in two
- * places (Content Admin's phrase view and /words/add's batch-phrase
- * section) that must not interfere with each other or with the character
- * add form's own tag section.
+ * Compact Textbook -> Grade -> Unit -> Lesson tag picker. Reuses the same
+ * textbook/lesson-tag services and cascade concept as the character tag
+ * section on /words/add (AddSection.tsx), but as a small standalone
+ * component with its own local state rather than sharing that page's
+ * vm-level addTag* state -- this picker is used in multiple places
+ * (Content Admin's phrase view, /words/add's batch-phrase section) that
+ * must not interfere with each other or with the character add form's own
+ * tag section.
+ *
+ * Two modes:
+ * - "immediate" (default): resolves/creates the underlying lesson_tags row
+ *   via createLessonTagIfNew as soon as its own Assign button is clicked,
+ *   handing the id to onAssign. Used where tagging acts on already-persisted
+ *   rows (Content Admin's selected/batch phrase tagging).
+ * - "controlled": no internal Assign button or tag creation -- reports the
+ *   raw in-progress selection via onSelectionChange on every change, and
+ *   lets the caller decide when to resolve/create the tag (e.g. together
+ *   with a form submission, mirroring the character add form's pre-submit
+ *   tag section).
  */
 export type TagCascadePickerStrings = {
   textbookPlaceholder: string;
@@ -25,18 +35,38 @@ export type TagCascadePickerStrings = {
   createNewConfirm: string;
   createNewCancel: string;
   loadingTextbooks: string;
-  assignButton: string;
-  assigning: string;
+  customValueOption: string;
+  assignButton?: string;
+  assigning?: string;
 };
+
+export type TagCascadeSelection = {
+  textbookId: string | null;
+  grade: string;
+  unit: string;
+  lesson: string;
+};
+
+type TagCascadePickerProps =
+  | {
+      strings: TagCascadePickerStrings;
+      mode?: "immediate";
+      onAssign: (lessonTagId: string) => Promise<void>;
+      onSelectionChange?: never;
+    }
+  | {
+      strings: TagCascadePickerStrings;
+      mode: "controlled";
+      onAssign?: never;
+      onSelectionChange: (selection: TagCascadeSelection) => void;
+    };
 
 export default function TagCascadePicker({
   strings,
+  mode = "immediate",
   onAssign,
-}: {
-  strings: TagCascadePickerStrings;
-  onAssign: (lessonTagId: string) => Promise<void>;
-}) {
-  const instanceId = useId();
+  onSelectionChange,
+}: TagCascadePickerProps) {
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [textbooksLoading, setTextbooksLoading] = useState(true);
   const [textbookId, setTextbookId] = useState<string | null>(null);
@@ -48,6 +78,13 @@ export default function TagCascadePicker({
   const [unit, setUnit] = useState("");
   const [lesson, setLesson] = useState("");
   const [assigning, setAssigning] = useState(false);
+
+  const [gradeCreateMode, setGradeCreateMode] = useState(false);
+  const [gradeInputValue, setGradeInputValue] = useState("");
+  const [unitCreateMode, setUnitCreateMode] = useState(false);
+  const [unitInputValue, setUnitInputValue] = useState("");
+  const [lessonCreateMode, setLessonCreateMode] = useState(false);
+  const [lessonInputValue, setLessonInputValue] = useState("");
 
   useEffect(() => {
     listTextbooks()
@@ -64,6 +101,24 @@ export default function TagCascadePicker({
     listLessonTags(textbookId).then(setLessonTags).catch(() => setLessonTags([]));
   }, [textbookId]);
 
+  useEffect(() => {
+    if (mode !== "controlled" || !onSelectionChange) return;
+    onSelectionChange({ textbookId, grade, unit, lesson });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, textbookId, grade, unit, lesson]);
+
+  function resetCascadeBelowTextbook() {
+    setGrade("");
+    setUnit("");
+    setLesson("");
+    setGradeCreateMode(false);
+    setGradeInputValue("");
+    setUnitCreateMode(false);
+    setUnitInputValue("");
+    setLessonCreateMode(false);
+    setLessonInputValue("");
+  }
+
   async function handleCreateTextbook() {
     const trimmed = textbookInputValue.trim();
     if (!trimmed) return;
@@ -74,16 +129,31 @@ export default function TagCascadePicker({
       setTextbookId(created.id);
       setTextbookCreateMode(false);
       setTextbookInputValue("");
-      setGrade("");
-      setUnit("");
-      setLesson("");
+      resetCascadeBelowTextbook();
     } finally {
       setTextbookCreating(false);
     }
   }
 
+  function handleGradeChange(nextGrade: string) {
+    setGrade(nextGrade);
+    setUnit("");
+    setLesson("");
+    setUnitCreateMode(false);
+    setUnitInputValue("");
+    setLessonCreateMode(false);
+    setLessonInputValue("");
+  }
+
+  function handleUnitChange(nextUnit: string) {
+    setUnit(nextUnit);
+    setLesson("");
+    setLessonCreateMode(false);
+    setLessonInputValue("");
+  }
+
   async function handleAssign() {
-    if (!textbookId || !grade.trim() || !unit.trim() || !lesson.trim()) return;
+    if (!onAssign || !textbookId || !grade.trim() || !unit.trim() || !lesson.trim()) return;
     setAssigning(true);
     try {
       const tag = await createLessonTagIfNew(textbookId, grade.trim(), unit.trim(), lesson.trim());
@@ -118,9 +188,7 @@ export default function TagCascadePicker({
                 return;
               }
               setTextbookId(event.target.value || null);
-              setGrade("");
-              setUnit("");
-              setLesson("");
+              resetCascadeBelowTextbook();
             }}
             disabled={textbooksLoading}
           >
@@ -165,70 +233,190 @@ export default function TagCascadePicker({
         )}
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {/* Grade */}
         <div>
           <label className="block text-xs text-gray-500">{strings.gradePlaceholder}</label>
-          <input
-            className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-            list={`${instanceId}-grades`}
-            value={grade}
-            onChange={(event) => {
-              setGrade(event.target.value);
-              setUnit("");
-              setLesson("");
-            }}
-            disabled={!textbookId}
-            placeholder={strings.gradePlaceholder}
-          />
-          <datalist id={`${instanceId}-grades`}>
-            {gradeOptions.map((g) => (
-              <option key={g} value={g} />
-            ))}
-          </datalist>
+          {!gradeCreateMode ? (
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+              value={grade}
+              onChange={(event) => {
+                if (event.target.value === "__custom__") {
+                  setGradeCreateMode(true);
+                  return;
+                }
+                handleGradeChange(event.target.value);
+              }}
+              disabled={!textbookId}
+            >
+              <option value="">{strings.gradePlaceholder}</option>
+              {gradeOptions.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+              <option value="__custom__">{strings.customValueOption}</option>
+            </select>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                className="flex-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                placeholder={strings.gradePlaceholder}
+                value={gradeInputValue}
+                onChange={(event) => setGradeInputValue(event.target.value)}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const customGrade = gradeInputValue.trim();
+                  handleGradeChange(customGrade);
+                  setGradeCreateMode(false);
+                  setGradeInputValue("");
+                }}
+                disabled={!gradeInputValue.trim()}
+                className="btn-primary rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
+              >
+                {strings.createNewConfirm}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setGradeCreateMode(false);
+                  setGradeInputValue("");
+                }}
+                className="btn-nav rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
+              >
+                {strings.createNewCancel}
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Unit */}
         <div>
           <label className="block text-xs text-gray-500">{strings.unitPlaceholder}</label>
-          <input
-            className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-            list={`${instanceId}-units`}
-            value={unit}
-            onChange={(event) => {
-              setUnit(event.target.value);
-              setLesson("");
-            }}
-            disabled={!grade.trim()}
-            placeholder={strings.unitPlaceholder}
-          />
-          <datalist id={`${instanceId}-units`}>
-            {unitOptions.map((u) => (
-              <option key={u} value={u} />
-            ))}
-          </datalist>
+          {!unitCreateMode ? (
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+              value={unit}
+              onChange={(event) => {
+                if (event.target.value === "__custom__") {
+                  setUnitCreateMode(true);
+                  return;
+                }
+                handleUnitChange(event.target.value);
+              }}
+              disabled={!grade.trim()}
+            >
+              <option value="">{strings.unitPlaceholder}</option>
+              {unitOptions.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+              <option value="__custom__">{strings.customValueOption}</option>
+            </select>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                className="flex-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                placeholder={strings.unitPlaceholder}
+                value={unitInputValue}
+                onChange={(event) => setUnitInputValue(event.target.value)}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const customUnit = unitInputValue.trim();
+                  handleUnitChange(customUnit);
+                  setUnitCreateMode(false);
+                  setUnitInputValue("");
+                }}
+                disabled={!unitInputValue.trim()}
+                className="btn-primary rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
+              >
+                {strings.createNewConfirm}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUnitCreateMode(false);
+                  setUnitInputValue("");
+                }}
+                className="btn-nav rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
+              >
+                {strings.createNewCancel}
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Lesson */}
         <div>
           <label className="block text-xs text-gray-500">{strings.lessonPlaceholder}</label>
-          <input
-            className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-            list={`${instanceId}-lessons`}
-            value={lesson}
-            onChange={(event) => setLesson(event.target.value)}
-            disabled={!unit.trim()}
-            placeholder={strings.lessonPlaceholder}
-          />
-          <datalist id={`${instanceId}-lessons`}>
-            {lessonOptions.map((l) => (
-              <option key={l} value={l} />
-            ))}
-          </datalist>
+          {!lessonCreateMode ? (
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+              value={lesson}
+              onChange={(event) => {
+                if (event.target.value === "__custom__") {
+                  setLessonCreateMode(true);
+                  return;
+                }
+                setLesson(event.target.value);
+              }}
+              disabled={!unit.trim()}
+            >
+              <option value="">{strings.lessonPlaceholder}</option>
+              {lessonOptions.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+              <option value="__custom__">{strings.customValueOption}</option>
+            </select>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                className="flex-1 rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                placeholder={strings.lessonPlaceholder}
+                value={lessonInputValue}
+                onChange={(event) => setLessonInputValue(event.target.value)}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const customLesson = lessonInputValue.trim();
+                  setLesson(customLesson);
+                  setLessonCreateMode(false);
+                  setLessonInputValue("");
+                }}
+                disabled={!lessonInputValue.trim()}
+                className="btn-primary rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
+              >
+                {strings.createNewConfirm}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLessonCreateMode(false);
+                  setLessonInputValue("");
+                }}
+                className="btn-nav rounded-md border-2 px-3 py-2 text-sm disabled:opacity-50"
+              >
+                {strings.createNewCancel}
+              </button>
+            </div>
+          )}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={handleAssign}
-        disabled={!textbookId || !grade.trim() || !unit.trim() || !lesson.trim() || assigning}
-        className="btn-primary rounded-md border-2 px-4 py-2 text-sm disabled:opacity-50"
-      >
-        {assigning ? strings.assigning : strings.assignButton}
-      </button>
+      {mode === "immediate" ? (
+        <button
+          type="button"
+          onClick={handleAssign}
+          disabled={!textbookId || !grade.trim() || !unit.trim() || !lesson.trim() || assigning}
+          className="btn-primary rounded-md border-2 px-4 py-2 text-sm disabled:opacity-50"
+        >
+          {assigning ? strings.assigning : strings.assignButton}
+        </button>
+      ) : null}
     </div>
   );
 }

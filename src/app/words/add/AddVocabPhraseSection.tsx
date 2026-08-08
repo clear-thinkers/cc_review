@@ -5,19 +5,39 @@ import { useLocale } from "@/app/shared/locale";
 import {
   addVocabPhrases,
   assignVocabPhraseLessonTags,
+  createLessonTagIfNew,
   getExistingVocabPhrasesByText,
 } from "@/lib/supabase-service";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
-import TagCascadePicker from "../shared/TagCascadePicker";
+import TagCascadePicker, { type TagCascadeSelection } from "../shared/TagCascadePicker";
 import { taggingStrings } from "../shared/tagging.strings";
-import { computePhraseIngestionResult, parseCommaSeparatedPhrases } from "./addIngestion";
+import {
+  computePhraseIngestionResult,
+  isTagFormComplete,
+  parseCommaSeparatedPhrases,
+} from "./addIngestion";
+
+const EMPTY_TAG_SELECTION: TagCascadeSelection = {
+  textbookId: null,
+  grade: "",
+  unit: "",
+  lesson: "",
+};
 
 /**
  * Batch phrase entry on /words/add, parallel to the single-hanzi character
  * textarea above it (AddSection.tsx) but for multi-character phrases. A
  * phrase stays intact as one unit -- parseCommaSeparatedPhrases splits on
- * commas only, never exploding a phrase into individual characters the way
- * the character flow's extractUniqueHanzi does.
+ * commas, spaces, and line breaks (same delimiter tolerance as the
+ * character flow), never exploding a phrase into individual characters the
+ * way the character flow's extractUniqueHanzi does.
+ *
+ * The tag section mirrors the character form's pre-submit placement: the
+ * "Add tags" link sits above the submit button, not after it, and the
+ * selected tag is resolved/created and applied together with the phrase
+ * batch on submit -- to both newly-added phrases and already-existing
+ * phrases in the same submitted batch, matching the character ingestion
+ * rule (0_ARCHITECTURE.md, Ingestion Rules #11).
  */
 export default function AddVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) {
   const { str } = vm;
@@ -28,14 +48,32 @@ export default function AddVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) 
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [lastAddedIds, setLastAddedIds] = useState<string[]>([]);
   const [tagSectionOpen, setTagSectionOpen] = useState(false);
+  const [tagSelection, setTagSelection] = useState<TagCascadeSelection>(EMPTY_TAG_SELECTION);
+
+  function handleToggleTagSection() {
+    setTagSectionOpen((open) => !open);
+    setTagSelection(EMPTY_TAG_SELECTION);
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const parsed = parseCommaSeparatedPhrases(input);
     if (parsed.length === 0) {
       setNotice(phraseStr.noInput);
+      return;
+    }
+
+    if (
+      !isTagFormComplete(
+        tagSectionOpen,
+        tagSelection.textbookId,
+        tagSelection.grade,
+        tagSelection.unit,
+        tagSelection.lesson
+      )
+    ) {
+      setNotice(tagStr.partialTagError);
       return;
     }
 
@@ -49,8 +87,6 @@ export default function AddVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) 
       );
 
       const created = await addVocabPhrases(phrasesToAdd);
-      setLastAddedIds(created.map((phrase) => phrase.id));
-      setTagSectionOpen(false);
 
       const notices: string[] = [];
       if (created.length === 0) {
@@ -71,22 +107,34 @@ export default function AddVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) 
             .replace("{phrases}", invalidPhrases.join("、"))
         );
       }
+
+      // Assign the tag to every submitted phrase in this batch, new and
+      // already-existing alike -- mirrors the character add form.
+      if (tagSectionOpen && tagSelection.textbookId && tagSelection.grade && tagSelection.unit && tagSelection.lesson) {
+        const allTargetIds = [...created.map((phrase) => phrase.id), ...existing.map((phrase) => phrase.id)];
+        if (allTargetIds.length > 0) {
+          try {
+            const lessonTag = await createLessonTagIfNew(
+              tagSelection.textbookId,
+              tagSelection.grade,
+              tagSelection.unit,
+              tagSelection.lesson
+            );
+            await assignVocabPhraseLessonTags(allTargetIds, lessonTag.id);
+          } catch {
+            notices.push(phraseStr.tagAssignError);
+          }
+        }
+      }
+
       setNotice(notices.join(" "));
       setInput("");
+      setTagSectionOpen(false);
+      setTagSelection(EMPTY_TAG_SELECTION);
     } catch {
       setNotice(phraseStr.noNew);
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function handleAssignTag(lessonTagId: string) {
-    if (lastAddedIds.length === 0) return;
-    try {
-      await assignVocabPhraseLessonTags(lastAddedIds, lessonTagId);
-      setNotice(phraseStr.tagAssignSuccess);
-    } catch {
-      setNotice(phraseStr.tagAssignError);
     }
   }
 
@@ -105,26 +153,20 @@ export default function AddVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) 
           disabled={submitting}
           rows={3}
         />
-        <button
-          type="submit"
-          className="btn-primary rounded-md border-2 px-4 py-2 disabled:opacity-50"
-          disabled={submitting || !input.trim()}
-        >
-          {phraseStr.submitButton}
-        </button>
-      </form>
 
-      {lastAddedIds.length > 0 ? (
+        {/* Lesson tag section -- set up before submitting, applied on submit */}
         <div>
           <button
             type="button"
-            onClick={() => setTagSectionOpen((open) => !open)}
+            onClick={handleToggleTagSection}
             className="text-sm text-blue-600 underline"
           >
-            {phraseStr.tagSectionTitle}
+            {tagSectionOpen ? tagStr.collapseButton : tagStr.expandButton}
           </button>
+
           {tagSectionOpen ? (
-            <div className="mt-2">
+            <div className="mt-2 space-y-2">
+              <p className="text-xs font-medium text-gray-600">{tagStr.sectionLabel}</p>
               <TagCascadePicker
                 strings={{
                   textbookPlaceholder: tagStr.textbookPlaceholder,
@@ -136,15 +178,23 @@ export default function AddVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) 
                   createNewConfirm: tagStr.createNewConfirm,
                   createNewCancel: tagStr.createNewCancel,
                   loadingTextbooks: tagStr.loadingTextbooks,
-                  assignButton: phraseStr.tagSectionTitle,
-                  assigning: phraseStr.tagSectionTitle,
+                  customValueOption: tagStr.customValueOption,
                 }}
-                onAssign={handleAssignTag}
+                mode="controlled"
+                onSelectionChange={setTagSelection}
               />
             </div>
           ) : null}
         </div>
-      ) : null}
+
+        <button
+          type="submit"
+          className="btn-primary rounded-md border-2 px-4 py-2 disabled:opacity-50"
+          disabled={submitting || !input.trim()}
+        >
+          {phraseStr.submitButton}
+        </button>
+      </form>
     </div>
   );
 }

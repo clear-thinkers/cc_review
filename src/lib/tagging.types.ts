@@ -79,3 +79,6 @@ export type CascadeDropdownOption =
 
 /** The map from word ID to its resolved lesson tags for the Lessons column. */
 export type WordLessonTagsMap = Map<string, ResolvedLessonTag[]>;
+
+/** The map from vocab phrase ID to its resolved lesson tags for phrase filter bars. */
+export type VocabPhraseLessonTagsMap = Map<string, ResolvedLessonTag[]>;

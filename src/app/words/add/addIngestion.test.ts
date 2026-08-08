@@ -225,6 +225,28 @@ describe("parseCommaSeparatedPhrases", () => {
   it("does not split a single multi-character phrase into individual characters", () => {
     expect(parseCommaSeparatedPhrases("你好")).toEqual(["你好"]);
   });
+
+  it("splits on spaces", () => {
+    expect(parseCommaSeparatedPhrases("你好 谢谢 对不起")).toEqual(["你好", "谢谢", "对不起"]);
+  });
+
+  it("splits on line breaks", () => {
+    expect(parseCommaSeparatedPhrases("你好\n谢谢\n对不起")).toEqual(["你好", "谢谢", "对不起"]);
+  });
+
+  it("handles a mix of commas, spaces, and line breaks in one input", () => {
+    expect(parseCommaSeparatedPhrases("你好, 谢谢\n对不起 没关系，早上好")).toEqual([
+      "你好",
+      "谢谢",
+      "对不起",
+      "没关系",
+      "早上好",
+    ]);
+  });
+
+  it("collapses consecutive delimiters of mixed kinds without producing empty entries", () => {
+    expect(parseCommaSeparatedPhrases("你好,  \n, 谢谢")).toEqual(["你好", "谢谢"]);
+  });
 });
 
 // ---------------------------------------------------------------------------

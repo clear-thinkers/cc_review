@@ -66,21 +66,22 @@ export function isTagFormComplete(
 /**
  * Batch Phrase Entry — Ingestion Decision Helpers
  *
- * Parallel to computeIngestionResult above, but for /words/add's
- * comma-separated phrase entry mode. A phrase stays intact as one
- * multi-character unit — deliberately NOT extractUniqueHanzi, which
- * explodes text into individual Han characters.
+ * Parallel to computeIngestionResult above, but for /words/add's batch
+ * phrase entry mode. A phrase stays intact as one multi-character unit —
+ * deliberately NOT extractUniqueHanzi, which explodes text into individual
+ * Han characters.
  */
 
 /**
- * Split a comma-separated phrase list into distinct entries: splits on
- * both the ASCII and full-width comma, trims each entry, drops empties,
- * and dedupes while preserving first-seen order.
+ * Split a batch phrase list into distinct entries: splits on the ASCII and
+ * full-width comma, whitespace, and line breaks (same delimiter tolerance
+ * as the character batch-add rule), trims each entry, drops empties, and
+ * dedupes while preserving first-seen order.
  */
 export function parseCommaSeparatedPhrases(input: string): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const raw of input.split(/[,，]/)) {
+  for (const raw of input.split(/[,，\s]+/)) {
     const trimmed = raw.trim();
     if (!trimmed || seen.has(trimmed)) continue;
     seen.add(trimmed);

@@ -64,9 +64,11 @@ characters.
 - Full design history (why things are shaped this way, ambiguities resolved
   along the way): rest of this document, below.
 
-**Verification status:** 483 tests passing, `tsc --noEmit` and `eslint`
-clean as of the last change. All automated checks only — see item 3-5 above
-for what still needs a human clicking through the app.
+**Verification status:** 540 tests passing, `tsc --noEmit` and `eslint`
+clean as of the last change (2026-08-08 Content Admin Phrases-view work —
+see "2026-08-08 follow-up" under "Known gaps" below). All automated checks
+only — see item 3-5 above for what still needs a human clicking through the
+app.
 
 ## Problem
 
@@ -707,18 +709,136 @@ and can't supply their own drag-and-match distractors.
   a fresh packaged-session round, unlike characters, which get an explicit
   "skipped" notice (`str.fillTest.notices.skippedBundledCharacters`). No
   phrase equivalent was added.
-- Content Admin's phrase table doesn't display a phrase's currently-assigned
-  tags (assignment works; there's no `vocab_phrase_id -> ResolvedLessonTag[]`
-  read-back and column for it yet, unlike the character table's Lessons
-  column).
+- Content Admin's phrase table still doesn't display a phrase's
+  currently-assigned tags as a column (assignment still works, and — as of
+  2026-08-08 — the tag data is now read back via
+  `getVocabPhraseLessonTagsForFamily()` to power the new filter bar below,
+  but there's no per-row Lessons-pill column yet, unlike the character
+  table).
 - Whether completing a phrase round should earn coins the same way character
   fill-tests do was never specified and was not implemented — grading a
   phrase touches no wallet/coin state.
 
+### 2026-08-08 follow-up: filter bar + inline-add removal
+
+- **Content Admin's Phrases view now has a default filter bar** matching the
+  Characters view's: Phrase Search, Tags (Cascade, multi-select OR logic),
+  and Filter by Tag Part (Textbook → Grade → Unit → Lesson cascade, AND
+  logic within a phrase's tags, combined with the Tags filter via AND) — see
+  `str.admin.filters.*` (reused, not duplicated) and the new
+  `phraseStr.filters.phraseSearchLabel` string. Backed by a new
+  `getVocabPhraseLessonTagsForFamily()` in `supabase-service.ts` (mirrors
+  `getWordLessonTagsForFamily`) and two new pure helpers,
+  `hasActivePartialTagFilter`/`matchesPartialTagFilter`, extracted into the
+  shared `tagFilter.utils.ts` (previously this AND-logic was only inlined in
+  `AdminSection.tsx`).
+  - **No "Due Now" filter for phrases** — `vocab_phrases` intentionally has
+    no SRS/due-date state (see "Scope" above), so the concept doesn't apply.
+    Confirmed with the parent 2026-08-08: dropped rather than reinterpreted.
+- **The inline "+ New Phrase" add row on Content Admin was removed.**
+  Phrase creation is now exclusively via `/words/add`'s batch
+  comma-separated entry (`AddVocabPhraseSection.tsx`), matching how
+  character creation already only happens on `/words/add`, not on Content
+  Admin. The single-phrase `addVocabPhrase()` service function is unchanged
+  and still covered by its own unit test — only the Content Admin UI path
+  to it was removed.
+- **The Phrases view also gained the same selection/batch-action toolbar
+  the Characters view has**: a "No filters applied | Selected N" summary
+  line, Select filtered / Clear selection, a batch AI Content Generation
+  menu (missing only / all / filtered / selected, reusing the existing
+  per-row one-shot `requestVocabPhraseGeneration` call at concurrency 3),
+  Add to test session, and a batch Include-in-test-bank toggle. Two pieces
+  don't map 1:1 onto phrases and were resolved with the parent 2026-08-08
+  rather than silently faked:
+  - **Batch "Pinyin Generation" is new, phrase-specific behavior**, not a
+    port of the character version. Characters refresh already-saved
+    phrase/example pinyin; a `vocab_phrase`'s pinyin is generated together
+    with both definitions + one example in a single call, so there was no
+    batch-pinyin-only precedent. Built as a new batch loop over the
+    existing narrow `mode: "example_pinyin"` AI call
+    (`requestExamplePinyin`), touching only `examples[].pinyin` — phrase-level
+    pinyin and both definitions are never touched by this button. New pure
+    helpers `resolveBatchPhraseTargets`/`resolveExamplePinyinRefreshIndices`/
+    `vocabPhraseHasContent`/`vocabPhraseMissingExamplePinyin` in the new
+    `src/app/words/admin/vocabPhraseAdmin.utils.ts` (tested).
+  - **Batch "Include in test bank" toggles `includeInFillTest` on every
+    example of every selected phrase** (all-or-nothing, mirroring the
+    character button's feel), since the flag lives per-example rather than
+    per-phrase for `vocab_phrases`.
+  - **No "Select page" button** — the Phrases view has no pagination, so a
+    page-scoped selection button would be identical to "Select filtered";
+    only "Select filtered (N)" and "Clear selection" were added.
+- **The Phrases table now uses the exact same border/frame styling as the
+  Characters table**: the table wrapper gained `rounded-md border` (it
+  previously had none — `overflow-x-auto` only) and the header row gained
+  `bg-gray-50` to match. Body rows already used the identical `border-b
+  align-top` styling on both views, so this was purely the outer
+  wrapper/header fix, not a rebuild.
+
+### 2026-08-08 follow-up: batch phrase entry accepts spaces/line breaks
+
+- `/words/add`'s phrase batch textarea (`AddVocabPhraseSection.tsx`) parsed
+  only comma-separated input, unlike the character batch textarea directly
+  above it, which already accepts commas, spaces, or line breaks (see
+  `Ingestion Rules` in `0_ARCHITECTURE.md` and `str.add.pageDescription`).
+  `parseCommaSeparatedPhrases` (`src/app/words/add/addIngestion.ts`) now
+  splits on the same delimiter set — ASCII/full-width comma, whitespace,
+  and line breaks — collapsing consecutive/mixed delimiters into one split
+  point. Function name kept as-is (still the file's public export used by
+  the UI and its tests); only the split regex and its docstring changed.
+  Bilingual copy (`str.add.vocabPhrases.pageDescription`/`inputPlaceholder`)
+  updated to describe the same batch-input tolerance the character section
+  already advertises. No schema, route, or RLS surface touched.
+
+### 2026-08-08 follow-up: batch phrase tag setup moves before the submit button
+
+- `/words/add`'s phrase batch tag section previously only appeared *after* a
+  successful submit (a "为刚添加的短语分配标签" link revealed once phrases had
+  already been created, immediately assigning the picked tag to that batch
+  via its own Assign button). This didn't match the character form directly
+  above it, where the "Add tags" section is expanded *before* submitting and
+  the tag is created/applied together with the word batch on submit.
+  `AddVocabPhraseSection.tsx` now places the same pre-submit tag section
+  above its submit button; the selected tag is resolved (`createLessonTagIfNew`)
+  and applied (`assignVocabPhraseLessonTags`) on submit to both newly-created
+  phrases and already-existing phrases in the same submitted batch — mirroring
+  `0_ARCHITECTURE.md`'s character Ingestion Rule #11 exactly. An incomplete
+  tag selection (section open, not all 4 levels picked) blocks submission
+  with the same `tagStr.partialTagError` the character form already uses,
+  via the shared `isTagFormComplete` helper.
+- `TagCascadePicker.tsx` (shared by this flow and Content Admin's phrase
+  tagging) gained a `mode` prop: `"immediate"` (default, unchanged — its own
+  Assign button resolves/creates the tag right away) for Content Admin's
+  existing usage, and a new `"controlled"` mode (no internal button; reports
+  the live in-progress selection via `onSelectionChange`) for this deferred,
+  submit-time flow. Content Admin's usage is untouched and still compiles/
+  passes under the new prop shape.
+- The post-submit tag link and its `tagAssignSuccess` notice were removed;
+  `tagAssignError` was kept and repurposed for the (rare) case where phrases
+  save successfully but the subsequent tag-assignment call fails.
+
+### 2026-08-08 fix: phrase tag Grade/Unit/Lesson now support adding new values
+
+- The Grade/Unit/Lesson fields in `TagCascadePicker.tsx` (shared by
+  `/words/add`'s phrase batch tag section and Content Admin's phrase
+  tagging) were `<input list>`/`<datalist>` combo boxes with no discoverable
+  way to add a value that wasn't already in the cascade — unlike the
+  character tag section's `<select>` + `"+ Enter custom value"` pattern.
+  Replaced with the exact same `<select>` + create-mode pattern the
+  character form uses. See `docs/fix-log/build-fix-log-2026-08-08-phrase-tag-custom-value-entry.md`
+  for the full root cause and change list.
+
 ### Verification
 
-- `npx vitest run`: 483/483 passing. `npx tsc --noEmit`: clean.
-  `npx eslint` on every new/touched file: zero new errors or warnings.
+- `npx vitest run`: 544/544 passing (up from 540 — 4 new
+  `parseCommaSeparatedPhrases` delimiter tests for the 2026-08-08
+  space/line-break follow-up above; the tag-section relocation reused
+  existing tested helpers, `isTagFormComplete` and `computePhraseIngestionResult`,
+  rather than adding new pure-function surface). `npx tsc --noEmit`: clean.
+  `npx eslint` on every new/touched file (including Content Admin's
+  `VocabPhraseAdminSection.tsx`, to confirm its existing `TagCascadePicker`
+  usage is unaffected): zero new errors or warnings. `npm run check:encoding`:
+  clean.
 - **Not run**: `scripts/verify-rls.ts` (needs a live Supabase project +
   service role key), and no live browser walkthrough of the actual
   drag-and-match phrase quiz, Content Admin phrase view, or `/words/add`

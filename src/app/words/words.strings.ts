@@ -60,17 +60,16 @@ export const wordsStrings = {
       allSuccess: "Added {count} character(s).",
       vocabPhrases: {
         pageTitle: "Add Phrases",
-        pageDescription: "Add multi-character phrases, separated by commas (e.g. 你好, 谢谢, 对不起).",
-        inputPlaceholder: "Comma-separated phrases (e.g. 你好, 谢谢, 对不起)",
+        pageDescription:
+          "Add multi-character phrases. Batch input is supported with commas, spaces, or line breaks (e.g. 你好, 谢谢, 对不起).",
+        inputPlaceholder: "Batch phrases (e.g. 你好, 谢谢 对不起)",
         submitButton: "Batch Add Phrases",
         noInput: "Please enter one or more phrases.",
         noNew: "No new phrases were added.",
         partialSuccess: "Added {count} phrase(s), skipped {skipped} existing.",
         allSuccess: "Added {count} phrase(s).",
         invalidSkipped: "Skipped {count} entries outside the 2-10 character length limit: {phrases}",
-        tagSectionTitle: "Assign a tag to the phrases just added",
-        tagAssignSuccess: "Tag assigned to the new phrases.",
-        tagAssignError: "Failed to assign tag. Please try again.",
+        tagAssignError: "Phrases were added, but assigning the tag failed. Please try again.",
       },
     },
 
@@ -623,10 +622,9 @@ export const wordsStrings = {
       },
       vocabPhrases: {
         searchPlaceholder: "Search phrases...",
-        newPhrasePlaceholder: "New phrase (2-10 characters)",
-        addButton: "Add Phrase",
-        invalidLength: "A phrase must be 2-10 Chinese characters.",
-        duplicatePhrase: "That phrase has already been added.",
+        filters: {
+          phraseSearchLabel: "Phrase Search",
+        },
         columns: {
           phrase: "Phrase",
           meaning: "Definition",
@@ -657,7 +655,6 @@ export const wordsStrings = {
           "Clear all generated content for this phrase (pinyin, definitions, and examples)? This cannot be undone.",
         emptyState: "No phrases yet. Add one above to get started.",
         loading: "Loading phrases...",
-        selectionCount: "{count} selected",
         tagSection: {
           title: "Assign a tag to the selected phrases",
           assignSuccess: "Tag assigned.",
@@ -673,6 +670,33 @@ export const wordsStrings = {
           success: "Phrases added to the review test session.",
           error: "Failed to update the review test session. Please try again.",
         },
+        batchMenus: {
+          pinyin: {
+            missingOnly: "Generate missing example pinyin",
+            all: "Refresh pinyin for all examples",
+            filtered: "Refresh pinyin for filtered examples",
+            selected: "Refresh pinyin for selected examples",
+          },
+        },
+        batchWarningDialogs: {
+          contentAll: {
+            title: "Regenerate all phrase content?",
+            message:
+              "This will overwrite saved pinyin, definitions, and examples for every phrase. This action cannot be undone.",
+            confirmButton: "Regenerate All",
+            cancelButton: "Cancel",
+          },
+          pinyinAll: {
+            title: "Refresh pinyin for all phrase examples?",
+            message:
+              "This will overwrite saved example pinyin for every phrase with saved examples. Phrase-level pinyin and definitions are not touched. This action cannot be undone.",
+            confirmButton: "Refresh All",
+            cancelButton: "Cancel",
+          },
+        },
+        noBatchContentTargets: "No phrases matched this AI generation action.",
+        noBatchPinyinTargets: "No phrase examples matched this pinyin action.",
+        pinyinBatchProgress: "Refreshing example pinyin {current}/{total}: {phrase}",
       },
       stats: {
         characters: "All Characters",
@@ -1215,17 +1239,15 @@ export const wordsStrings = {
       allSuccess: "已添加 {count} 个汉字。",
       vocabPhrases: {
         pageTitle: "添加短语",
-        pageDescription: "添加多字短语，使用逗号分隔（例如：你好, 谢谢, 对不起）。",
-        inputPlaceholder: "逗号分隔的短语（例如：你好, 谢谢, 对不起）",
+        pageDescription: "添加多字短语，支持批量输入。可使用逗号、空格或换行分隔（例如：你好, 谢谢, 对不起）。",
+        inputPlaceholder: "短语批量输入（例如：你好, 谢谢 对不起）",
         submitButton: "批量添加短语",
         noInput: "请输入至少一个短语。",
         noNew: "没有新增短语（可能都已存在）。",
         partialSuccess: "已添加 {count} 个短语，跳过 {skipped} 个已存在短语。",
         allSuccess: "已添加 {count} 个短语。",
         invalidSkipped: "已跳过 {count} 条超出2-10字长度限制的条目：{phrases}",
-        tagSectionTitle: "为刚添加的短语分配标签",
-        tagAssignSuccess: "标签已分配给新短语。",
-        tagAssignError: "分配标签失败，请重试。",
+        tagAssignError: "短语已添加，但标签分配失败，请重试。",
       },
     },
 
@@ -1766,10 +1788,9 @@ export const wordsStrings = {
       },
       vocabPhrases: {
         searchPlaceholder: "搜索短语...",
-        newPhrasePlaceholder: "新短语（2-10个字符）",
-        addButton: "添加短语",
-        invalidLength: "短语必须是2-10个汉字。",
-        duplicatePhrase: "该短语已添加过。",
+        filters: {
+          phraseSearchLabel: "短语搜索",
+        },
         columns: {
           phrase: "短语",
           meaning: "释义",
@@ -1798,7 +1819,6 @@ export const wordsStrings = {
         clearConfirm: "清除该短语的所有已生成内容（拼音、释义和例句）？此操作无法撤销。",
         emptyState: "还没有短语。请在上方添加一个开始使用。",
         loading: "正在加载短语...",
-        selectionCount: "已选择 {count} 项",
         tagSection: {
           title: "为选中的短语分配标签",
           assignSuccess: "标签已分配。",
@@ -1814,6 +1834,31 @@ export const wordsStrings = {
           success: "短语已加入测试场次。",
           error: "更新测试场次失败，请重试。",
         },
+        batchMenus: {
+          pinyin: {
+            missingOnly: "生成缺失的例句拼音",
+            all: "刷新所有例句的拼音",
+            filtered: "刷新筛选结果例句的拼音",
+            selected: "刷新已选择例句的拼音",
+          },
+        },
+        batchWarningDialogs: {
+          contentAll: {
+            title: "重新生成所有短语内容？",
+            message: "此操作将覆盖每个短语已保存的拼音、释义和例句。此操作无法撤销。",
+            confirmButton: "全部重新生成",
+            cancelButton: "取消",
+          },
+          pinyinAll: {
+            title: "刷新所有短语例句的拼音？",
+            message: "此操作将覆盖每个已有例句的短语的例句拼音。短语本身的拼音和释义不受影响。此操作无法撤销。",
+            confirmButton: "全部刷新",
+            cancelButton: "取消",
+          },
+        },
+        noBatchContentTargets: "没有匹配此次 AI 生成操作的短语。",
+        noBatchPinyinTargets: "没有匹配此次拼音操作的短语例句。",
+        pinyinBatchProgress: "正在刷新例句拼音 {current}/{total}：{phrase}",
       },
       stats: {
         characters: "总汉字",

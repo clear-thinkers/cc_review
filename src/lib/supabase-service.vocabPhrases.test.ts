@@ -20,6 +20,7 @@ import {
   assignVocabPhraseLessonTags,
   deleteVocabPhrase,
   getExistingVocabPhrasesByText,
+  getVocabPhraseLessonTagsForFamily,
   gradeVocabPhrase,
   listVocabPhrases,
   nudgeWordFamiliarity,
@@ -214,6 +215,63 @@ describe("supabase-service vocab phrases", () => {
     const result = await gradeVocabPhrase("phrase-1");
     expect(updateBuilder.update).toHaveBeenCalledWith({ test_count: 5 });
     expect(result.testCount).toBe(5);
+  });
+
+  it("getVocabPhraseLessonTagsForFamily scopes the query to the current family and resolves tags per phrase", async () => {
+    const builder = { select: vi.fn(), eq: vi.fn() };
+    builder.select.mockReturnValue(builder);
+    builder.eq.mockResolvedValue({
+      data: [
+        {
+          vocab_phrase_id: "phrase-1",
+          lesson_tags: {
+            id: "tag-1",
+            textbook_id: "textbook-1",
+            slot_1_value: "G2",
+            slot_2_value: "Unit 8",
+            slot_3_value: "Lesson 4",
+            family_id: "family-1",
+            created_at: "2026-07-26T00:00:00.000Z",
+            textbooks: {
+              id: "textbook-1",
+              name: "人教版",
+              is_shared: true,
+              family_id: null,
+              created_by: null,
+              created_at: "2026-01-01T00:00:00.000Z",
+            },
+          },
+        },
+      ],
+      error: null,
+    });
+    fromMock.mockReturnValue(builder);
+
+    const map = await getVocabPhraseLessonTagsForFamily();
+    expect(builder.eq).toHaveBeenCalledWith("family_id", "family-1");
+    expect(map.get("phrase-1")).toEqual([
+      {
+        lessonTagId: "tag-1",
+        textbookId: "textbook-1",
+        textbookName: "人教版",
+        grade: "G2",
+        unit: "Unit 8",
+        lesson: "Lesson 4",
+      },
+    ]);
+  });
+
+  it("getVocabPhraseLessonTagsForFamily skips rows with no resolved lesson tag", async () => {
+    const builder = { select: vi.fn(), eq: vi.fn() };
+    builder.select.mockReturnValue(builder);
+    builder.eq.mockResolvedValue({
+      data: [{ vocab_phrase_id: "phrase-1", lesson_tags: null }],
+      error: null,
+    });
+    fromMock.mockReturnValue(builder);
+
+    const map = await getVocabPhraseLessonTagsForFamily();
+    expect(map.size).toBe(0);
   });
 
   it("assignVocabPhraseLessonTags upserts one row per phrase id, ignoring duplicates", async () => {

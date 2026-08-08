@@ -40,6 +40,7 @@ import type {
   Textbook,
   LessonTag,
   WordLessonTagsMap,
+  VocabPhraseLessonTagsMap,
   ResolvedLessonTag,
 } from "./tagging.types";
 import type { HiddenAdminTarget } from "./admin.types";
@@ -1962,6 +1963,48 @@ export async function getWordLessonTagsForFamily(): Promise<WordLessonTagsMap> {
     const existing = map.get(row.word_id) ?? [];
     existing.push(resolved);
     map.set(row.word_id, existing);
+  }
+  return map;
+}
+
+/**
+ * Return a map of vocabPhraseId → ResolvedLessonTag[] for all vocab phrases
+ * belonging to the current family. Mirrors getWordLessonTagsForFamily; used
+ * to populate the Phrases filter bar on Content Admin.
+ */
+export async function getVocabPhraseLessonTagsForFamily(): Promise<VocabPhraseLessonTagsMap> {
+  const { familyId } = await getSessionMetadata();
+
+  const { data, error } = await supabase
+    .from("vocab_phrase_lesson_tags")
+    .select(
+      `vocab_phrase_id,
+       lesson_tags ( id, textbook_id, slot_1_value, slot_2_value, slot_3_value, family_id, created_at,
+         textbooks ( id, name, is_shared, family_id, created_by, created_at )
+       )`
+    )
+    .eq("family_id", familyId);
+  if (error) throw new Error(`getVocabPhraseLessonTagsForFamily: ${error.message}`);
+
+  const map: VocabPhraseLessonTagsMap = new Map();
+  for (const row of (data ?? []) as unknown as Array<{
+    vocab_phrase_id: string;
+    lesson_tags: (SupabaseLessonTagRow & { textbooks: SupabaseTextbookRow }) | null;
+  }>) {
+    if (!row.lesson_tags) continue;
+    const lt = row.lesson_tags;
+    const tb = lt.textbooks;
+    const resolved: ResolvedLessonTag = {
+      lessonTagId: lt.id,
+      textbookId: lt.textbook_id,
+      textbookName: tb?.name ?? "",
+      grade: lt.slot_1_value ?? "",
+      unit: lt.slot_2_value ?? "",
+      lesson: lt.slot_3_value ?? "",
+    };
+    const existing = map.get(row.vocab_phrase_id) ?? [];
+    existing.push(resolved);
+    map.set(row.vocab_phrase_id, existing);
   }
   return map;
 }
