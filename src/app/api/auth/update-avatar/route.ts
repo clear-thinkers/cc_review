@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, getServerSupabaseClient } from '@/lib/supabaseClient';
+import { getJwtAppMetadataUserId } from '@/lib/decodeJwtPayload';
 import type { AvatarId } from '@/lib/auth.types';
 
 const VALID_AVATAR_IDS: AvatarId[] = [
@@ -43,9 +44,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid or expired session' }, { status: 401 });
   }
 
-  // ── 2. Extract the active profile user_id from JWT app_metadata ──────
-  // This is set by /api/auth/pin-verify after Layer 2 completes.
-  const userId = user.app_metadata?.user_id as string | undefined;
+  // ── 2. Extract the active profile user_id from THIS token's own claims ──
+  // Decoded from the caller's own already-verified token (not a fresh
+  // auth.users lookup) so it reflects session-scoped claims injected by
+  // custom_access_token_hook per this session's own auth_session_profiles
+  // row -- see docs/feature-specs/2026-08-08-session-scoped-profile-claims.md.
+  // supabase.auth.getUser(token) above returns a LIVE auth.users read,
+  // whose app_metadata is no longer written by pin-verify and would be
+  // permanently stale.
+  const userId = getJwtAppMetadataUserId(token);
   if (!userId) {
     return NextResponse.json(
       { error: 'Profile session not established. Complete PIN entry first.' },

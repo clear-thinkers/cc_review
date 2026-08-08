@@ -212,3 +212,129 @@ fact.
 - 0_ARCHITECTURE.md: no -- no schema, RLS, or system-guarantee change.
 - 0_BUILD_CONVENTIONS.md: no -- no new script or convention introduced.
 - 0_PRODUCT_ROADMAP.md: no -- data repair, not a scope change.
+
+---
+
+## Retry Attempt — 2026-08-08 (root-cause fix)
+
+### Why the Prior Attempts Failed
+
+Both prior entries in this log fixed symptoms (the notice-clobbering UI bug,
+then two rounds of manual data repair) but explicitly deferred the actual
+root cause. The user confirmed it directly this round: they logged in as the
+parent on their own device while the child's device was mid-session on the
+child's profile. Per the 2026-07-30 root-cause note, HanziQuest's two-layer
+auth model stores the active Layer 2 profile's claims
+(`family_id`/`user_id`/`role`/`is_platform_admin`) in `app_metadata` on the
+**single shared `auth.users` row per family** (one Supabase Auth account per
+family, Layer 2 PIN switches profiles on top of it). Every device signed
+into that family shares the same row. A PIN switch on any device overwrites
+it; every *other* device's next background token auto-refresh (hourly, per
+`jwt_expiry = 3600`) silently picks up the new value with no signal to
+either device.
+
+### Revised Root Cause
+
+Confirmed as above -- claims are family-scoped, not session/device-scoped,
+even though Supabase issues each device signing in with the same
+email/password its own distinct Auth session (`auth.sessions.id`, stable
+across that session's token refreshes). This is the differentiator the fix
+uses.
+
+### Changes Applied
+
+Full design in `docs/feature-specs/2026-08-08-session-scoped-profile-claims.md`.
+Summary:
+
+- **New table `auth_session_profiles`** (`supabase/migrations/20260808000000_auth_session_profiles.sql`):
+  one row per Supabase Auth `session_id` (not per family), holding the
+  active profile's claims for that specific session. RLS enabled, default
+  deny -- only `service_role` and `supabase_auth_admin` may touch it.
+- **New Postgres function `custom_access_token_hook`**
+  (`supabase/migrations/20260808000001_custom_access_token_hook.sql`),
+  registered as a Supabase **Custom Access Token Hook**
+  (`supabase/config.toml [auth.hook.custom_access_token]`, plus a manual
+  Dashboard toggle on both dev and prod -- `supabase db push` does not
+  apply hosted auth config, and `supabase config push` was deliberately
+  avoided since it pushes the entire `[auth]` block with no diff/dry-run,
+  risking unrelated hosted-only settings). Runs on every token mint/refresh
+  for every session project-wide; looks up `auth_session_profiles` by the
+  token's own `session_id` and injects `app_metadata.family_id/user_id/role/is_platform_admin`
+  -- the **exact same claim shape** `current_family_id()`, `current_user_id()`,
+  `current_jwt_role()`, and `is_platform_admin()` already read (see
+  `supabase/migrations/20260311000001_fix_function_search_path_mutable.sql`),
+  so none of those RLS helper functions changed. A lookup miss (no Layer 2
+  completed yet for that session) passes claims through unchanged.
+- **`src/app/api/auth/pin-verify/route.ts`**: replaced the
+  `admin.updateUserById({ app_metadata })` write (shared, family-scoped)
+  with an `auth_session_profiles` upsert keyed by the caller's own decoded
+  `session_id` (session-scoped).
+- **`src/app/api/auth/update-avatar/route.ts`**: was resolving the active
+  profile's `user_id` via a *live* `auth.users` read
+  (`supabase.auth.getUser(token).app_metadata`), which the above change
+  makes permanently stale. Fixed to decode the caller's own already-verified
+  token's `app_metadata.user_id` claim instead (now correctly
+  session-scoped via the hook).
+- **`src/lib/decodeJwtPayload.ts`** (new, with tests): shared pure helper
+  for extracting `session_id` / `app_metadata.user_id` from an
+  already-verified token, used by both routes above.
+- **`scripts/verify-session-scoped-claims.ts`** (new, mirrors
+  `scripts/verify-rls.ts`'s live-verification pattern): signs in twice under
+  one shared test family login (simulating two devices), switches each to a
+  *different* profile, and asserts device A's claims are unaffected by
+  device B's later switch across a forced `refreshSession()` -- the exact
+  regression this fix targets. Added as `npm run verify:session-scoped-claims`.
+- `auth.users.app_metadata` is left inert (no longer written, not cleared)
+  per the spec's Open Questions -- harmless since nothing reads it anymore.
+
+### Architectural Impact
+
+Auth/session layer. New table + new Postgres function + a Supabase Auth
+Hook registration (dashboard-level config, not purely code). No existing
+table schema changed. No existing RLS policy changed -- the four helper
+functions RLS depends on are unchanged in behavior, only re-sourced.
+
+### Verification
+
+- `npm test`: 518/518 passing (17 new: 9 `decodeJwtPayload`, 4 `pin-verify`
+  route, 4 `update-avatar` route).
+- `npx tsc --noEmit`: clean.
+- `npm run check:encoding`: clean.
+- Migrations applied to dev, hook registered via dev Dashboard,
+  `npm run verify:session-scoped-claims` against dev: 5/5 passed including
+  the regression check.
+- `npm run verify:rls` against dev: 44/45 passed. The one failure
+  (`vocab_phrase_lesson_tags` setup -- missing `lesson_tags.grade` column)
+  is pre-existing and unrelated to this fix (phrase-keyed-input feature,
+  not touched here) -- flagged separately, not fixed in this pass.
+- Migrations applied to prod (`db:push:prod:dry` reviewed first, then
+  `db:push:prod`), hook registered via prod Dashboard,
+  `npm run verify:session-scoped-claims` against prod: 5/5 passed including
+  the regression check.
+
+### Preventative Rule
+
+The root cause flagged as deferred in the original 2026-07-30 entry is now
+fixed: a Layer 2 profile switch on one device can no longer change the
+claims a different, concurrently active device's session resolves to, on
+its own token refresh or otherwise. Future changes to `pin-verify`,
+`update-avatar`, or the four RLS helper functions should re-run `npm run
+verify:session-scoped-claims` against dev before shipping, since a broken
+`custom_access_token_hook` fails token refresh **project-wide**, not just
+for the family being tested.
+
+### Docs Updated
+
+- AI_CONTRACT.md: no -- no hard-stop or scope-boundary rule changed (the
+  fix crossed the existing schema-migration boundary, which was already
+  covered by the required feature spec + explicit authorization, not by a
+  new rule).
+- 0_ARCHITECTURE.md: no -- out of scope for this entry; the four RLS helper
+  function definitions and their documented claim shape are unchanged in
+  behavior. Consider a future dated companion doc under
+  `docs/architecture/` describing the two-layer auth model's current
+  session-scoped mechanism if this becomes a recurring point of confusion --
+  not added here to keep this fix log scoped to the incident record.
+- 0_BUILD_CONVENTIONS.md: no -- the new script follows the existing §10 /
+  live-verification (`verify-rls.ts`) pattern; no convention changed.
+- 0_PRODUCT_ROADMAP.md: no -- bug fix, not a scope change.

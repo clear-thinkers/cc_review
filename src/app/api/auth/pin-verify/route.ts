@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { scryptSync, timingSafeEqual } from 'node:crypto';
 import { supabase, getServerSupabaseClient } from '@/lib/supabaseClient';
+import { getJwtSessionId } from '@/lib/decodeJwtPayload';
 import type { PinVerifyRequest, PinVerifyResponse, UserProfile, AvatarId, UserRole } from '@/lib/auth.types';
 
 /**
@@ -178,22 +179,41 @@ export async function POST(request: NextRequest): Promise<NextResponse<PinVerify
     isPlatformAdmin: userRow.is_platform_admin as boolean,
   };
 
-  // ── 8. Enrich the Supabase JWT with family/user claims ───────────────
-  // Write family_id, user_id, role into app_metadata on the auth.users row.
-  // Supabase includes app_metadata in every JWT — claims persist across
-  // token refreshes without re-enrichment. The client must call
-  // supabase.auth.refreshSession() after this to receive the enriched token.
-  const { error: enrichError } = await adminClient.auth.admin.updateUserById(
-    user.id,  // auth.users.id (Layer 1 identity — the parent who authenticated)
-    {
-      app_metadata: {
+  // ── 8. Enrich THIS session's JWT with family/user claims ──────────────
+  // Session-scoped, not shared: upsert into auth_session_profiles keyed by
+  // this specific token's own session_id, rather than writing app_metadata
+  // onto the shared auth.users row (one Supabase Auth account per family,
+  // but each device gets its own session_id). custom_access_token_hook
+  // injects the equivalent app_metadata claims per-session at mint/refresh
+  // time -- see docs/feature-specs/2026-08-08-session-scoped-profile-claims.md.
+  // Prevents a profile switch on one device from silently reassigning the
+  // identity another device's session resolves to on its next token
+  // refresh (see docs/fix-log/build-fix-log-2026-07-30-packaged-session-limbo.md).
+  // The client must still call supabase.auth.refreshSession() after this to
+  // receive a token minted with the new claims.
+  const sessionId = getJwtSessionId(token);
+  if (!sessionId) {
+    console.error('[pin-verify] Layer 1 token is missing a session_id claim');
+    return NextResponse.json(
+      { success: false, error: 'Session enrichment failed' },
+      { status: 500 }
+    );
+  }
+
+  const { error: enrichError } = await adminClient
+    .from('auth_session_profiles')
+    .upsert(
+      {
+        session_id: sessionId,
+        auth_user_id: user.id, // auth.users.id (Layer 1 identity — the parent who authenticated)
         family_id: profile.familyId,
         user_id: profile.id,
         role: profile.role,
         is_platform_admin: profile.isPlatformAdmin,
+        updated_at: new Date().toISOString(),
       },
-    }
-  );
+      { onConflict: 'session_id' }
+    );
 
   if (enrichError) {
     return NextResponse.json(
