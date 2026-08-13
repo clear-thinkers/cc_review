@@ -6,7 +6,9 @@ import {
   buildContentByCharacterMap,
   buildDueReviewAutosavePayload,
   buildFillTestPlanForVocabPhrases,
+  cloneFillTest,
   filterPausedSessionsForViewer,
+  findFlashcardPhrasePinyin,
   getPausedSessionRemainingCount,
   isVocabPhraseFillTestReady,
   isVocabPhraseRoundQuizWord,
@@ -360,6 +362,42 @@ describe("buildFillTestPlanForVocabPhrases", () => {
   });
 });
 
+describe("cloneFillTest", () => {
+  it("preserves vocabPhraseMembers (regression: quiz queue silently lost phrase-round grading)", () => {
+    const original = {
+      phrases: ["谢谢", "对不起"],
+      sentences: [
+        { text: "___你。", answerIndex: 0, vocabPhraseId: "p1" },
+        { text: "___，我错了。", answerIndex: 1, vocabPhraseId: "p2" },
+      ],
+      vocabPhraseMembers: [
+        { vocabPhraseId: "p1", phrase: "谢谢", phraseCount: 1 },
+        { vocabPhraseId: "p2", phrase: "对不起", phraseCount: 1 },
+      ],
+    };
+
+    const cloned = cloneFillTest(original);
+
+    expect(cloned.vocabPhraseMembers).toEqual(original.vocabPhraseMembers);
+    // A real clone, not the same reference -- mutating the clone must not
+    // affect the original round definition still held elsewhere.
+    expect(cloned.vocabPhraseMembers).not.toBe(original.vocabPhraseMembers);
+  });
+
+  it("preserves members (character rounds) unaffected by the vocabPhraseMembers fix", () => {
+    const original = {
+      phrases: ["谢"],
+      sentences: [{ text: "___。", answerIndex: 0, characterId: "w1" }],
+      members: [{ wordId: "w1", hanzi: "谢", phraseCount: 1 }],
+    };
+
+    const cloned = cloneFillTest(original);
+
+    expect(cloned.members).toEqual(original.members);
+    expect(cloned.vocabPhraseMembers).toBeUndefined();
+  });
+});
+
 describe("isVocabPhraseFillTestReady", () => {
   it("is true when at least one example is fill-test-eligible", () => {
     const phrase = makeVocabPhrase("p1", "谢谢", ["谢谢你。"]);
@@ -374,6 +412,30 @@ describe("isVocabPhraseFillTestReady", () => {
   it("is false when every example is excluded from fill-test", () => {
     const phrase = makeVocabPhrase("p3", "没关系", ["没关系。"], { includeInFillTest: false });
     expect(isVocabPhraseFillTestReady(phrase)).toBe(false);
+  });
+});
+
+describe("findFlashcardPhrasePinyin", () => {
+  it("finds the pinyin for a phrase saved under any character's content", () => {
+    const entries = [
+      makeContentEntry("城", "城市", "北京是一座美丽的城市。"),
+      makeContentEntry("河", "银河", "夜晚的银河非常美丽。"),
+    ];
+    expect(findFlashcardPhrasePinyin("银河", entries)).toBe("py");
+  });
+
+  it("matches after trimming whitespace, the same equivalence buildFillTestFromSavedContent uses to dedupe candidates", () => {
+    const entries = [makeContentEntry("城", "城市", "北京是一座美丽的城市。")];
+    expect(findFlashcardPhrasePinyin("  城市  ", entries)).toBe("py");
+  });
+
+  it("returns undefined when no saved phrase matches", () => {
+    const entries = [makeContentEntry("城", "城市", "北京是一座美丽的城市。")];
+    expect(findFlashcardPhrasePinyin("银河", entries)).toBeUndefined();
+  });
+
+  it("returns undefined for an empty phrase", () => {
+    expect(findFlashcardPhrasePinyin("", [])).toBeUndefined();
   });
 });
 

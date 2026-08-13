@@ -5,10 +5,15 @@
  * consumed by service/domain utilities outside the UI tree.
  */
 export type SessionGradeData = {
-  wordId: string; // Reference to word.id
-  hanzi: string; // Character reviewed
+  wordId: string; // Reference to word.id, or a vocab_phrases.id when isVocabPhrase is true
+  hanzi: string; // Character reviewed, or the phrase text when isVocabPhrase is true
   grade: "again" | "hard" | "good" | "easy"; // Grade given
   timestamp?: number; // When this individual grade was submitted (optional)
+  // True for a vocab-phrase round entry rather than a character entry --
+  // phrase rounds are binary (easy = correct, again = wrong, no partial
+  // credit), and earn coins under a separate flat rule instead of the
+  // character easy/good/hard/again table. See coins.ts.
+  isVocabPhrase?: boolean;
 };
 
 export type QuizSession = {
@@ -60,7 +65,8 @@ export function isValidGradeData(data: unknown): data is SessionGradeData {
     typeof g.wordId === "string" &&
     typeof g.hanzi === "string" &&
     isValidGrade(g.grade) &&
-    (g.timestamp === undefined || typeof g.timestamp === "number")
+    (g.timestamp === undefined || typeof g.timestamp === "number") &&
+    (g.isVocabPhrase === undefined || typeof g.isVocabPhrase === "boolean")
   );
 }
 

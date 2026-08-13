@@ -462,6 +462,7 @@ const gradeLabels = getGradeLabels(str);
       wordId: item.wordId,
       hanzi: item.hanzi,
       grade: item.tier,
+      isVocabPhrase: item.isVocabPhrase,
     }));
     return calculateSessionCoins(gradeData);
   }, [quizHistory]);
@@ -3990,12 +3991,16 @@ const gradeLabels = getGradeLabels(str);
         // Reuses the same QuizHistoryItem shape for phrase rounds -- the
         // history list only ever displays hanzi/tier/counts, it doesn't
         // care whether the id belongs to a word or a vocab phrase.
+        // isVocabPhrase carries through to gradeData at session-completion
+        // time so coin calculation applies the flat-1 phrase rule instead
+        // of the character easy/good/hard/again table -- see lib/coins.ts.
         ...result.vocabPhraseMemberResults.map((vocabPhraseMemberResult) => ({
           wordId: vocabPhraseMemberResult.vocabPhraseId,
           hanzi: vocabPhraseMemberResult.phrase,
           tier: vocabPhraseMemberResult.tier,
           correctCount: vocabPhraseMemberResult.correctCount,
           totalCount: vocabPhraseMemberResult.totalCount,
+          isVocabPhrase: true,
         })),
       ];
       setQuizHistory(updatedHistory);
@@ -4093,6 +4098,7 @@ const gradeLabels = getGradeLabels(str);
                 hanzi: item.hanzi,
                 grade,
                 timestamp: sessionEndTime, // Use session end time as approximation
+                isVocabPhrase: item.isVocabPhrase,
               };
             });
 
@@ -4373,6 +4379,7 @@ const gradeLabels = getGradeLabels(str);
     handleAdminBatchToggleFillTestInclude,
     createSelectedReviewTestSession,
     allFlashcardContents,
+    vocabPhrases,
     allWordsSummary,
     words,
     toggleAllWordsSort,

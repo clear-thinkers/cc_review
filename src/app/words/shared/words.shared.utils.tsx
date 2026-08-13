@@ -116,6 +116,9 @@ export function cloneFillTest(fillTest: FillTest): FillTest {
     phrases: [...fillTest.phrases],
     sentences: fillTest.sentences.map((sentence) => ({ ...sentence })),
     ...(fillTest.members ? { members: fillTest.members.map((member) => ({ ...member })) } : {}),
+    ...(fillTest.vocabPhraseMembers
+      ? { vocabPhraseMembers: fillTest.vocabPhraseMembers.map((member) => ({ ...member })) }
+      : {}),
   };
 }
 
@@ -544,6 +547,40 @@ export function normalizePhraseCompareKey(input: string): string {
 
 export function isPhraseIncludedInFillTest(phrase: FlashcardMeaningPhrase): boolean {
   return phrase.include_in_fill_test !== false;
+}
+
+/**
+ * Looks up a character-phrase's saved pinyin by phrase text, scanning every
+ * saved meaning/phrase across all flashcard content -- FillTest.phrases is
+ * just string[] (no pinyin travels with the runtime quiz plan), and a
+ * bundled round's sentences don't reliably carry a per-sentence characterId
+ * (only buildBundledFillTestPlan sets one; the ordinary single-character
+ * path from buildFillTestFromSavedContent does not), so text is the one
+ * identifier guaranteed present either way. Same equivalence
+ * (normalizePhraseCompareKey) buildFillTestFromSavedContent already uses to
+ * dedupe candidates, so this matches the same phrase that function would.
+ * Used by the fill-test review step's correct-answer reveal.
+ */
+export function findFlashcardPhrasePinyin(
+  phrase: string,
+  allFlashcardContents: FlashcardContentEntry[]
+): string | undefined {
+  const targetKey = normalizePhraseCompareKey(phrase);
+  if (!targetKey) {
+    return undefined;
+  }
+
+  for (const entry of allFlashcardContents) {
+    for (const meaning of entry.content.meanings) {
+      for (const phraseItem of meaning.phrases) {
+        if (normalizePhraseCompareKey(phraseItem.phrase) === targetKey) {
+          return phraseItem.pinyin;
+        }
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function escapeRegExp(source: string): string {

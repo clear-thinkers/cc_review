@@ -25,6 +25,10 @@ export type QuizHistoryItem = {
   tier: Tier;
   correctCount: number;
   totalCount: number;
+  // True for a vocab-phrase round entry rather than a character entry --
+  // carried through to SessionGradeData at session-completion time so
+  // coin calculation can apply the flat-1 phrase rule. See lib/coins.ts.
+  isVocabPhrase?: boolean;
 };
 
 export type QuizSelections = Array<number | null>;

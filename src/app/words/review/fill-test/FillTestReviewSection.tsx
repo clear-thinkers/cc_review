@@ -6,6 +6,7 @@ import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 import type { TestableWord } from "./fillTest.types";
 import { CoinAnimation } from "./coins.animation";
 import { playCelebrationSound } from "../../shared/coins.sound";
+import { findFlashcardPhrasePinyin, renderPhraseWithPinyin } from "../../shared/words.shared.utils";
 
 type QuizCelebrationWindow = Window & {
   __quizEasyGradeEvent?: number;
@@ -45,6 +46,8 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     quizSummary,
     quizSessionCoins,
     gradeLabels,
+    allFlashcardContents,
+    vocabPhrases,
   } = vm;
 
   // Celebration animation state
@@ -278,6 +281,50 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                             {str.fillTest.gameplay.clearButton}
                           </button>
                         </div>
+
+                        {sentenceResult && !sentenceResult.isCorrect ? (() => {
+                          const expectedPhrase =
+                            currentQuizWord.fillTest.phrases[sentenceResult.expectedPhraseIndex];
+                          const vocabPhrase = sentence.vocabPhraseId
+                            ? vocabPhrases.find((phrase) => phrase.id === sentence.vocabPhraseId)
+                            : undefined;
+                          const revealPinyin =
+                            vocabPhrase?.pinyin ?? findFlashcardPhrasePinyin(expectedPhrase, allFlashcardContents) ?? "";
+
+                          return (
+                            <div className="mt-2 space-y-1">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-green-700">
+                                {str.fillTest.results.correctSentenceLabel}
+                              </p>
+                              <div
+                                className={`grid grid-cols-1 gap-2 ${
+                                  vocabPhrase ? "sm:grid-cols-[1.2fr_1fr]" : "sm:grid-cols-[1.5fr_0.7fr]"
+                                }`}
+                              >
+                                <div className="rounded-md border border-green-200 bg-green-50 p-2.5">
+                                  <p className="flex flex-wrap items-center gap-1 text-base font-bold text-gray-900">
+                                    <span>{beforeBlank}</span>
+                                    <span className="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-green-800">
+                                      {expectedPhrase}
+                                    </span>
+                                    <span>{afterBlank}</span>
+                                  </p>
+                                </div>
+                                <div className="rounded-md border border-l-4 border-l-green-600 bg-white p-2.5">
+                                  <p className="mb-1">{renderPhraseWithPinyin(expectedPhrase, revealPinyin)}</p>
+                                  {vocabPhrase ? (
+                                    <>
+                                      <p className="text-sm font-semibold text-gray-900">
+                                        {vocabPhrase.meaningZh}
+                                      </p>
+                                      <p className="text-xs italic text-gray-500">{vocabPhrase.meaningEn}</p>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })() : null}
                       </div>
                     );
                   })}
@@ -331,33 +378,11 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
                       </li>
                     ))}
                   </ul>
-                  <ul className="space-y-1 text-sm">
-                    {quizResult.sentenceResults.map((resultItem) => {
-                      const expectedPhrase = currentQuizWord.fillTest.phrases[resultItem.expectedPhraseIndex];
-                      const chosenPhrase =
-                        resultItem.chosenPhraseIndex === null
-                          ? str.fillTest.results.emptyChoice
-                          : currentQuizWord.fillTest.phrases[resultItem.chosenPhraseIndex];
-
-                      return (
-                        <li
-                          key={`${currentQuizWord.id}-result-${resultItem.sentenceIndex}`}
-                          className={resultItem.isCorrect ? "text-green-700" : "text-red-700"}
-                        >
-                          {str.fillTest.results.sentenceResult
-                            .replace("{index}", String(resultItem.sentenceIndex + 1))
-                            .replace(
-                              "{result}",
-                              resultItem.isCorrect
-                                ? str.fillTest.results.correct
-                                : str.fillTest.results.incorrect
-                            )
-                            .replace("{chosen}", chosenPhrase)
-                            .replace("{expected}", expectedPhrase)}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  {quizResult.correctCount < quizResult.sentenceResults.length ? (
+                    <p className="text-xs italic text-gray-500">
+                      {str.fillTest.results.reviewAboveHint}
+                    </p>
+                  ) : null}
                   <button
                     type="button"
                     className="btn-nav rounded-md border-2 px-4 py-2 hover:bg-[#fff1cd]"
