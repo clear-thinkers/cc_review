@@ -1,6 +1,6 @@
 # Build Conventions — HanziQuest (`cc_review`)
 
-_Last updated: 2026-03-28 (§10 added)_
+_Last updated: 2026-08-13 (§5, §7, §8 corrected; §10 gained two script entries)_
 
 For authority hierarchy, hard stops, doc update policy, and fix log policy — see `AI_CONTRACT.md`.
 For where to file new documents — see `0_ARCHITECTURE.md §6`.
@@ -165,7 +165,7 @@ src/app/words/[feature]/
 - [ ] Strings owner confirmed (local file or workspace file extended)
 - [ ] `[feature].types.ts` created if new domain types introduced
 - [ ] No hardcoded text in JSX
-- [ ] Locale hook: useLocale() from src/lib/locale/useLocale.ts (or wherever it lives) — confirm path in 0_ARCHITECTURE.md
+- [ ] Locale hook: `useLocale()` from `src/app/shared/locale.tsx`
 - [ ] ARIA labels sourced from strings file
 - [ ] All buttons have bilingual labels, tooltips, and notifications
 - [ ] Tests added per §6
@@ -210,7 +210,7 @@ Every new feature must have tests before it is considered complete.
 - `results/results.module.css` — predates Tailwind-only rule; all new styling for `results/` must extend this file, not mix with Tailwind.
 - `review/fill-test/coins.animation.module.css` — animation keyframes only. A new CSS module is only permitted for keyframe animations Tailwind cannot express; document the reason at the top of the file.
 
-**Pinyin (ruby) alignment:** render as per-character units (Hanzi + pinyin token), not a full pinyin line above a full Hanzi line. Map pinyin tokens only to Hanzi code points; skip punctuation and non-Hanzi characters. When token count mismatches, render Hanzi without pinyin — no placeholder. Remove from DOM when pinyin is hidden (not CSS `visibility: hidden`). See `FlashcardCard.tsx` for the reference DOM pattern.
+**Pinyin (ruby) alignment:** render as per-character units (Hanzi + pinyin token), not a full pinyin line above a full Hanzi line. Map pinyin tokens only to Hanzi code points; skip punctuation and non-Hanzi characters. When token count mismatches, render Hanzi without pinyin — no placeholder. Remove from DOM when pinyin is hidden (not CSS `visibility: hidden`). Reuse `renderPhraseWithPinyin`/`renderSentenceWithPinyin`/`tokenizePinyinSyllables` from `words.shared.utils.tsx` — do not hand-roll this DOM pattern again; `FlashcardCard.tsx`, Content Admin's phrase view, and `FillTestReviewSection.tsx`'s correct-answer reveal all call the same helpers.
 
 **Styling rules:** see `docs/architecture/style-ref.md` for the full styling rules to follow for colors and buttons. If docs/architecture/style-ref.md is not readable, stop and flag before writing any styled components.
 
@@ -219,7 +219,7 @@ Every new feature must have tests before it is considered complete.
 ## 8 · Build & CI Guardrails
 
 - **Encoding check:** `npm run check:encoding` — runs `scripts/check-mojibake.mjs`, scans for garbled characters in source and docs.
-- **String parity check:** asserts identical EN/ZH key sets across all `*.strings.ts` files. Runs as part of `npm test`.
+- **String parity check:** where it exists, asserts identical EN/ZH top-level key sets for one strings file (e.g. `prompts.strings.ts` → `prompts.test.tsx`) and runs as part of `npm test`. **Not a repo-wide guarantee** — `words.strings.ts`, the largest and most-edited strings file, has no such test today; EN/ZH parity there is manual-review only. Add a parity test for any strings file you touch that doesn't already have one — don't assume `npm test` catches a mismatch.
 - **CI workflow:** `.github/workflows/encoding-guardrails.yml` — triggers on all PRs and pushes to `main`/`master`.
 
 ---
@@ -338,6 +338,38 @@ npm run generate:coin-compensation-sql -- \
 
 ---
 
+### `scripts/generate-packaged-session-reattribution-fix.ts`
+
+**npm command:** `npm run generate:packaged-session-reattribution-sql`
+
+**Purpose:** Generates an idempotent SQL transaction that reattributes a misattributed packaged-session `quiz_sessions` row (and its coin award) from one family member to another, stamps `review_test_sessions.completed_at`, and deletes the session's stale `review_session_progress` row.
+
+**When to use:** A packaged session's completion was recorded under the wrong `user_id` — the concurrent-device profile-claim class of bug documented in `docs/fix-log/build-fix-log-2026-07-30-packaged-session-limbo.md`, since fixed at the root (see `verify-session-scoped-claims.ts` below), but incidents from before that fix may still need one-off repair.
+
+**Env vars required:** same two as `generate-coin-compensation-fix.ts` above.
+
+**Required flags**
+| Flag | Type | Description |
+|---|---|---|
+| `--session-id` | text | Target `review_test_sessions.id` |
+| `--from-user-id` | UUID | The `users.id` the completion was wrongly attributed to |
+| `--to-user-id` | UUID | The `users.id` (must be `role="child"`) it should be reattributed to |
+
+**Optional flags**
+| Flag | Default | Description |
+|---|---|---|
+| `--quiz-session-id` | auto-detected | Explicit `quiz_sessions.id`; auto-detection matches `--from-user-id`'s most recent row whose `grade_data` total matches the session's target count |
+| `--output` | stdout | Write SQL to a file path instead of printing |
+| `--prod` / `--env prod` | off | Same prod selector convention as the coin-compensation script above |
+
+**Key behaviours:** validates both users belong to the same family as the session before emitting SQL; raises rather than guessing if the quiz session is owned by neither `--from-user-id` nor `--to-user-id`.
+
+**Fix log:** `docs/fix-log/build-fix-log-2026-07-30-packaged-session-limbo.md`
+**Shared lib:** `src/lib/packagedSessionReattributionFix.ts`
+**Tests:** `src/lib/packagedSessionReattributionFix.test.ts`
+
+---
+
 ### `scripts/verify-rls.ts`
 
 **Purpose:** Verifies RLS policy correctness against a live Supabase dev project. Covers table accessibility, platform-admin bypass, unenriched session isolation, cross-family isolation, child write scope, and quiz session immutability.
@@ -352,3 +384,21 @@ npm run generate:coin-compensation-sql -- \
 | `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` |
 
 Runs against dev only — no `--prod` flag. Never point this at prod without first auditing the test sections for destructive writes.
+
+**Known state (2026-08-13):** Section 6 (`vocab_phrases`/`vocab_phrase_lesson_tags`) has one standing failure — `vocab_phrase_lesson_tags setup: service role INSERT lesson_tag failed: Could not find the 'grade' column of 'lesson_tags' in the schema cache`. Pre-existing, unrelated to any change since it first appeared, not yet fixed. Expect 44/45, not 45/45, until this is addressed.
+
+---
+
+### `scripts/verify-session-scoped-claims.ts`
+
+**npm command:** `npm run verify:session-scoped-claims`
+
+**Purpose:** Verifies `custom_access_token_hook` against a live Supabase project — that a Layer 2 profile switch (`auth_session_profiles` upsert, what `/api/auth/pin-verify` does) on one Auth session never affects the claims a *different*, concurrently active Auth session receives on its own token refresh. This is the regression check for the incident class in `docs/fix-log/build-fix-log-2026-07-30-packaged-session-limbo.md` (final "root-cause fix" entry).
+
+**When to use:** Before shipping any change to `current_family_id()`/`current_user_id()`/`is_platform_admin()`/`current_jwt_role()` or `custom_access_token_hook` itself — see `AI_CONTRACT.md §2`. Also useful as a first diagnostic when a `family_id`/`user_id`-dependent write fails RLS unexpectedly and a stale-identity bug is suspected.
+
+**Env vars required:** same three as `verify-rls.ts` above.
+
+**No flags.** Signs into one shared test family login twice (simulating two devices, each gets its own Auth `session_id`), switches each session to a different profile via a direct `auth_session_profiles` upsert (bypassing the `pin-verify` HTTP route — same precedent as `verify-rls.ts`'s `createTestAuthClient`, since the behavior under test is the hook + table, not PIN-checking logic), and asserts device A's claims are unaffected by device B's later switch across a forced `refreshSession()`.
+
+Creates and cleans up its own ephemeral test family/users/auth account — safe to rerun. Runs against dev only, no `--prod` flag. If the hook isn't registered on the target project (Dashboard → Authentication → Hooks — not applied by `supabase db push`), every assertion fails with claims missing `family_id`/`user_id`, which is itself the useful signal.

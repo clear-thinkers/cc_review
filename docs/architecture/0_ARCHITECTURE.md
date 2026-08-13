@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-05-11_
+_Last updated: 2026-08-13_
 
 ---
 
@@ -18,25 +18,25 @@ This project is a **Supabase-backed Chinese memory engine** with deterministic r
 Tier 1 rules (active):
 - Review is scheduler-driven and deterministic (`again|hard|good|easy` grade mapping — no stochastic grading).
 - Review sessions consume **persisted content only** — no live generation.
-- AI generation is scoped to admin authoring workflows only (`/words/admin` → `/api/flashcard/generate`).
-- Flashcard content is keyed by `character|pronunciation` and normalized before persistence.
-- Fill-test eligibility is derived from saved phrase/example rows and `include_in_fill_test` flags. One eligible phrase/example row is enough for runtime quiz eligibility; low-phrase characters are bundled at session start.
+- AI generation is scoped to admin authoring workflows only: `/words/admin` → `/api/flashcard/generate` (characters) or `/api/vocab-phrase/generate` (phrases).
+- Flashcard content is keyed by `character|pronunciation` and normalized before persistence. Vocab phrases are keyed by `(family_id, phrase)` and are flat — no nested meanings.
+- Fill-test eligibility is derived from saved phrase/example rows and `include_in_fill_test` flags. One eligible phrase/example row is enough for runtime quiz eligibility; low-phrase characters are bundled at session start. A vocab phrase needs one eligible example and always forms its own round, never bundled with characters.
 - Unsafe content and malformed payloads are dropped during normalization before they can be persisted.
 - Coins are earned from completed quiz sessions and spent through shop unlocks or redeemed for real-dollar value; neither action changes scheduler state or quiz history.
 - `wallets.total_coins` is a running spendable balance — it is decremented by shop unlocks and coin redemptions. It is NOT a total-earned counter; `quiz_sessions.coins_earned` is the immutable per-session earned record and is never modified by redemptions.
 
 Primary admin user flow:
-1. Add Hanzi       → `/words/add`     → Supabase `words` table (hanzi ingested, optionally tagged, unreviewed).
-2. Manage tags     → `/words/add`, `/words/all`
+1. Add Hanzi/phrases → `/words/add`   → Supabase `words` table (characters) or `vocab_phrases` table (comma/space/line-separated batch), both unreviewed until curated.
+2. Manage tags     → `/words/add`, `/words/all`, `/words/admin`
                                          → assign textbook / grade / unit / lesson
-                                         → Supabase `word_lesson_tags` + tag tables.
+                                         → Supabase `word_lesson_tags` / `vocab_phrase_lesson_tags` + tag tables.
 3. Adjust prompts  → `/words/prompts` → edit/version AI prompt templates → Supabase prompts table.
-4. Curate content  → `/words/admin`   → `/api/flashcard/generate` + manual edits 
-                                         → Supabase `flashcard_contents` table.
-5. Package tests   → `/words/admin`   → named review test sessions
+4. Curate content  → `/words/admin`   → `/api/flashcard/generate` (characters) or `/api/vocab-phrase/generate` (phrases) + manual edits
+                                         → Supabase `flashcard_contents` / `vocab_phrases` tables.
+5. Package tests   → `/words/admin`   → named review test sessions, characters and/or phrases
                                          → Supabase `review_test_sessions*` tables.
 6. Review & quiz   → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test`
-                                         → reads persisted data only.
+                                         → reads persisted data only; phrase rounds run separately from character rounds.
 7. Reward loop     → `/words/results`, `/words/shop`
                                          → Supabase `quiz_sessions`, `wallets`, and shop tables.
 8. Manage shop     → `/words/shop-admin`, `/words/debug`
@@ -114,9 +114,9 @@ These rules govern content curation at `/words/admin`:
    - `missing content`: no normalized phrase row exists
    - `ready for testing`: has content and at least one phrase included for fill test; runtime bundled fill-test mode can quiz one- or two-phrase characters
    - `excluded for testing`: has content but no phrase included for fill test
-9. Batch AI content generation is exposed from the Content Admin action toolbar with four scopes: `missing only`, `all`, `filtered only`, and `selected only`. The `missing only` action resolves against all admin targets and skips targets that already have persisted content; the `all` action resolves against all admin targets and overwrites persisted content. The `filtered only` and `selected only` scopes overwrite persisted content for their resolved target sets. The destructive `all` action requires a confirmation dialog before mutation.
+9. Batch AI content generation has four scopes on the Content Admin toolbar: `missing only` (skips targets that already have content), `all` (overwrites every target), `filtered only`/`selected only` (overwrites their resolved target set). The destructive `all` action requires a confirmation dialog.
 10. Characters with no dictionary pronunciation are skipped with notice; this is not a fatal load error.
-11. Batch AI content generation uses a fixed concurrency of 3 (`Promise.allSettled`). Batch size is capped at 3 to avoid saturating the AI provider with concurrent requests from a single session. No per-character retry — a failed character is counted and skipped; the loop continues. The completion notice reports total succeeded and total failed counts. Batch size must not be increased without validating provider rate limits. Batch pinyin generation is exposed from the same action toolbar with the same four scopes, but operates only on saved content rows; `missing only` fills missing phrase/example pinyin only, while the other three scopes refresh phrase/example pinyin for the resolved saved rows. The destructive `all` pinyin action requires a confirmation dialog before mutation.
+11. Batch AI content generation runs at a fixed concurrency of 3 (`Promise.allSettled`), capped to avoid saturating the AI provider; do not raise it without validating provider rate limits. No per-character retry — a failure is counted and skipped, the loop continues, and the completion notice reports succeeded/failed totals. Batch pinyin generation shares the same toolbar and four scopes but only touches saved content rows: `missing only` fills missing pinyin, the other three refresh pinyin for their resolved set. The destructive `all` pinyin action requires confirmation.
 12. A **default filter bar** is displayed above the character list. It includes:
    - **Due Now**: Checkbox to show only admin targets whose associated character has at least one due word (`nextReviewAt <= now` or `0`/empty).
    - **Tags (Cascade)**: Multi-select dropdown showing available cascade tags (`TextbookName · Grade · Unit · Lesson`). Content Admin tag matching uses OR logic within a target's associated word tags.
@@ -138,6 +138,14 @@ These rules govern content curation at `/words/admin`:
 24. Reusing an existing active session name with exact case appends only new `character|pronunciation` targets to that session instead of creating a duplicate session row.
 25. Review test session creation order is computed at save time by familiarity ascending, then character ascending, then pronunciation ascending.
 26. Creating or appending a review test session persists only target membership metadata; it does not duplicate flashcard content into a second content table.
+
+Rules 27+ govern the Content Admin **Phrases** view — a Characters/Phrases toggle swaps the whole table body; rules 1–26 above are untouched when Characters is active:
+
+27. The Phrases view is a flat table over `vocab_phrases` — one row per phrase, no character→meaning→phrase nesting (there is nothing to nest at the phrase level). Phrase creation happens only via `/words/add`'s batch entry, not on this page — there is no inline "+ New Phrase" row.
+28. Generation calls route through `/api/vocab-phrase/generate` (never `/api/flashcard/generate`), with two modes: a default one-shot full generate (pinyin + both definitions + one example) and `mode: "example_pinyin"` (pinyin for one hand-typed or hand-edited sentence, used by the per-example E/+Example actions).
+29. The Phrases view has its own default filter bar (Phrase Search, Tags Cascade, Filter by Tag Part) mirroring the Characters filter bar, minus **Due Now** — `vocab_phrases` has no SRS/due-date state, so the concept doesn't apply.
+30. The Phrases view has its own selection/batch toolbar mirroring the Characters one (batch AI generation at concurrency 3, Add to Review Test Session, batch include-in-test-bank toggle) with two deliberate non-1:1 behaviors: batch "Pinyin Generation" only refreshes `examples[].pinyin` via the narrow `example_pinyin` mode (phrase-level pinyin/definitions are generated together with the full one-shot generate, so there's no batch-pinyin-only precedent to port); batch "Include in test bank" toggles `include_in_fill_test` on every example of every selected phrase (all-or-nothing), since the flag lives per-example, not per-phrase. There is no "Select page" action — the Phrases view has no pagination.
+31. Packaging phrases into a review test session is a standalone selection/toolbar parallel to the Characters one (not the same `adminTargets` state, which is character-specific), calling the same underlying `createReviewTestSession`/`appendTargetsToReviewTestSession` service functions. A session may mix character and phrase targets.
 
 ### Due Review Queue Rules
 
@@ -173,6 +181,8 @@ These rules govern the due queue view at `/words/review`:
 26. Discarding a paused session is immediate with no confirmation dialog, matching the `/words/all` delete precedent (§ All Characters Inventory Rules, rule 8).
 27. Resuming a paused session branches by `source_type`: an ad-hoc due-review row navigates to `/words/review/fill-test?resumeProgressKey=<clientSessionKey>`; a packaged row navigates to `/words/review/fill-test?reviewTestSessionId=<packagedSessionId>` instead — the SAME entry point as starting a fresh packaged session — deliberately skipping the flashcard phase, since flashcard review is non-graded and re-doing it isn't required to resume grading.
 28. Each Paused Sessions row displays a session label alongside its saved/remaining info: a packaged row shows the packaged session's name (resolved from the same session list backing the Test Sessions table above, falling back to the raw session id if that list hasn't loaded yet); an ad-hoc due-review row shows a generic "Due Review" label.
+29. A packaged session's "quiz-ready" count and its Start-button gate both cover character targets (`quizWords`) **and** vocab-phrase targets (`vocabPhrases`, filtered to phrases with at least one fill-test-eligible example) — a phrase-only session must never read as 0/0 quiz-ready.
+30. Starting a packaged session routes through the flashcard phase first only when it has at least one character target. A phrase-only packaged session skips flashcard review entirely and goes straight to `/words/review/fill-test?reviewTestSessionId=<id>` — vocab phrases have no flashcard entity, so that phase would always be empty. Mixed sessions are unaffected: the flashcard phase still runs for their character targets.
 
 ### Flashcard Review Rules (`/words/review/flashcard`)
 
@@ -204,9 +214,9 @@ These rules govern bundled fill-test quiz sessions:
 9. Grading remains character-level. A bundled quiz appends one grade entry per included character, not one grade entry per blank.
 10. Standard characters with three blanks use the existing three-blank rule: `3/3=easy`, `2/3=good`, `1/3=hard`, `0/3=again`.
 11. Low-phrase characters use the correct-rate rule on their own blanks: all correct is `easy`, partial and greater than 50% is `good`, partial and less than or equal to 50% is `hard`, none correct is `again`.
-12. Quiz-session coin logic is unchanged and continues to award from character-level grade entries: `easy=5`, `good=3`, `hard=1`, `again=0`.
+12. Character grade entries earn coins from the unchanged table: `easy=5`, `good=3`, `hard=1`, `again=0`. Vocab-phrase entries earn a separate flat rule instead — see rule 26.
 13. Packaged review test sessions use the same bundled fill-test planner over the packaged quiz-ready character set.
-14. Fill-test review does not add routes, tables, columns, RPCs, RLS policies, or AI calls.
+14. This character-only fill-test path (rules 1–13) adds no routes, tables, columns, RPCs, RLS policies, or AI calls of its own. Rules 22+ below cover the phrase-round path, which does — see Data Schema.
 15. Fill-test sessions of BOTH source types (ad-hoc due-review and packaged) autosave progress after every graded word via `saveReviewSessionProgress`, upserted under a `client_session_key` — a client-minted `crypto.randomUUID()` for a NEW ad-hoc session, or the `review_test_sessions.id` itself for a packaged session — held for the life of that runtime session. Autosave is fire-and-forget: a failed save is logged and never blocks quiz interaction or surfaces an error toast.
 16. The saved resume position is always `quizIndex + 1` (the NEXT unanswered word), never the just-graded `quizIndex` — `gradeWord()` already mutates the scheduler for a word the moment it is graded, independent of the "Next" click, so replaying the same word on resume would double-grade it. No autosave row is written when the just-graded word was the last item in the queue (the session is about to complete normally instead).
 17. `/words/review/fill-test?resumeProgressKey=<clientSessionKey>` loads the matching `review_session_progress` row and initializes runtime state from its saved `progress_data` instead of building a fresh plan from due words. If the row is missing (already discarded/completed elsewhere, or points at a non-`due_review` row), the child is redirected to `/words/review?reviewTestSessionStatus=resume_missing`.
@@ -214,6 +224,15 @@ These rules govern bundled fill-test quiz sessions:
 19. Stopping an in-progress session via the existing "Stop quiz" button leaves its saved `review_session_progress` row intact — only explicit Discard (from the Due Review Paused Sessions list) and normal session completion delete it. Completing an ad-hoc session deletes the row after the `quiz_sessions` insert succeeds; completing a packaged session relies on server-side cleanup in the `complete_review_test_session` RPC instead (not duplicated client-side) — the client never issues its own `deleteReviewSessionProgress` call for packaged completion.
 20. `/words/review/fill-test?reviewTestSessionId=<id>` (the existing packaged entry point, unchanged) checks for a saved `review_session_progress` row for that session id BEFORE building a fresh bundled plan. If one exists (`source_type = 'packaged'`), the session resumes from it instead of starting over; this check runs on every packaged-session entry, so a child who clicks "Start session" again while paused (e.g. after re-doing the non-graded flashcard phase) still lands back on their saved progress rather than a duplicate fresh plan.
 21. Packaged resume re-validation runs the same NOT-YET-ANSWERED-tail check as rule 18, PLUS one packaged-only check: every member word of each remaining queued item must still be one of the session's CURRENT quiz-ready targets (`activeReviewTestSessionRuntime.quizWords`), not just still word/content-eligible. A parent may have removed a packaged target (or its content) while the session was paused; an item referencing a removed target is dropped even if the word and its content are otherwise still valid. If this drops every remaining item, the session redirects to the existing packaged `no_quiz_ready` empty state (not a new status code) and the now-useless saved row is deleted. A corrupted/unreadable saved payload redirects to the existing packaged `invalid` status instead of the ad-hoc `resume_missing` status, which is reserved for the `resumeProgressKey` entry point.
+
+Rules 22+ govern **vocab-phrase rounds** (`vocab_phrases`, packaged-only — see Data Schema). A phrase blank uses the identical drag-and-match mechanic as a character blank; the differences are all in round construction and grading:
+
+22. Phrases always form their own round(s), never mixed with a character in the same round — `buildFillTestPlanForVocabPhrases` is a standalone planner alongside (never inside) `buildBundledFillTestPlan`. A session with both kinds produces a sequence of rounds, some character-only, some phrase-only. Phrases are chunked into groups of up to 3 per round (same convention as the ordinary 3-blank character quiz); each phrase contributes exactly one blank per round from one randomly-chosen fill-test-eligible example, since a phrase can never supply its own distractor. A phrase with zero eligible examples is skipped from the round (unlike characters, it gets no explicit "skipped" notice — a known gap, not silently shipped).
+23. A phrase round has no low/standard split and no partial credit: it's graded through the same `gradeBundledFillTest` call every round uses, but with exactly one blank per phrase, so the tier is always binary — `easy` (correct) or `again` (wrong).
+24. Grading writes to `vocab_phrases.test_count` only via `gradeVocabPhrase` — no `repetitions`/`ease`/`next_review_at` on the phrase row (phrases are packaged-only, never auto-scheduled).
+25. On a correct phrase answer only (tier `easy`), the phrase's own component Hanzi (via `extractUniqueHanzi`, deduped) are looked up against the family's standalone `words`; each match gets its familiarity nudged via the same unmodified `calculateNextState(word, "good", now)` every direct character grade uses, persisted by `nudgeWordFamiliarity` — which increments `reviewCount` but deliberately **not** `testCount` (reserved for direct standalone tests of that character). A character never added standalone is silently skipped. A wrong phrase answer touches no character state at all.
+26. A correctly-answered phrase round entry earns a flat **1 coin**, independent of the character `easy=5/good=3/hard=1/again=0` table in rule 12 — a wrong entry earns 0. `SessionGradeData.isVocabPhrase` is the discriminator `calculateSessionCoins` branches on; grading writes both kinds of entries into the same `quiz_sessions.grade_data` array.
+27. After a wrong sentence in EITHER a character or phrase round, the review step shows the correct sentence inline, directly under that sentence — never only in an aggregate list — with ruby pinyin on the revealed phrase (ruby lives in a companion card beside the sentence, never inside the answer pill itself, so pill sizing/alignment stays identical whether right or wrong). A phrase round's companion card additionally shows the Chinese definition first, English below; a character round's does not, since a character's blank has no single-phrase definition (its definition lives one level up, on the meaning group).
 
 ### Quiz Results Rules (`/words/results`)
 
@@ -254,6 +273,7 @@ These rules govern the results/history view for session data reporting:
    - If the entered session name matches an existing active packaged review test session with exact case, the action appends only new targets to that session
    - If no eligible targets remain after resolution, no mutation occurs and the UI surfaces an error notice
 9. **Empty state:** When no sessions exist, display a placeholder message directing users to start a review session; hide all table and summary UI elements.
+10. **Known gap — vocab-phrase entries in `gradeData`:** a phrase round's grade entries share the same `SessionGradeData` shape as character entries (`hanzi` holds the phrase text, `isVocabPhrase: true` is the only discriminator), so "Tested Characters"/"Failed Characters" and the accuracy percentages in rules 3–6 don't distinguish them — a phrase shows up in those Hanzi lists like a character would. Accepted, not fixed. **Send Failed to Test Session (rule 8) is unaffected in practice**: `resolveFailedCharactersToReviewTestTargets` matches failed entries against `words.hanzi` (always a single Hanzi character), so a multi-character phrase entry never matches and is silently skipped via the same "no current word row" path rule 8 already documents — it does not need special-casing to behave correctly.
 
 ### Recipe Shop Rules (`/words/shop`)
 
@@ -308,7 +328,7 @@ These rules govern the two-layer authentication and session protection system:
 2. All other pages and routes require a valid Supabase session to access; unauthenticated requests redirect to `/login`.
 3. **Two-layer authentication model:**
    - **Layer 1 — Family Authentication (Supabase Auth):** One Supabase Auth account per family. Standard email + password. Supabase handles token issuance, refresh, and recovery. This layer proves the person belongs to the family.
-   - **Layer 2 — Profile Selection + PIN (App Layer):** After Layer 1, the user sees their family's profile cards and taps a profile. A 4-digit PIN entry screen renders. The app hashes the PIN and compares it to `users.pin_hash` for the selected profile. On match, the app session context is set (`family_id`, `user_id`, `role`) and the JWT is enriched with these claims.
+   - **Layer 2 — Profile Selection + PIN (App Layer):** After Layer 1, the user sees their family's profile cards and taps a profile. A 4-digit PIN entry screen renders. The app hashes the PIN and compares it to `users.pin_hash` for the selected profile. On match, `/api/auth/pin-verify` upserts an `auth_session_profiles` row keyed by the caller's own Auth `session_id` (not the shared `auth.users` row — see §11 below), and the client calls `supabase.auth.refreshSession()` so its next token carries the new claims via `custom_access_token_hook`.
 4. **Registration flow:**
    - User visits `/register` and enters family name, email, and password
    - Supabase Auth creates the account
@@ -319,7 +339,7 @@ These rules govern the two-layer authentication and session protection system:
 5. **Login flow:**
    - Layer 1: User enters email + password; Supabase Auth validates and issues JWT
    - Layer 2: Profile picker renders all `users` rows for the authenticated `family_id`; user taps a profile and enters their PIN
-   - On PIN match: session context set, JWT enriched, redirect to `/words`
+   - On PIN match: `auth_session_profiles` upserted for this session, token refreshed, redirect to `/words`
    - On PIN mismatch: `failed_pin_attempts` incremented on the `users` row
 6. **PIN security:**
    - PIN hashed with `scrypt` (N=16384, r=8, p=1, keylen=32); stored format: `{32-hex-salt}:{64-hex-hash}`
@@ -337,7 +357,7 @@ These rules govern the two-layer authentication and session protection system:
    - Avatar displayed in nav bar when logged in
 9. **Session persistence:**
    - Supabase Auth manages JWT lifecycle (issuance, refresh, expiration)
-   - App session context (`family_id`, `user_id`, `role`) is derived from JWT `app_metadata` claims
+   - App session context (`family_id`, `user_id`, `role`) is derived from JWT `app_metadata` claims, kept current by `custom_access_token_hook` on every refresh — never from the Supabase JS client's `session.user.app_metadata` (see Data Schema § RLS above)
    - `AuthProvider` React context exposes session state to all components
    - `SessionGuard` wraps protected routes and redirects to `/login` when no valid session exists
 10. **Logout flow:**
@@ -351,6 +371,7 @@ These rules govern the two-layer authentication and session protection system:
     - Within a family, `user_id`-scoped tables (wallet, quiz_sessions) isolate per-profile data
     - Platform admin (`is_platform_admin = true`) bypasses RLS for data management
     - No cross-tenant data leakage is possible at the database layer
+    - Because Layer 1 is one shared Supabase Auth account per family, isolating *which profile* a given browser tab/device is acting as is a session-level concern, not a family-level one — `auth_session_profiles` scopes claims per Auth `session_id`, so a parent switching profiles on their own device can never change what a child's already-open device resolves to on its own token refresh. Before this (a real production incident, see `docs/fix-log/build-fix-log-2026-07-30-packaged-session-limbo.md`), claims were written to the shared `auth.users` row and any concurrent device's next refresh silently picked up whichever profile was switched to last, anywhere.
 
 ### Role-Based Routing Rules (`/words/*`)
 
@@ -393,7 +414,7 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | UI | `src/app/...`, `WordsWorkspace` | Interaction, view state, locale rendering |
 | Domain | `src/lib/scheduler.ts`, `src/lib/fillTest.ts`, `src/lib/flashcardLlm.ts` | Pure logic: scheduling, grading, normalization |
 | Service | `src/lib/supabase-service.ts`, `src/lib/supabaseClient.ts`, `src/lib/xinhua.ts` | IO: Supabase reads/writes (all data access), static data loading |
-| AI | `src/app/api/flashcard/generate/route.ts` | Prompt orchestration, provider calls, active-prompt resolution from `prompt_templates` |
+| AI | `src/app/api/flashcard/generate/route.ts`, `src/app/api/vocab-phrase/generate/route.ts` | Prompt orchestration, provider calls, active-prompt resolution from `prompt_templates` |
 
 ### Call Graph (Structural)
 
@@ -405,7 +426,7 @@ This describes how layers are wired — the actual call and import relationships
   - `src/lib/supabase-service.ts` uses the browser Supabase client (`supabase` from `supabaseClient.ts`), which passes the session JWT automatically.
   - RLS policies scope all reads/writes to the current family/user via JWT `app_metadata` claims.
   - Service functions handle camelCase (TypeScript) ↔ snake_case (Postgres) conversion.
-  - For inserts requiring `family_id`/`user_id`, the service layer reads these from the Supabase session `app_metadata`.
+  - For inserts requiring `family_id`/`user_id`, the service layer's `getSessionMetadata()` resolves them from the **access token's own** `app_metadata` claim (`decodeJwtPayload.ts`'s `getJwtAppMetadata()`) — never from the Supabase JS client's `session.user.app_metadata`, which reflects the `auth.users` DB row, not the active session-scoped profile. See Data Schema § RLS and `AI_CONTRACT.md §1`.
   - API routes import `getServerSupabaseClient()` (service role, for admin operations only)
   - **No direct IndexedDB/Dexie operations** — IndexedDB is fully retired; `src/lib/db.ts` has been deleted.
 - `src/lib/scheduler.ts` has no dependency on UI or API layers — it is a pure domain module.
@@ -438,11 +459,23 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `auth_user_id` | uuid (nullable) | Links to Supabase Auth user (non-null for parents, null for children) |
 | `name` | text | User display name |
 | `role` | text | Either `'parent'` or `'child'` |
-| `pin_hash` | text (nullable) | SHA-256 hash of 4-digit PIN; null for parents (use Supabase Auth PASSWORD) |
+| `pin_hash` | text (nullable) | `scrypt` hash of 4-digit PIN (see Login Rules §6); null for parents (use Supabase Auth PASSWORD) |
 | `is_platform_admin` | boolean | True only for Chengyuan (platform admin); bypasses RLS on all tables |
 | `failed_pin_attempts` | integer | Incremented on wrong PIN; reset on success; application locks at 5 attempts |
 | `avatar_id` | text (nullable) | Filename stem; valid values: `bubble_tea_excited_1`, `cake_sleep_1`, `donut_wink_1`, `rice_ball_sleep_1`, `zongzi_smile_1`, `ramen_excited_1`, `babaorice_smile_1`, `bun_wink_1` |
 | `created_at` | timestamptz | Server timestamp |
+
+**`auth_session_profiles` table** — active Layer 2 profile per Supabase Auth session (not per family), keyed by the JWT's own `session_id`; enables one Layer 1 account to be signed in as different profiles on different devices simultaneously without cross-contaminating claims. Default-deny RLS — only `service_role` and `supabase_auth_admin` may touch it; see Login Rules §3 and `custom_access_token_hook` below
+
+| Field | Type | Notes |
+|---|---|---|
+| `session_id` | uuid | Primary key; matches the Supabase Auth session (and JWT `session_id` claim) this profile applies to |
+| `auth_user_id` | uuid | The shared Layer 1 auth account this session belongs to |
+| `family_id` | uuid | Foreign key → `families.id` |
+| `user_id` | uuid | Foreign key → `users.id`; the active profile |
+| `role` | text | `'parent'` or `'child'`, mirrors `users.role` at PIN-verify time |
+| `is_platform_admin` | boolean | Mirrors `users.is_platform_admin` at PIN-verify time |
+| `updated_at` | timestamptz | Set on every PIN switch |
 
 **`words` table** — one row per Hanzi character, scoped to family
 
@@ -486,6 +519,30 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `created_at` | timestamptz | Server timestamp |
 | **Unique constraint** | | `(family_id, character, pronunciation)` |
 
+**`vocab_phrases` table** — standalone multi-character phrase content, parallel to `words` but with no SRS scheduling (packaged-only, no auto-review)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `phrase` | text | `check (char_length(phrase) between 2 and 10)` |
+| `pinyin` | text (nullable) | Nullable until AI-generated or hand-entered |
+| `meaning_zh` / `meaning_en` | text (nullable) | Chinese and English definitions |
+| `examples` | jsonb | `{ zh, pinyin, include_in_fill_test }[]`; `check (jsonb_array_length(examples) <= 20)` |
+| `test_count` | integer | Default 0; incremented by `gradeVocabPhrase` only — no `repetitions`/`ease`/`next_review_at` |
+| `created_at` | timestamptz | Server timestamp |
+| **Unique constraint** | | `(family_id, phrase)` |
+
+**`vocab_phrase_lesson_tags` table** — join table assigning lesson tags to phrases, mirrors `word_lesson_tags`
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `vocab_phrase_id` | uuid | Foreign key → `vocab_phrases.id`; cascades on delete |
+| `lesson_tag_id` | uuid | Foreign key → `lesson_tags.id`; cascades on delete |
+| `family_id` | uuid | Denormalized for RLS |
+| **Unique constraint** | | `(vocab_phrase_id, lesson_tag_id)` |
+
 **`review_test_sessions` table** — active/completed packaged review sessions, scoped to family
 
 | Field | Type | Notes |
@@ -506,8 +563,9 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `id` | uuid | Primary key |
 | `session_id` | text | Foreign key → `review_test_sessions.id`; cascades on delete |
 | `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
-| `character` | text | Packaged Hanzi character |
-| `pronunciation` | text | Packaged pronunciation for that Hanzi |
+| `character` | text | Packaged Hanzi character, or a phrase target's own `phrase` text (display data) |
+| `pronunciation` | text | Packaged pronunciation, or a phrase target's own `pinyin` (display data) |
+| `vocab_phrase_id` | uuid (nullable) | Foreign key → `vocab_phrases.id`; cascades on delete. Discriminator: non-null means this target grades against `vocab_phrases`, not `words` — `character`/`pronunciation` stay populated either way so existing display/grouping code needs no branch |
 | `display_order` | integer | Save-time target order after familiarity/character/pronunciation sorting |
 | **Unique constraint** | | `(session_id, character, pronunciation)` |
 
@@ -537,7 +595,7 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `family_id` | uuid | Foreign key → `families.id` (denormalized for RLS efficiency) |
 | `created_at` | timestamptz | Server timestamp when session was completed |
 | `session_type` | text | Currently `'fill-test'`; reserved for future quiz types |
-| `grade_data` | jsonb | Array of SessionGradeData: `{ wordId, hanzi, grade, timestamp }` |
+| `grade_data` | jsonb | Array of SessionGradeData: `{ wordId, hanzi, grade, timestamp, isVocabPhrase? }`. `isVocabPhrase` entries hold a `vocab_phrases.id`/phrase text in `wordId`/`hanzi` instead of a word — see Fill-Test Review Rules |
 | `fully_correct_count` | integer | Count of grades === `'easy'` (default: 0) |
 | `failed_count` | integer | Count of grades === `'again'` (default: 0) |
 | `partially_correct_count` | integer | Count of grades === `'good'` or `'hard'` (default: 0) |
@@ -640,7 +698,7 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `id` | uuid | Primary key |
 | `family_id` | uuid (nullable) | Foreign key → `families.id`; null for Default rows |
 | `user_id` | uuid (nullable) | Foreign key → `users.id`; null for Default rows |
-| `prompt_type` | text | One of: `full`, `phrase`, `example`, `phrase_details`, `meaning_details` |
+| `prompt_type` | text | One of: `full`, `phrase`, `example`, `phrase_details`, `meaning_details`, `vocab_phrase` |
 | `slot_name` | text | User-visible name; max 50 chars; Default rows always named `"Default"` |
 | `prompt_body` | text | System prompt sent to DeepSeek; per-type min/max enforced in service layer |
 | `is_active` | boolean | True on the currently active slot; at most one per `(family_id, prompt_type)` |
@@ -688,12 +746,14 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 
 ### Row Level Security Policies
 
-All tables have RLS enabled. Policies are applied based on JWT claims `family_id` and `user_id` from the session.
+All tables have RLS enabled. Policies are applied based on JWT `app_metadata` claims (`family_id`, `user_id`, `role`, `is_platform_admin`) — session-scoped per `auth_session_profiles` above, not a static value written once at login. Application code must resolve these the same way: via `getSessionMetadata()` in `supabase-service.ts` (or `getJwtAppMetadata()` in `decodeJwtPayload.ts`), never via the Supabase JS client's `session.user.app_metadata`, which reflects the `auth.users` DB row and does not track PIN switches (see `AI_CONTRACT.md §1`, Auth / Session Claims).
 
-**Helper functions (used by all RLS policies):**
-- `current_family_id()` — extracts `family_id` JWT claim
-- `current_user_id()` — extracts `user_id` JWT claim
-- `is_platform_admin()` — returns true if current user has `is_platform_admin=true`
+**Helper functions (used by all RLS policies), all reading `request.jwt.claims -> app_metadata`:**
+- `current_family_id()` / `current_user_id()` — extract the `family_id`/`user_id` claim
+- `is_platform_admin()` — true if the claim's `is_platform_admin` is true
+- `current_jwt_role()` — extracts the `role` claim (`'parent'` or `'child'`); used by role-gated RPCs like `complete_review_test_session`
+
+**`custom_access_token_hook`** (Postgres function, registered as a Supabase Auth Hook — dashboard config per project, not applied by `supabase db push`): runs on every token mint/refresh, looks up `auth_session_profiles` by the token's own `session_id`, and injects that row's claims into `app_metadata`. A lookup miss passes the token through unchanged. See `docs/feature-specs/2026-08-08-session-scoped-profile-claims.md`.
 
 **Policy patterns:**
 - **Family-scoped read:** Most user data tables allow reads where `family_id = current_family_id()`, OR if `is_platform_admin() = true`
@@ -772,8 +832,10 @@ These are the technical behaviors the system upholds. They are the factual basis
 6a. **Coin redemptions are atomic.** The `redeem_coins` RPC is the only write path that may decrement wallets and insert redemption rows. It validates coin amount, note, and signature; locks the wallet row with `FOR UPDATE`; checks available balance; decrements; and inserts the record in one transaction boundary. Direct client inserts to `coin_redemptions` are blocked by RLS.
 7. **Shop writes do not affect learning state.** Shop unlocks, spend history, coin redemptions, ingredient catalog edits, and recipe metadata edits never update `words`, `flashcard_contents`, scheduler fields, or quiz-session grading data.
 7a. **`quiz_sessions.coins_earned` is immutable.** Coin redemptions decrement `wallets.total_coins` only. The per-session earned totals in `quiz_sessions` are never modified by any redemption path.
-8. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists.
+8. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists — this holds for the vocab-phrase familiarity nudge too, since `nudgeWordFamiliarity` calls the same unmodified `calculateNextState`, not a parallel scheduling path.
 9. **Due review pages wrap `WordsWorkspace` in `<Suspense>`.** Required for correct search-param handling in Next.js.
+10. **A quiz round is never mixed-kind.** Every round is either all-character or all-phrase; `memberResults` and `vocabPhraseMemberResults` on a single `gradeBundledFillTest` call are mutually exclusive, never both non-empty.
+11. **Identity resolution is session-scoped, not account-scoped.** `current_family_id()`/`current_user_id()`/`is_platform_admin()`/`current_jwt_role()` all read the access token's `app_metadata`, kept current per-session by `custom_access_token_hook` reading `auth_session_profiles`. `auth.users.app_metadata` is written nowhere in the app and must never be treated as a source of truth for identity.
 
 ---
 
@@ -783,7 +845,7 @@ Required error behaviors for each failure mode. Do not improvise alternatives.
 
 | Failure | Required Behavior |
 |---|---|
-| AI generation failure (`/api/flashcard/generate`) | Return error to admin UI. Do not fall back to cached or unvalidated output. Surface the error to the user. |
+| AI generation failure (`/api/flashcard/generate` or `/api/vocab-phrase/generate`) | Return error to admin UI. Do not fall back to cached or unvalidated output. Surface the error to the user. |
 | Normalization failure (malformed AI payload) | Log the failure. Drop the affected phrase/example. Continue with remaining valid content. Never write a partial payload. |
 | Supabase read failure (review screens) | Show a graceful error state in the UI. Do not re-fetch from AI. Session fails cleanly. |
 | Missing `char_detail.json` entry | Return empty pronunciation candidates. Do not throw. UI handles the empty state. |

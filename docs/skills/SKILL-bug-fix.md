@@ -62,10 +62,11 @@ These are absolute — no exception regardless of how the task is framed.
 
 | Rule | Source |
 |---|---|
-| ❌ No direct writes to `coin_balance`, `coin_transactions`, or `shop_purchases` — use RPCs only | AI_CONTRACT.md §1 |
+| ❌ No direct writes to `wallets`, `shop_recipe_unlocks`, `shop_coin_transactions`, or `coin_redemptions` — use `unlock_shop_recipe`/`redeem_coins`/`record_quiz_session` only | AI_CONTRACT.md §1 |
 | ❌ No import of `src/lib/db.ts` or any IndexedDB operation — it is fully retired | AI_CONTRACT.md §1 |
 | ❌ No AI/model provider calls from `src/app/...` (UI layer) — AI calls live in `src/app/api/` only | AI_CONTRACT.md §1 |
 | ❌ No bypassing Supabase RLS by passing raw `family_id`/`user_id` from the client | AI_CONTRACT.md §1 |
+| ❌ No reading `session.user.app_metadata` for family_id/user_id — use `getSessionMetadata()`/`getJwtAppMetadata()` instead | AI_CONTRACT.md §1 |
 | ❌ No hardcoded user-facing strings in JSX — all copy goes in `*.strings.ts` files | AI_CONTRACT.md §1 |
 | ❌ No live AI generation inside flashcard or fill-test review screens | AI_CONTRACT.md §1 |
 | ❌ No skipping normalization/safety filtering on AI-generated content before persisting | AI_CONTRACT.md §1 |

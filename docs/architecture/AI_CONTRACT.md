@@ -1,6 +1,6 @@
 # AI Contract — HanziQuest (`cc_review`)
 
-_Last updated: 2026-03-27_
+_Last updated: 2026-08-13_
 
 > **This file is the highest-authority reference for all agent behavior.**
 > In any conflict between documents, this file wins.
@@ -39,7 +39,10 @@ These rules are absolute. No exception, no matter how the task is framed.
 - ❌ Never hardcode user-facing strings in JSX. All copy goes in `*.strings.ts` files.
 
 **Wallet & Coins**
-- ❌ Never write directly to `coin_balance`, `coin_transactions`, or `shop_purchases` from application code. All mutations must go through designated Supabase RPCs.
+- ❌ Never write directly to `wallets`, `shop_recipe_unlocks`, `shop_coin_transactions`, or `coin_redemptions` from application code. All mutations must go through `unlock_shop_recipe`, `redeem_coins`, or `record_quiz_session` — the only RPCs allowed to touch these tables.
+
+**Auth / Session Claims**
+- ❌ Never read `session.user.app_metadata` (the Supabase JS client's decoded `user` object) for the current `family_id`/`user_id`. It reflects the `auth.users` DB row, not the active Layer 2 profile, and goes stale the moment a PIN switch happens without also rewriting that row — which the app deliberately no longer does (see `docs/feature-specs/2026-08-08-session-scoped-profile-claims.md`). Always resolve identity via `getSessionMetadata()` in `supabase-service.ts` (or `getJwtAppMetadata()` in `decodeJwtPayload.ts`), which read the access token's own claims — the same claims Postgres RLS reads server-side via `current_family_id()`/`current_user_id()`.
 
 ---
 
@@ -58,6 +61,7 @@ Authorization requires the word **"authorized"** to appear explicitly in the tas
 **Boundaries:**
 - Schema migrations — adding, removing, or renaming tables, columns, RPCs, or persisted fields
 - Editing any Supabase RLS policy definition — mistakes are silent and untestable without running `verify-rls.ts`; errors can leak or block data across family boundaries
+- Editing `current_family_id()`, `current_user_id()`, `is_platform_admin()`, or the `custom_access_token_hook` — every RLS policy in the system depends on these; a broken hook fails token refresh **project-wide**, not just for one family. Re-run `npm run verify:session-scoped-claims` and `npm run verify:rls` against dev before shipping any change here.
 - Deleting or archiving existing content or data
 - Changing the scheduler's grading logic or due-date algorithm
 - Adding a new AI provider or modifying prompt orchestration logic
