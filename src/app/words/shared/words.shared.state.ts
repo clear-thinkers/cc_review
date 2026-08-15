@@ -338,6 +338,20 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
   const isFillTestReviewPage = page === "fillTest";
   const activeMenuPage: NavPage = isFlashcardReviewPage || isFillTestReviewPage ? "review" : page;
   const requestedReviewWordId = searchParams.get("wordId");
+  const requestedReviewWordIds = searchParams.get("wordIds");
+  // Batch review launch from Due Review's multi-select checkboxes -- an
+  // ephemeral, non-persisted subset scoping (no review_test_sessions row),
+  // distinct from the packaged-session path below. wordIds (plural) takes
+  // precedence over the single wordId param when both are somehow present.
+  const requestedWordIdList = useMemo(
+    () =>
+      requestedReviewWordIds
+        ? requestedReviewWordIds.split(",").filter(Boolean)
+        : requestedReviewWordId
+          ? [requestedReviewWordId]
+          : [],
+    [requestedReviewWordIds, requestedReviewWordId]
+  );
   const requestedReviewTestSessionId = searchParams.get("reviewTestSessionId");
   const reviewTestSessionStatus = searchParams.get("reviewTestSessionStatus");
   const reviewTestSessionName = searchParams.get("reviewTestSessionName");
@@ -619,6 +633,7 @@ const gradeLabels = getGradeLabels(str);
     const prepared = dueWords.map((word) => ({
       word,
       familiarity: getMemorizationProbability(word, now),
+      testCount: getTestCount(word),
     }));
 
     prepared.sort((left, right) => {
@@ -632,6 +647,9 @@ const gradeLabels = getGradeLabels(str);
           break;
         case "familiarity":
           comparison = left.familiarity - right.familiarity;
+          break;
+        case "testCount":
+          comparison = left.testCount - right.testCount;
           break;
         default:
           comparison = 0;
@@ -2926,7 +2944,11 @@ const gradeLabels = getGradeLabels(str);
   );
 
   useEffect(() => {
-    if (page !== "admin") {
+    // Also runs on Due Review (not just Content Admin) -- the batch "Add
+    // Selected to Session" action there needs adminTargets to resolve each
+    // selected due word's character|pronunciation target(s), the same way
+    // Content Admin's own packaging flow does.
+    if (page !== "admin" && page !== "review") {
       return;
     }
 
@@ -3356,22 +3378,32 @@ const gradeLabels = getGradeLabels(str);
     setQuizActivePhraseIndex(null);
   }
 
-  function openFlashcardReview(wordId?: string) {
-    if (!wordId) {
+  function openFlashcardReview(wordIdOrIds?: string | string[]) {
+    if (!wordIdOrIds || (Array.isArray(wordIdOrIds) && wordIdOrIds.length === 0)) {
       router.push("/words/review/flashcard");
       return;
     }
 
-    router.push(`/words/review/flashcard?wordId=${encodeURIComponent(wordId)}`);
+    if (Array.isArray(wordIdOrIds)) {
+      router.push(`/words/review/flashcard?wordIds=${encodeURIComponent(wordIdOrIds.join(","))}`);
+      return;
+    }
+
+    router.push(`/words/review/flashcard?wordId=${encodeURIComponent(wordIdOrIds)}`);
   }
 
-  function openFillTestReview(wordId?: string) {
-    if (!wordId) {
+  function openFillTestReview(wordIdOrIds?: string | string[]) {
+    if (!wordIdOrIds || (Array.isArray(wordIdOrIds) && wordIdOrIds.length === 0)) {
       router.push("/words/review/fill-test");
       return;
     }
 
-    router.push(`/words/review/fill-test?wordId=${encodeURIComponent(wordId)}`);
+    if (Array.isArray(wordIdOrIds)) {
+      router.push(`/words/review/fill-test?wordIds=${encodeURIComponent(wordIdOrIds.join(","))}`);
+      return;
+    }
+
+    router.push(`/words/review/fill-test?wordId=${encodeURIComponent(wordIdOrIds)}`);
   }
 
   function openReviewTestSession(sessionId: string) {
@@ -3545,10 +3577,10 @@ const gradeLabels = getGradeLabels(str);
       return;
     }
 
-    const requestedWord = requestedReviewWordId
-      ? sortedDueWords.find((entry) => entry.word.id === requestedReviewWordId)?.word
-      : undefined;
-    const wordsForSession = requestedWord ? [requestedWord] : sortedDueWords.map((entry) => entry.word);
+    const wordsForSession =
+      requestedWordIdList.length > 0
+        ? sortedDueWords.filter((entry) => requestedWordIdList.includes(entry.word.id)).map((entry) => entry.word)
+        : sortedDueWords.map((entry) => entry.word);
     if (wordsForSession.length === 0) {
       setFlashcardNotice(
         "No due characters available for flashcard review."
@@ -3580,7 +3612,7 @@ const gradeLabels = getGradeLabels(str);
     flashcardInProgress,
     isFlashcardReviewPage,
     loading,
-    requestedReviewWordId,
+    requestedWordIdList,
     requestedReviewTestSessionId,
     router,
     session?.isPlatformAdmin,
@@ -3861,10 +3893,10 @@ const gradeLabels = getGradeLabels(str);
       return;
     }
 
-    const requestedWord = requestedReviewWordId
-      ? fillTestDueWords.find((word) => word.id === requestedReviewWordId)
-      : undefined;
-    const wordsForSession = requestedWord ? [requestedWord] : fillTestDueWords;
+    const wordsForSession =
+      requestedWordIdList.length > 0
+        ? fillTestDueWords.filter((word) => requestedWordIdList.includes(word.id))
+        : fillTestDueWords;
     if (wordsForSession.length === 0) {
       setQuizNotice(str.fillTest.notices.noQuizReady);
       return;
@@ -3912,7 +3944,7 @@ const gradeLabels = getGradeLabels(str);
     loading,
     quizCompleted,
     quizInProgress,
-    requestedReviewWordId,
+    requestedWordIdList,
     requestedReviewTestSessionId,
     resumeProgressKey,
     router,

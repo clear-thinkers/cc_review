@@ -11,7 +11,14 @@ import type {
   AdminTarget,
 } from "./admin.types";
 import { getAllTagFilterOptionIds, toggleTagFilterId } from "../shared/tagFilter.utils";
-import { matchesCharacterSearchFilter, renderPhraseWithPinyin, renderSentenceWithPinyin } from "../shared/words.shared.utils";
+import {
+  getMemorizationProbability,
+  matchesCharacterSearchFilter,
+  renderPhraseWithPinyin,
+  renderSentenceWithPinyin,
+} from "../shared/words.shared.utils";
+import { matchesFamiliarityFilter } from "../all/all.utils";
+import CharacterPhraseToggle from "../shared/CharacterPhraseToggle";
 import VocabPhraseAdminSection from "./VocabPhraseAdminSection";
 
 type AdminBatchWarningKind = "content_all" | "pinyin_all";
@@ -821,6 +828,13 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         if (wordsDueNow.length === 0) return false;
       }
 
+      // Filter: Familiarity (target's underlying word, keyed by character)
+      if (filterFamiliarityValue !== "") {
+        const targetWord = vm.words.find((w) => w.hanzi === target.character);
+        const familiarity = targetWord ? getMemorizationProbability(targetWord) : 0;
+        if (!matchesFamiliarityFilter(familiarity, filterFamiliarityOperator, filterFamiliarityValue)) return false;
+      }
+
       // Filter: Tags (OR logic - target must have any selected tag)
       if (filterSelectedTagIds.length > 0) {
         const targetWords = vm.words.filter((w) => w.hanzi === target.character);
@@ -868,6 +882,8 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   }, [
     filteredByStatsAdminRenderRows,
     filterDueNow,
+    filterFamiliarityOperator,
+    filterFamiliarityValue,
     filterSelectedTagIds,
     filterTagTextbooks,
     filterTagGrades,
@@ -886,6 +902,7 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const adminHasActiveCountFilter =
     (adminStatsFilter !== "targets" && adminStatsFilter !== "characters") ||
     filterDueNow ||
+    filterFamiliarityValue !== "" ||
     filterSelectedTagIds.length > 0 ||
     hasActivePartialTagFilter ||
     filterCharacterSearch.trim() !== "";
@@ -1145,46 +1162,22 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   }
 
   const adminViewToggle = (
-    <div className="flex gap-1 rounded-md border p-1 text-sm" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={adminViewMode === "characters"}
-        className={
-          adminViewMode === "characters"
-            ? "rounded px-3 py-1 btn-toggle-on"
-            : "rounded px-3 py-1 text-gray-600 hover:bg-gray-50"
-        }
-        onClick={() => setAdminViewMode("characters")}
-      >
-        {str.admin.viewToggle.characters}
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={adminViewMode === "phrases"}
-        className={
-          adminViewMode === "phrases"
-            ? "rounded px-3 py-1 btn-toggle-on"
-            : "rounded px-3 py-1 text-gray-600 hover:bg-gray-50"
-        }
-        onClick={() => setAdminViewMode("phrases")}
-      >
-        {str.admin.viewToggle.phrases}
-      </button>
-    </div>
+    <CharacterPhraseToggle
+      mode={adminViewMode}
+      onChange={setAdminViewMode}
+      charactersLabel={str.admin.viewToggle.characters}
+      phrasesLabel={str.admin.viewToggle.phrases}
+    />
   );
 
   if (adminViewMode === "phrases") {
     return (
       <section className="space-y-3 rounded-lg border p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h2 className="font-medium">{str.admin.pageTitle}</h2>
-            <p className="text-sm text-gray-700">{str.admin.pageDescription}</p>
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-medium">{str.admin.pageTitle}</h2>
           {adminViewToggle}
         </div>
+        <p className="text-sm text-gray-700">{str.admin.pageDescription}</p>
         <VocabPhraseAdminSection vm={vm} />
       </section>
     );
@@ -1192,13 +1185,11 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
   return (
     <section className="space-y-3 rounded-lg border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="font-medium">{str.admin.pageTitle}</h2>
-          <p className="text-sm text-gray-700">{str.admin.pageDescription}</p>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="font-medium">{str.admin.pageTitle}</h2>
         {adminViewToggle}
       </div>
+      <p className="text-sm text-gray-700">{str.admin.pageDescription}</p>
 
       <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <button
@@ -1330,6 +1321,35 @@ export default function AdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                 />
                 <span className="text-sm">{str.admin.filters.dueNow.label}</span>
               </label>
+            </div>
+
+            {/* Familiarity Filter */}
+            <div className="space-y-1">
+              <label className="block text-xs text-gray-600">{str.admin.filters.familiarity.label}</label>
+              <div className="flex gap-2 items-center">
+                <select
+                  className="flex-shrink-0 rounded-md border px-2 py-1 text-sm"
+                  value={filterFamiliarityOperator}
+                  onChange={(e) => setFilterFamiliarityOperator(e.target.value as "<=" | ">=")}
+                  title={str.admin.filters.familiarity.tooltip}
+                >
+                  <option value="<=">{str.admin.filters.familiarity.operators.lessThanOrEqual}</option>
+                  <option value=">=">{str.admin.filters.familiarity.operators.greaterThanOrEqual}</option>
+                </select>
+                <input
+                  type="number"
+                  className="w-44 rounded-md border px-2 py-1 text-sm"
+                  min="0"
+                  max="100"
+                  placeholder={str.admin.filters.familiarity.valueLabel}
+                  value={filterFamiliarityValue}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFilterFamiliarityValue(val === "" ? "" : Math.max(0, Math.min(100, Number(val))));
+                  }}
+                  title={str.admin.filters.familiarity.tooltip}
+                />
+              </div>
             </div>
 
             {/* Tag-related filters: Tags (Cascade) + Filter by Tag Part on same row */}

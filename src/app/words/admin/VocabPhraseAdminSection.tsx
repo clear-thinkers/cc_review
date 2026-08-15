@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocale } from "@/app/shared/locale";
 import { supabase } from "@/lib/supabaseClient";
 import {
   appendTargetsToReviewTestSession,
-  assignVocabPhraseLessonTags,
   createReviewTestSession,
   deleteVocabPhrase,
   getVocabPhraseLessonTagsForFamily,
@@ -17,8 +15,6 @@ import type { ReviewTestSession, ReviewTestSessionTargetDraft } from "@/lib/revi
 import type { VocabPhrase, VocabPhraseExample } from "@/lib/types";
 import type { VocabPhraseLessonTagsMap } from "@/lib/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
-import TagCascadePicker from "../shared/TagCascadePicker";
-import { taggingStrings } from "../shared/tagging.strings";
 import { renderPhraseWithPinyin, renderSentenceWithPinyin } from "../shared/words.shared.utils";
 import {
   getAllTagFilterOptionIds,
@@ -131,8 +127,6 @@ type EditTarget =
 
 export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const { str } = vm;
-  const locale = useLocale();
-  const tagStr = taggingStrings[locale].add;
   const phraseStr = str.admin.vocabPhrases;
   const sharedActions = str.admin.table.actionButtons;
 
@@ -141,6 +135,7 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterHasContent, setFilterHasContent] = useState<"" | "yes" | "no">("");
   const [filterSelectedTagIds, setFilterSelectedTagIds] = useState<string[]>([]);
   const [filterTagTextbooks, setFilterTagTextbooks] = useState<string[]>([]);
   const [filterTagGrades, setFilterTagGrades] = useState<string[]>([]);
@@ -149,7 +144,6 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
   const [filterSectionOpen, setFilterSectionOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [tagSectionOpen, setTagSectionOpen] = useState(false);
   const [packageSectionOpen, setPackageSectionOpen] = useState(false);
   const [reviewTestSessions, setReviewTestSessions] = useState<ReviewTestSession[]>([]);
   const [existingSessionId, setExistingSessionId] = useState<string>("");
@@ -274,6 +268,8 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
 
   const visiblePhrases = phrases.filter((phrase) => {
     if (!phrase.phrase.includes(searchQuery.trim())) return false;
+    if (filterHasContent === "yes" && !vocabPhraseHasContent(phrase)) return false;
+    if (filterHasContent === "no" && vocabPhraseHasContent(phrase)) return false;
     const phraseTags = phraseTagsMap.get(phrase.id) ?? [];
     const phraseTagIds = new Set(phraseTags.map((t) => t.lessonTagId));
     if (!matchesSelectedTagFilter(phraseTagIds, filterSelectedTagIds)) return false;
@@ -283,6 +279,7 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
 
   function clearAllFilters(): void {
     setSearchQuery("");
+    setFilterHasContent("");
     setFilterSelectedTagIds([]);
     setFilterTagTextbooks([]);
     setFilterTagGrades([]);
@@ -311,7 +308,10 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
   );
   const selectedExamplesAllIncluded = allSelectedExamplesIncluded(selectedPhraseList);
   const hasActiveFilter =
-    searchQuery.trim() !== "" || filterSelectedTagIds.length > 0 || isPartialTagFilterActive;
+    searchQuery.trim() !== "" ||
+    filterHasContent !== "" ||
+    filterSelectedTagIds.length > 0 ||
+    isPartialTagFilterActive;
   const BATCH_CONCURRENCY = 3;
 
   function handleSelectFiltered() {
@@ -710,19 +710,6 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
     });
   }
 
-  async function handleAssignTag(lessonTagId: string) {
-    if (selectedIds.size === 0) {
-      setNotice(phraseStr.packageSection.noSelection);
-      return;
-    }
-    try {
-      await assignVocabPhraseLessonTags([...selectedIds], lessonTagId);
-      setNotice(phraseStr.tagSection.assignSuccess);
-    } catch {
-      setNotice(phraseStr.tagSection.assignError);
-    }
-  }
-
   async function handlePackageSelected() {
     if (selectedIds.size === 0) {
       setNotice(phraseStr.packageSection.noSelection);
@@ -782,7 +769,12 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
             type="button"
             onClick={clearAllFilters}
             className="text-xs text-blue-600 underline disabled:opacity-50"
-            disabled={searchQuery.trim() === "" && filterSelectedTagIds.length === 0 && !isPartialTagFilterActive}
+            disabled={
+              searchQuery.trim() === "" &&
+              filterHasContent === "" &&
+              filterSelectedTagIds.length === 0 &&
+              !isPartialTagFilterActive
+            }
           >
             {str.admin.filters.clearButton}
           </button>
@@ -800,6 +792,20 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+            </div>
+
+            {/* Has Content Filter */}
+            <div className="space-y-1">
+              <label className="block text-xs text-gray-600">{phraseStr.filters.hasContent.label}</label>
+              <select
+                className="rounded-md border px-2 py-1 text-sm bg-white"
+                value={filterHasContent}
+                onChange={(e) => setFilterHasContent(e.target.value as "" | "yes" | "no")}
+              >
+                <option value="">{phraseStr.filters.hasContent.all}</option>
+                <option value="yes">{phraseStr.filters.hasContent.yes}</option>
+                <option value="no">{phraseStr.filters.hasContent.no}</option>
+              </select>
             </div>
 
             {/* Tag-related filters: Tags (Cascade) + Filter by Tag Part on same row */}
@@ -1063,14 +1069,6 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
                 >
                   {selectedExamplesAllIncluded ? str.admin.buttons.batchFillTestOff : str.admin.buttons.batchFillTestOn}
                 </button>
-                <button
-                  type="button"
-                  className="btn-nav rounded-md border-2 px-3 py-1.5 text-xs"
-                  disabled={selectedIds.size === 0 || toolbarBusy}
-                  onClick={() => setTagSectionOpen((open) => !open)}
-                >
-                  {phraseStr.tagSection.title}
-                </button>
               </div>
               {openBatchMenu === "content" ? (
                 <div className="w-full max-w-sm rounded-md border bg-white p-2 shadow-lg">
@@ -1187,26 +1185,6 @@ export default function VocabPhraseAdminSection({ vm }: { vm: WordsWorkspaceVM }
             </div>
           </div>
         </div>
-      ) : null}
-
-      {tagSectionOpen && selectedIds.size > 0 ? (
-        <TagCascadePicker
-          strings={{
-            textbookPlaceholder: tagStr.textbookPlaceholder,
-            gradePlaceholder: tagStr.gradePlaceholder,
-            unitPlaceholder: tagStr.unitPlaceholder,
-            lessonPlaceholder: tagStr.lessonPlaceholder,
-            createNewOption: tagStr.createNewOption,
-            createNewPlaceholder: tagStr.createNewPlaceholder,
-            createNewConfirm: tagStr.createNewConfirm,
-            createNewCancel: tagStr.createNewCancel,
-            loadingTextbooks: tagStr.loadingTextbooks,
-            customValueOption: tagStr.customValueOption,
-            assignButton: phraseStr.tagSection.title,
-            assigning: phraseStr.generating,
-          }}
-          onAssign={handleAssignTag}
-        />
       ) : null}
 
       {packageSectionOpen && selectedIds.size > 0 ? (

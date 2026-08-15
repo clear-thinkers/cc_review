@@ -17,8 +17,8 @@ export const wordsStrings = {
       menu: "Menu",
       navigateBetweenPages: "Navigate between pages.",
       appFlow: "App Flow",
-      addCharacters: "Add Characters",
-      allCharacters: "All Characters",
+      addCharacters: "Add Characters & Phrases",
+      allCharacters: "All Characters & Phrases",
       contentAdmin: "Content Admin",
       aiPrompts: "AI Prompts",
       shop: "Recipe Shop",
@@ -87,26 +87,26 @@ export const wordsStrings = {
       unavailableHint: "Switch profiles to open this step.",
       steps: {
         addCharacters: {
-          title: "Parent Adds Characters",
-          description: "Add the Hanzi your family wants to study first.",
-          cta: "Go to Add Characters",
+          title: "Parent Adds Characters & Phrases",
+          description: "Add the Hanzi and phrases your family wants to study first.",
+          cta: "Go to Add Characters & Phrases",
         },
         allCharacters: {
-          title: "Family Reviews All Characters",
+          title: "Family Reviews All Characters & Phrases",
           description:
-            "Both parent and child can inspect what has been added. Parents can also manage tags, reset familiarity, and delete added characters here when needed.",
-          cta: "Open All Characters",
+            "Both parent and child can inspect what has been added. Parents can also manage tags, reset character familiarity, and delete added characters or phrases here when needed.",
+          cta: "Open All Characters & Phrases",
         },
         addContent: {
           title: "Parent Adds Content",
           description:
-            "Generate or edit meanings, phrases, and examples for the new characters, and bundle selected characters into a test session.",
+            "Generate or edit meanings, phrases, and examples for new characters, manage standalone phrases, and bundle selected characters and/or phrases into a test session.",
           cta: "Go to Content Admin",
         },
         dueReview: {
           title: "Family Checks Due Review",
           description:
-            "Both parent and child can see what is due now, review flashcards, and see which characters are bundled into test sessions. Only the child can start a test session or begin fill-test quizzes.",
+            "Both parent and child can see what is due now, review flashcards, and see which characters and phrases are bundled into test sessions. Only the child can start a test session or begin fill-test quizzes.",
           cta: "Open Due Review",
         },
         results: {
@@ -172,12 +172,18 @@ export const wordsStrings = {
         character: "Character",
         nextReviewDate: "Next Review Date",
         familiarity: "Familiarity",
+        testCount: "Times Tested",
         action: "Action",
         flashcard: "Flashcard",
         fillTest: "Fill test",
       },
       sortButtons: {
         sort: "Sort",
+      },
+      batchActions: {
+        reviewSelected: "Review Selected",
+        testSelected: "Test Selected",
+        addSelectedToSession: "Add Selected to Session",
       },
     },
 
@@ -622,6 +628,12 @@ export const wordsStrings = {
         searchPlaceholder: "Search phrases...",
         filters: {
           phraseSearchLabel: "Phrase Search",
+          hasContent: {
+            label: "Has Content?",
+            all: "All",
+            yes: "Yes",
+            no: "No",
+          },
         },
         columns: {
           phrase: "Phrase",
@@ -920,6 +932,16 @@ export const wordsStrings = {
           label: "Due now",
           tooltip: "Show only characters due for review now (from their words)",
         },
+        familiarity: {
+          label: "Familiarity",
+          operatorLabel: "Operator",
+          valueLabel: "Value (0-100)",
+          operators: {
+            lessThanOrEqual: "≤",
+            greaterThanOrEqual: "≥",
+          },
+          tooltip: "Filter by familiarity level",
+        },
         tags: {
           label: "Tags",
           placeholder: "Select tags (multi-select)",
@@ -953,8 +975,12 @@ export const wordsStrings = {
 
     // ============= ALL CHARACTERS PAGE =============
     all: {
-      pageTitle: "All Characters",
-      pageDescription: "Character list with review/test counts and familiarity.",
+      pageTitle: "All Characters & Phrases",
+      pageDescription: "Character and phrase list with review/test counts, familiarity, and content status.",
+      viewToggle: {
+        characters: "Characters",
+        phrases: "Phrases",
+      },
       stats: {
         totalCharacters: "Total Characters",
         timesReviewed: "Times Reviewed",
@@ -962,6 +988,28 @@ export const wordsStrings = {
         avgFamiliarity: "Avg Familiarity",
       },
       noCharacters: "No characters yet.",
+      vocabPhrases: {
+        stats: {
+          totalPhrases: "Total Phrases",
+          timesTested: "Times Tested",
+          withContent: "With Content",
+          containsAddedCharacters: "Contains Added Characters",
+        },
+        noPhrases: "No phrases yet.",
+        deleteError: "Failed to delete. Please try again.",
+        filters: {
+          phraseSearch: {
+            label: "Phrase Search",
+            placeholder: "Enter phrase to search...",
+          },
+        },
+        table: {
+          headers: {
+            phrase: "Phrase",
+            addedCharacters: "Added Characters",
+          },
+        },
+      },
       filters: {
         title: "Default Filters",
         clearButton: "Clear Filters",
@@ -1195,8 +1243,8 @@ export const wordsStrings = {
       menu: "菜单",
       navigateBetweenPages: "在页面之间导航。",
       appFlow: "使用流程",
-      addCharacters: "添加汉字",
-      allCharacters: "全部汉字",
+      addCharacters: "添加汉字和词语",
+      allCharacters: "全部汉字和词语",
       contentAdmin: "内容管理",
       aiPrompts: "AI提示词",
       shop: "食谱商店",
@@ -1236,16 +1284,16 @@ export const wordsStrings = {
       partialSuccess: "已添加 {count} 个汉字，跳过 {skipped} 个已存在字符。",
       allSuccess: "已添加 {count} 个汉字。",
       vocabPhrases: {
-        pageTitle: "添加短语",
-        pageDescription: "添加多字短语，支持批量输入。可使用逗号、空格或换行分隔（例如：你好, 谢谢, 对不起）。",
-        inputPlaceholder: "短语批量输入（例如：你好, 谢谢 对不起）",
-        submitButton: "批量添加短语",
-        noInput: "请输入至少一个短语。",
-        noNew: "没有新增短语（可能都已存在）。",
-        partialSuccess: "已添加 {count} 个短语，跳过 {skipped} 个已存在短语。",
-        allSuccess: "已添加 {count} 个短语。",
+        pageTitle: "添加词语",
+        pageDescription: "添加多字词语，支持批量输入。可使用逗号、空格或换行分隔（例如：你好, 谢谢, 对不起）。",
+        inputPlaceholder: "词语批量输入（例如：你好, 谢谢 对不起）",
+        submitButton: "批量添加词语",
+        noInput: "请输入至少一个词语。",
+        noNew: "没有新增词语（可能都已存在）。",
+        partialSuccess: "已添加 {count} 个词语，跳过 {skipped} 个已存在词语。",
+        allSuccess: "已添加 {count} 个词语。",
         invalidSkipped: "已跳过 {count} 条超出2-10字长度限制的条目：{phrases}",
-        tagAssignError: "短语已添加，但标签分配失败，请重试。",
+        tagAssignError: "词语已添加，但标签分配失败，请重试。",
       },
     },
 
@@ -1263,24 +1311,24 @@ export const wordsStrings = {
       unavailableHint: "切换档案后可打开这一步。",
       steps: {
         addCharacters: {
-          title: "家长添加汉字",
-          description: "先把家里准备学习的汉字加入系统。",
-          cta: "前往添加汉字",
+          title: "家长添加汉字和词语",
+          description: "先把家里准备学习的汉字和词语加入系统。",
+          cta: "前往添加汉字和词语",
         },
         allCharacters: {
-          title: "一起查看全部汉字",
+          title: "一起查看全部汉字和词语",
           description:
-            "家长和孩子都可以查看已经添加的汉字。家长也可以在这里按需要管理标签、重置熟悉度，并删除已添加的汉字。",
-          cta: "打开全部汉字",
+            "家长和孩子都可以查看已经添加的汉字和词语。家长也可以在这里按需要管理标签、重置汉字熟悉度，并删除已添加的汉字或词语。",
+          cta: "打开全部汉字和词语",
         },
         addContent: {
           title: "家长添加内容",
-          description: "为新汉字生成或编辑释义、短语和例句，并把选中的汉字打包成测验来定向复习。",
+          description: "为新汉字生成或编辑释义、词语和例句，同时管理独立词语内容，并把选中的汉字和词语打包成测验来定向复习。",
           cta: "前往内容管理",
         },
         dueReview: {
           title: "一起查看待复习",
-          description: "家长和孩子都可以查看当前待复习内容、复习闪卡，并查看哪些汉字被打包成测验。只有孩子可以进行测验或填空测试。",
+          description: "家长和孩子都可以查看当前待复习内容、复习闪卡，并查看哪些汉字和词语被打包成测验。只有孩子可以进行测验或填空测试。",
           cta: "打开待复习",
         },
         results: {
@@ -1345,12 +1393,18 @@ export const wordsStrings = {
         character: "汉字",
         nextReviewDate: "下次复习日期",
         familiarity: "熟悉度",
+        testCount: "测试次数",
         action: "操作",
         flashcard: "闪卡",
         fillTest: "填空测试",
       },
       sortButtons: {
         sort: "排序",
+      },
+      batchActions: {
+        reviewSelected: "复习所选",
+        testSelected: "测试所选",
+        addSelectedToSession: "将所选加入测验",
       },
     },
 
@@ -1382,7 +1436,7 @@ export const wordsStrings = {
       card: {
         showDetailsButton: "显示详情",
         hideDetailsButton: "隐藏详情",
-        noPhraseIncluded: "未包含任何用于测试的短语",
+        noPhraseIncluded: "未包含任何用于测试的词语",
       },
       navigation: {
         first: "第一个",
@@ -1435,8 +1489,8 @@ export const wordsStrings = {
         unansweredBlanks: "未填空白:",
         sentenceLabel: "例句 {current} / {total}",
         phraseBankHeader: "词组库",
-        dragInstruction: "拖动到空白处，或点击短语然后点击空白处。",
-        dropPlaceholder: "在这里放置短语",
+        dragInstruction: "拖动到空白处，或点击词语然后点击空白处。",
+        dropPlaceholder: "在这里放置词语",
         clearButton: "清空",
         submitButton: "提交答案",
       },
@@ -1780,23 +1834,29 @@ export const wordsStrings = {
       pageDescription: "预生成并管理闪卡的释义、词组、例句。用户端将直接读取已保存内容。",
       viewToggle: {
         characters: "汉字",
-        phrases: "短语",
+        phrases: "词语",
       },
       vocabPhrases: {
-        searchPlaceholder: "搜索短语...",
+        searchPlaceholder: "搜索词语...",
         filters: {
-          phraseSearchLabel: "短语搜索",
+          phraseSearchLabel: "词语搜索",
+          hasContent: {
+            label: "有内容？",
+            all: "全部",
+            yes: "是",
+            no: "否",
+          },
         },
         columns: {
-          phrase: "短语",
+          phrase: "词语",
           meaning: "释义",
           examples: "例句",
           tags: "标签",
         },
         tooltips: {
           regeneratePhrase: "重新生成拼音、中英文释义和一个例句 — 会用新例句替换所有已保存的例句",
-          clearPhrase: "清除该短语的所有已生成内容（拼音、释义和例句）",
-          deletePhrase: "删除此短语",
+          clearPhrase: "清除该词语的所有已生成内容（拼音、释义和例句）",
+          deletePhrase: "删除此词语",
           regenerateDefinitions: "仅重新加载中英文释义",
           editDefinitions: "编辑释义",
           regenerateExample: "重新生成此例句",
@@ -1810,24 +1870,24 @@ export const wordsStrings = {
         newExamplePlaceholder: "输入新例句",
         fillingPinyin: "正在填充拼音...",
         generating: "生成中...",
-        generateError: "生成短语内容失败，请重试。",
-        deleteConfirm: "删除此短语？此操作无法撤销。",
-        clearConfirm: "清除该短语的所有已生成内容（拼音、释义和例句）？此操作无法撤销。",
-        emptyState: "还没有短语。请在上方添加一个开始使用。",
-        loading: "正在加载短语...",
+        generateError: "生成词语内容失败，请重试。",
+        deleteConfirm: "删除此词语？此操作无法撤销。",
+        clearConfirm: "清除该词语的所有已生成内容（拼音、释义和例句）？此操作无法撤销。",
+        emptyState: "还没有词语。请在上方添加一个开始使用。",
+        loading: "正在加载词语...",
         tagSection: {
-          title: "为选中的短语分配标签",
+          title: "为选中的词语分配标签",
           assignSuccess: "标签已分配。",
           assignError: "分配标签失败，请重试。",
         },
         packageSection: {
-          title: "将选中的短语加入测试场次",
+          title: "将选中的词语加入测试场次",
           newSessionPlaceholder: "新场次名称",
           existingSessionLabel: "加入已有场次",
           createButton: "创建场次",
           appendButton: "加入场次",
-          noSelection: "请先选择至少一个短语。",
-          success: "短语已加入测试场次。",
+          noSelection: "请先选择至少一个词语。",
+          success: "词语已加入测试场次。",
           error: "更新测试场次失败，请重试。",
         },
         batchMenus: {
@@ -1840,20 +1900,20 @@ export const wordsStrings = {
         },
         batchWarningDialogs: {
           contentAll: {
-            title: "重新生成所有短语内容？",
-            message: "此操作将覆盖每个短语已保存的拼音、释义和例句。此操作无法撤销。",
+            title: "重新生成所有词语内容？",
+            message: "此操作将覆盖每个词语已保存的拼音、释义和例句。此操作无法撤销。",
             confirmButton: "全部重新生成",
             cancelButton: "取消",
           },
           pinyinAll: {
-            title: "刷新所有短语例句的拼音？",
-            message: "此操作将覆盖每个已有例句的短语的例句拼音。短语本身的拼音和释义不受影响。此操作无法撤销。",
+            title: "刷新所有词语例句的拼音？",
+            message: "此操作将覆盖每个已有例句的词语的例句拼音。词语本身的拼音和释义不受影响。此操作无法撤销。",
             confirmButton: "全部刷新",
             cancelButton: "取消",
           },
         },
-        noBatchContentTargets: "没有匹配此次 AI 生成操作的短语。",
-        noBatchPinyinTargets: "没有匹配此次拼音操作的短语例句。",
+        noBatchContentTargets: "没有匹配此次 AI 生成操作的词语。",
+        noBatchPinyinTargets: "没有匹配此次拼音操作的词语例句。",
         pinyinBatchProgress: "正在刷新例句拼音 {current}/{total}：{phrase}",
       },
       stats: {
@@ -2037,10 +2097,10 @@ export const wordsStrings = {
         phraseEditError: "保存编辑后的词组失败。请重试。",
         exampleEditSaved: "已保存 {character} / {pronunciation} 的例句。",
         exampleEditError: "保存编辑后的例句失败。请重试。",
-        phraseRequired: "请输入短语后再保存。",
-        phraseMustInclude: "短语需要包含汉字 {character}。",
+        phraseRequired: "请输入词语后再保存。",
+        phraseMustInclude: "词语需要包含汉字 {character}。",
         exampleRequired: "请输入例句后再保存。",
-        exampleMustInclude: "例句需要包含短语。",
+        exampleMustInclude: "例句需要包含词语。",
         noContentToRefresh: "无保存内容可生成拼音。",
         noBatchContentTargets: "当前没有匹配此次 AI 生成操作的内容管理条目。",
         noBatchPinyinTargets: "当前没有匹配此次拼音操作的已保存内容。",
@@ -2078,6 +2138,16 @@ export const wordsStrings = {
           label: "当前待复习",
           tooltip: "只显示当前待复习的汉字（仅根据其词汇）",
         },
+        familiarity: {
+          label: "熟悉度",
+          operatorLabel: "操作符",
+          valueLabel: "值 (0-100)",
+          operators: {
+            lessThanOrEqual: "≤",
+            greaterThanOrEqual: "≥",
+          },
+          tooltip: "按熟悉度等级筛选",
+        },
         tags: {
           label: "标签",
           placeholder: "选择标签（多选）",
@@ -2111,8 +2181,12 @@ export const wordsStrings = {
 
     // ============= ALL CHARACTERS PAGE =============
     all: {
-      pageTitle: "全部汉字",
-      pageDescription: "显示所有汉字及其复习/测试计数和熟悉度。",
+      pageTitle: "全部汉字和词语",
+      pageDescription: "汉字和词语列表，包含复习/测试次数、熟悉度和内容状态。",
+      viewToggle: {
+        characters: "汉字",
+        phrases: "词语",
+      },
       stats: {
         totalCharacters: "总汉字数",
         timesReviewed: "已复习次数",
@@ -2120,6 +2194,28 @@ export const wordsStrings = {
         avgFamiliarity: "平均熟悉度",
       },
       noCharacters: "暂无汉字。",
+      vocabPhrases: {
+        stats: {
+          totalPhrases: "总词语数",
+          timesTested: "已测试次数",
+          withContent: "已有内容",
+          containsAddedCharacters: "含已添加汉字",
+        },
+        noPhrases: "暂无词语。",
+        deleteError: "删除失败，请重试。",
+        filters: {
+          phraseSearch: {
+            label: "词语搜索",
+            placeholder: "输入词语进行搜索...",
+          },
+        },
+        table: {
+          headers: {
+            phrase: "词语",
+            addedCharacters: "含已添加汉字",
+          },
+        },
+      },
       filters: {
         title: "默认筛选",
         clearButton: "清除筛选",

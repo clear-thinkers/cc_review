@@ -15,6 +15,8 @@ import {
 } from "../shared/tagFilter.utils";
 import { matchesCharacterSearchFilter } from "../shared/words.shared.utils";
 import { matchesFamiliarityFilter } from "./all.utils";
+import CharacterPhraseToggle from "../shared/CharacterPhraseToggle";
+import AllVocabPhraseSection from "./AllVocabPhraseSection";
 
 function appendSelectedOption(options: string[], selectedValue: string | null): string[] {
   const trimmedValue = selectedValue?.trim();
@@ -51,6 +53,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const addTagStr = taggingStrings[locale].add;
   const isChild = session?.role === "child";
 
+  const [allViewMode, setAllViewMode] = useState<"characters" | "phrases">("characters");
   const [selectedWordIds, setSelectedWordIds] = useState<string[]>([]);
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
@@ -569,9 +572,21 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
 
   return (
     <section className="space-y-3 rounded-lg border p-4">
-      <h2 className="font-medium">{str.all.pageTitle}</h2>
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="font-medium">{str.all.pageTitle}</h2>
+        <CharacterPhraseToggle
+          mode={allViewMode}
+          onChange={setAllViewMode}
+          charactersLabel={str.all.viewToggle.characters}
+          phrasesLabel={str.all.viewToggle.phrases}
+        />
+      </div>
       <p className="text-sm text-gray-700">{str.all.pageDescription}</p>
 
+      {allViewMode === "phrases" ? (
+        <AllVocabPhraseSection vm={vm} />
+      ) : (
+        <>
       <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex min-h-[76px] w-full flex-col items-center justify-center rounded-md border px-2 py-2 text-center">
           <p className="text-sm uppercase text-gray-600">{str.all.stats.totalCharacters}</p>
@@ -1427,6 +1442,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
             </div>
           )}
         </div>
+      )}
+        </>
       )}
     </section>
   );

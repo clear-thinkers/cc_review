@@ -9,8 +9,8 @@ import type {
 
 describe("Review Queue Types", () => {
   it("should allow creating DueWordsSortKey values", () => {
-    const sortKeys: DueWordsSortKey[] = ["hanzi", "nextReviewAt", "familiarity"];
-    expect(sortKeys).toHaveLength(3);
+    const sortKeys: DueWordsSortKey[] = ["hanzi", "nextReviewAt", "familiarity", "testCount"];
+    expect(sortKeys).toHaveLength(4);
   });
 
   it("should allow creating SortedDueWord objects", () => {
@@ -25,9 +25,11 @@ describe("Review Queue Types", () => {
         ease: 2.5,
       },
       familiarity: 0.85,
+      testCount: 3,
     };
     expect(word.word.hanzi).toBe("hao");
     expect(word.familiarity).toBe(0.85);
+    expect(word.testCount).toBe(3);
   });
 
   it("should allow creating ReviewTestSessionTarget objects", () => {

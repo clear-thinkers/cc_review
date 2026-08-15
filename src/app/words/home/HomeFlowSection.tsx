@@ -17,7 +17,7 @@ const HOME_FLOW_STEPS: HomeFlowStep[] = [
     id: "addCharacters",
     route: "/words/add",
     role: "parent",
-    getPageTitle: (vm) => vm.str.add.pageTitle,
+    getPageTitle: (vm) => vm.str.nav.addCharacters,
   },
   {
     id: "allCharacters",

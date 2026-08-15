@@ -103,6 +103,8 @@ _Last updated: 2026-03-27. Ground truth after semantic workspace token rollout, 
 | Flashcard reveal / hide | `rounded-md border-2 px-3 py-2 btn-secondary` | `src/app/words/review/flashcard/FlashcardReviewSection.tsx` |
 | Shop Admin filter / recipe-selection states | active `btn-secondary`; inactive `btn-nav` | `src/app/words/shop-admin/ShopAdminSection.tsx` |
 | Shared shell/theme-specific toggles | bespoke local patterns | `src/app/words/shared/WordsShell.tsx` |
+| Admin Characters/Phrases view toggle active | `rounded-md border-2 px-3 py-1.5 text-sm font-semibold btn-toggle-on` | `src/app/words/admin/AdminSection.tsx` |
+| Admin Characters/Phrases view toggle inactive | `btn-nav rounded-md border-2 px-3 py-1.5 text-sm font-medium hover:bg-[#fff1cd]` | `src/app/words/admin/AdminSection.tsx` |
 
 ## Dialog Buttons
 

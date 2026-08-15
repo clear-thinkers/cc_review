@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesFamiliarityFilter } from "./all.utils";
+import { getAddedCharactersInPhrase, matchesFamiliarityFilter } from "./all.utils";
 import { matchesCharacterSearchFilter } from "../shared/words.shared.utils";
 
 describe("matchesFamiliarityFilter", () => {
@@ -34,5 +34,19 @@ describe("matchesCharacterSearchFilter", () => {
 
   it("hides a character whose hanzi is not in the search set", () => {
     expect(matchesCharacterSearchFilter("我", "你好")).toBe(false);
+  });
+});
+
+describe("getAddedCharactersInPhrase", () => {
+  it("returns component hanzi that are in the added set, deduplicated and in phrase order", () => {
+    expect(getAddedCharactersInPhrase("你好你", new Set(["你", "好"]))).toEqual(["你", "好"]);
+  });
+
+  it("excludes component hanzi that are not in the added set", () => {
+    expect(getAddedCharactersInPhrase("你好", new Set(["你"]))).toEqual(["你"]);
+  });
+
+  it("returns an empty array when no component hanzi have been added", () => {
+    expect(getAddedCharactersInPhrase("你好", new Set())).toEqual([]);
   });
 });

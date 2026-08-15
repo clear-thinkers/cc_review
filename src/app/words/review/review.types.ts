@@ -13,11 +13,12 @@ export type {
  * Used in DueReviewSection and ReviewPage
  */
 
-export type DueWordsSortKey = "hanzi" | "nextReviewAt" | "familiarity";
+export type DueWordsSortKey = "hanzi" | "nextReviewAt" | "familiarity" | "testCount";
 
 export type SortedDueWord = {
   word: Word;
   familiarity: number;
+  testCount: number;
 };
 
 export type ReviewTestSessionRuntimeErrorCode =

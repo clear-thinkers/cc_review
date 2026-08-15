@@ -2,12 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { useSession } from "@/lib/authContext";
+import { useLocale } from "@/app/shared/locale";
 import { canAccessRoute } from "@/lib/permissions";
+import { appendTargetsToReviewTestSession, createReviewTestSession } from "@/lib/supabase-service";
+import { taggingStrings } from "../shared/tagging.strings";
 import {
   filterPausedSessionsForViewer,
+  getErrorMessage,
   getPausedSessionRemainingCount,
 } from "../shared/words.shared.utils";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
+import type { ReviewTestSessionTargetDraft } from "./review.types";
+import { sortReviewTestSessionTargets } from "./reviewSession.utils";
 
 function getReviewTestSessionStatusMessage(
   status: string | null,
@@ -68,9 +74,100 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
     handleDiscardPausedSession,
     reviewTestSessionStatus,
     reviewTestSessionName,
+    adminTargets,
+    adminLoading,
+    words,
+    reviewTestSessions,
+    refreshAllData,
   } = vm;
 
   const session = useSession();
+  const locale = useLocale();
+  const allEditorStr = taggingStrings[locale].allEditor;
+  const canManageSessions = canAccessRoute("/words/admin", session?.role, session?.isPlatformAdmin ?? false);
+
+  const [selectedDueWordIds, setSelectedDueWordIds] = useState<string[]>([]);
+  const [sessionFormOpen, setSessionFormOpen] = useState(false);
+  const [sessionNameInput, setSessionNameInput] = useState("");
+  const [creatingSession, setCreatingSession] = useState(false);
+  const [batchActionNotice, setBatchActionNotice] = useState<string | null>(null);
+
+  const visibleDueWordIds = useMemo(() => sortedDueWords.map((entry) => entry.word.id), [sortedDueWords]);
+  const allDueVisibleSelected =
+    visibleDueWordIds.length > 0 && visibleDueWordIds.every((id) => selectedDueWordIds.includes(id));
+
+  function toggleDueWordSelection(wordId: string): void {
+    setSelectedDueWordIds((previous) =>
+      previous.includes(wordId) ? previous.filter((id) => id !== wordId) : [...previous, wordId]
+    );
+  }
+
+  function toggleAllDueVisibleSelection(checked: boolean): void {
+    setSelectedDueWordIds((previous) => {
+      if (checked) {
+        return [...new Set([...previous, ...visibleDueWordIds])];
+      }
+      return previous.filter((id) => !visibleDueWordIds.includes(id));
+    });
+  }
+
+  function handleBatchStartFlashcard(): void {
+    openFlashcardReview(selectedDueWordIds);
+  }
+
+  function handleBatchStartFillTest(): void {
+    openFillTestReview(selectedDueWordIds);
+  }
+
+  async function handleAddSelectedToSession(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    const trimmedName = sessionNameInput.trim();
+    if (!trimmedName) {
+      setBatchActionNotice(str.admin.messages.reviewTestSessionNameRequired);
+      return;
+    }
+
+    const selectedWords = words.filter((word) => selectedDueWordIds.includes(word.id));
+    const drafts: ReviewTestSessionTargetDraft[] = selectedWords.flatMap((word) =>
+      adminTargets.filter((target) => target.character === word.hanzi)
+    );
+
+    if (drafts.length === 0) {
+      setBatchActionNotice(str.admin.messages.reviewTestSessionNoSelection);
+      return;
+    }
+
+    const orderedTargets = sortReviewTestSessionTargets(drafts, words);
+    setCreatingSession(true);
+    try {
+      const existingSession = reviewTestSessions.find((item) => item.name === trimmedName) ?? null;
+      if (existingSession) {
+        const addedCount = await appendTargetsToReviewTestSession(existingSession.id, orderedTargets);
+        setBatchActionNotice(
+          addedCount > 0
+            ? str.admin.messages.reviewTestSessionAppendSuccess
+                .replace("{name}", trimmedName)
+                .replace("{count}", String(addedCount))
+            : str.admin.messages.reviewTestSessionNoNewTargets.replace("{name}", trimmedName)
+        );
+      } else {
+        await createReviewTestSession(trimmedName, orderedTargets);
+        setBatchActionNotice(
+          str.admin.messages.reviewTestSessionCreateSuccess
+            .replace("{name}", trimmedName)
+            .replace("{count}", String(orderedTargets.length))
+        );
+      }
+      setSelectedDueWordIds([]);
+      setSessionFormOpen(false);
+      setSessionNameInput("");
+      await refreshAllData();
+    } catch (error) {
+      setBatchActionNotice(getErrorMessage(error, str.admin.messages.reviewTestSessionCreateError));
+    } finally {
+      setCreatingSession(false);
+    }
+  }
   const canAccessFillTest = canAccessRoute(
     "/words/review/fill-test",
     session?.role,
@@ -423,10 +520,89 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
       ) : dueWords.length === 0 ? (
         <p className="text-sm text-gray-600">{str.due.noCharacters}</p>
       ) : (
+        <>
+        {batchActionNotice ? <p className="text-sm text-blue-700">{batchActionNotice}</p> : null}
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-gray-600">
+            {allEditorStr.selectedCount.replace("{count}", String(selectedDueWordIds.length))}
+          </p>
+          <button
+            type="button"
+            className="rounded border-2 px-3 py-1.5 text-xs font-medium leading-none btn-confirm disabled:opacity-50"
+            disabled={selectedDueWordIds.length === 0}
+            onClick={handleBatchStartFlashcard}
+          >
+            {str.due.batchActions.reviewSelected}
+          </button>
+          {canAccessFillTest && (
+            <button
+              type="button"
+              className="rounded border-2 px-3 py-1.5 text-xs font-medium leading-none btn-caution disabled:opacity-50"
+              disabled={selectedDueWordIds.length === 0}
+              onClick={handleBatchStartFillTest}
+            >
+              {str.due.batchActions.testSelected}
+            </button>
+          )}
+          {canManageSessions && (
+            <button
+              type="button"
+              className="rounded border-2 px-3 py-1.5 text-xs font-medium leading-none btn-secondary disabled:opacity-50"
+              disabled={selectedDueWordIds.length === 0 || adminLoading}
+              title={adminLoading ? str.admin.loading : undefined}
+              onClick={() => {
+                setSessionNameInput(reviewTestSessions[0]?.name ?? "");
+                setSessionFormOpen((open) => !open);
+              }}
+            >
+              {str.due.batchActions.addSelectedToSession}
+            </button>
+          )}
+          {canManageSessions && sessionFormOpen && (
+            <form className="flex flex-wrap items-center gap-2" onSubmit={handleAddSelectedToSession}>
+              <input
+                aria-label={str.admin.reviewTestSession.nameLabel}
+                className="h-9 min-w-[12rem] rounded-md border border-indigo-300 px-3 py-1.5 text-xs"
+                value={sessionNameInput}
+                onChange={(event) => setSessionNameInput(event.target.value)}
+                placeholder={str.admin.reviewTestSession.namePlaceholder}
+              />
+              <button
+                type="submit"
+                className="rounded border-2 px-3 py-1.5 text-xs font-medium leading-none btn-secondary disabled:opacity-50"
+                disabled={creatingSession}
+              >
+                {str.admin.reviewTestSession.createButton}
+              </button>
+              <button
+                type="button"
+                className="rounded border-2 px-3 py-1.5 text-xs font-medium leading-none btn-neutral disabled:opacity-50"
+                disabled={creatingSession}
+                onClick={() => {
+                  setSessionFormOpen(false);
+                  setSessionNameInput("");
+                }}
+              >
+                {str.admin.reviewTestSession.cancelButton}
+              </button>
+            </form>
+          )}
+        </div>
         <div className="overflow-x-auto rounded-lg border">
           <table className="min-w-full border-collapse text-sm">
             <thead>
               <tr className="border-b">
+                <th className="px-3 py-2 text-left">
+                  <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={allDueVisibleSelected}
+                      onChange={(event) => toggleAllDueVisibleSelection(event.target.checked)}
+                      title={allEditorStr.tooltips.selectAllVisible}
+                    />
+                    {allEditorStr.selectAllVisible}
+                  </label>
+                </th>
                 <th className="px-3 py-2 text-left">
                   <button
                     type="button"
@@ -457,15 +633,34 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                     <span aria-hidden>{getDueSortIndicator("familiarity")}</span>
                   </button>
                 </th>
+                <th className="px-3 py-2 text-left">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1"
+                    onClick={() => toggleDueWordsSort("testCount")}
+                  >
+                    {str.due.table.testCount}{" "}
+                    <span aria-hidden>{getDueSortIndicator("testCount")}</span>
+                  </button>
+                </th>
                 <th className="px-3 py-2 text-left">{str.due.table.action}</th>
               </tr>
             </thead>
             <tbody>
-              {sortedDueWords.map(({ word, familiarity }) => (
+              {sortedDueWords.map(({ word, familiarity, testCount }) => (
                 <tr key={`due-${word.id}`} className="border-b align-top">
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedDueWordIds.includes(word.id)}
+                      onChange={() => toggleDueWordSelection(word.id)}
+                      aria-label={word.hanzi}
+                    />
+                  </td>
                   <td className="px-3 py-2">{word.hanzi}</td>
                   <td className="px-3 py-2">{formatDateTime(word.nextReviewAt)}</td>
                   <td className="px-3 py-2">{formatProbability(familiarity)}</td>
+                  <td className="px-3 py-2">{testCount}</td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -492,6 +687,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
     </section>

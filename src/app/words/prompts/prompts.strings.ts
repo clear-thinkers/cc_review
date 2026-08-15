@@ -78,7 +78,7 @@ export const promptsStrings = {
       example: "例句",
       phrase_details: "词组详情",
       meaning_details: "释义详情",
-      vocab_phrase: "词汇短语",
+      vocab_phrase: "词语例句",
     },
 
     // Section: Slot Cards
