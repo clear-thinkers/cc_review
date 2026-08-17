@@ -18,6 +18,7 @@ import {
   resolvePackagedReviewResume,
   resolveQuizCompletionNotice,
   revalidateSavedQuizQueue,
+  selectLowestFamiliarityWords,
   tokenizePinyinSyllables,
   VOCAB_PHRASE_ROUND_ID_PREFIX,
   wrapVocabPhraseRoundAsQuizWord,
@@ -973,6 +974,65 @@ describe("filterPausedSessionsForViewer", () => {
     const result = filterPausedSessionsForViewer(rows, "child-a", true);
 
     expect(result.map((row) => row.clientSessionKey).sort()).toEqual(["due-key", "packaged-key"]);
+  });
+});
+
+describe("selectLowestFamiliarityWords", () => {
+  const NOW = 1_700_000_000_000;
+
+  function makeWord(overrides: Partial<Word> = {}): Word {
+    return {
+      id: "word-1",
+      hanzi: "错",
+      createdAt: 1,
+      repetitions: 5,
+      intervalDays: 1,
+      ease: 1,
+      nextReviewAt: NOW,
+      reviewCount: 0,
+      testCount: 0,
+      ...overrides,
+    };
+  }
+
+  it("orders words by ascending familiarity, weakest first", () => {
+    const strong = makeWord({ id: "strong", ease: 10, createdAt: 1 });
+    const medium = makeWord({ id: "medium", ease: 1, createdAt: 2 });
+    const weak = makeWord({ id: "weak", ease: 0.5, createdAt: 3 });
+
+    const result = selectLowestFamiliarityWords([strong, medium, weak], 3, NOW);
+
+    expect(result.map((word) => word.id)).toEqual(["weak", "medium", "strong"]);
+  });
+
+  it("caps the result at the requested count", () => {
+    const strong = makeWord({ id: "strong", ease: 10 });
+    const medium = makeWord({ id: "medium", ease: 1 });
+    const weak = makeWord({ id: "weak", ease: 0.5 });
+
+    const result = selectLowestFamiliarityWords([strong, medium, weak], 2, NOW);
+
+    expect(result.map((word) => word.id)).toEqual(["weak", "medium"]);
+  });
+
+  it("breaks a familiarity tie by createdAt ascending", () => {
+    // Both words are unreviewed (repetitions=0), which getMemorizationProbability
+    // treats as a flat 0.25 -- so this exercises the tie-break path only.
+    const later = makeWord({ id: "later", repetitions: 0, nextReviewAt: 0, createdAt: 200 });
+    const earlier = makeWord({ id: "earlier", repetitions: 0, nextReviewAt: 0, createdAt: 100 });
+
+    const result = selectLowestFamiliarityWords([later, earlier], 2, NOW);
+
+    expect(result.map((word) => word.id)).toEqual(["earlier", "later"]);
+  });
+
+  it("returns the whole pool, ranked, when count exceeds its size", () => {
+    const strong = makeWord({ id: "strong", ease: 10 });
+    const weak = makeWord({ id: "weak", ease: 0.5 });
+
+    const result = selectLowestFamiliarityWords([strong, weak], 25, NOW);
+
+    expect(result.map((word) => word.id)).toEqual(["weak", "strong"]);
   });
 });
 

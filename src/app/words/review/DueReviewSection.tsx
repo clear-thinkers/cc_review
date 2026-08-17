@@ -10,10 +10,13 @@ import {
   filterPausedSessionsForViewer,
   getErrorMessage,
   getPausedSessionRemainingCount,
+  selectLowestFamiliarityWords,
 } from "../shared/words.shared.utils";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import type { ReviewTestSessionTargetDraft } from "./review.types";
 import { sortReviewTestSessionTargets } from "./reviewSession.utils";
+
+const QUICK_ADD_CHARACTER_COUNT = 25;
 
 function getReviewTestSessionStatusMessage(
   status: string | null,
@@ -117,6 +120,20 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
 
   function handleBatchStartFillTest(): void {
     openFillTestReview(selectedDueWordIds);
+  }
+
+  // Auto-selects the QUICK_ADD_CHARACTER_COUNT currently-due characters with
+  // the lowest familiarity, then hands off to the SAME selected-characters
+  // form/submit flow as "Add Selected to Session" (handleAddSelectedToSession)
+  // below -- so it inherits that flow's target resolution, create-or-append
+  // logic, and name-input requirement rather than duplicating any of it.
+  function handleQuickAdd25(): void {
+    const lowestFamiliarityIds = selectLowestFamiliarityWords(dueWords, QUICK_ADD_CHARACTER_COUNT).map(
+      (word) => word.id
+    );
+    setSelectedDueWordIds(lowestFamiliarityIds);
+    setSessionNameInput(reviewTestSessions[0]?.name ?? "");
+    setSessionFormOpen(true);
   }
 
   async function handleAddSelectedToSession(event: React.FormEvent): Promise<void> {
@@ -556,6 +573,17 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
               }}
             >
               {str.due.batchActions.addSelectedToSession}
+            </button>
+          )}
+          {canManageSessions && (
+            <button
+              type="button"
+              className="rounded border-2 px-3 py-1.5 text-xs font-medium leading-none btn-secondary disabled:opacity-50"
+              disabled={dueWords.length === 0 || adminLoading}
+              title={adminLoading ? str.admin.loading : undefined}
+              onClick={handleQuickAdd25}
+            >
+              {str.due.batchActions.quickAdd25}
             </button>
           )}
           {canManageSessions && sessionFormOpen && (

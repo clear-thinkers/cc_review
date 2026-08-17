@@ -184,6 +184,7 @@ export const wordsStrings = {
         reviewSelected: "Review Selected",
         testSelected: "Test Selected",
         addSelectedToSession: "Add Selected to Session",
+        quickAdd25: "Quick Add 25",
       },
     },
 
@@ -1405,6 +1406,7 @@ export const wordsStrings = {
         reviewSelected: "复习所选",
         testSelected: "测试所选",
         addSelectedToSession: "将所选加入测验",
+        quickAdd25: "快速添加25个",
       },
     },
 

@@ -271,6 +271,25 @@ export function formatProbability(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+/**
+ * Ranks `words` by familiarity ascending (weakest first, same metric and
+ * createdAt tie-break as the due-review table's familiarity column) and
+ * returns the lowest `count`. Used by Due Review's "Quick Add 25" action to
+ * auto-select the due characters most in need of review before handing off
+ * to the existing selected-characters -> review-test-session flow.
+ */
+export function selectLowestFamiliarityWords(words: Word[], count: number, now = Date.now()): Word[] {
+  return [...words]
+    .sort((left, right) => {
+      const comparison = getMemorizationProbability(left, now) - getMemorizationProbability(right, now);
+      if (comparison !== 0) {
+        return comparison;
+      }
+      return left.createdAt - right.createdAt;
+    })
+    .slice(0, Math.max(0, count));
+}
+
 export function getSelectionModeLabel(mode: QuizSelectionMode, str: WordsLocaleStrings): string {
   if (mode === "all") {
     return str.fillTest.selectionModes.all;
