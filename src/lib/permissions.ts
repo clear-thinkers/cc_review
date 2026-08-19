@@ -1,8 +1,9 @@
 import type { UserRole } from './auth.types';
 
-export type ProtectedRoute = 
+export type ProtectedRoute =
   | '/words'
   | '/words/add'
+  | '/words/add-paragraph'
   | '/words/all'
   | '/words/admin'
   | '/words/shop-admin'
@@ -32,6 +33,7 @@ export function canAccessRoute(
 
   switch (route) {
     case '/words/add':
+    case '/words/add-paragraph':
     case '/words/admin':
     case '/words/prompts':
       return role === 'parent';

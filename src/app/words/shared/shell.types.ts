@@ -6,6 +6,7 @@
 export type NavPage =
   | "home"
   | "add"
+  | "addParagraph"
   | "all"
   | "review"
   | "shop"

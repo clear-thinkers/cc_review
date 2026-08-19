@@ -47,6 +47,25 @@ export type TagCascadeSelection = {
   lesson: string;
 };
 
+/**
+ * Ensures the currently-selected value always has a matching <option>, even
+ * when it's a not-yet-persisted custom value the parent just typed (grade/
+ * unit/lesson don't exist in `lessonTags` until the underlying lesson_tags
+ * row is actually created at final Assign/submit time). Without this, the
+ * <select>'s `value` prop has no matching <option>, so the browser renders
+ * it blank -- the state is set correctly, but it looks like the value was
+ * never captured. Mirrors AddSection.tsx's own inline cascade, which
+ * already carries this fix; TagCascadePicker (this shared component) never
+ * got it.
+ */
+export function appendSelectedOption(options: string[], selectedValue: string | null): string[] {
+  const trimmedValue = selectedValue?.trim();
+  if (!trimmedValue || options.includes(trimmedValue)) {
+    return options;
+  }
+  return [...options, trimmedValue].sort();
+}
+
 type TagCascadePickerProps =
   | {
       strings: TagCascadePickerStrings;
@@ -166,13 +185,22 @@ export default function TagCascadePicker({
     }
   }
 
-  const gradeOptions = [...new Set(lessonTags.map((tag) => tag.grade))].sort();
-  const unitOptions = [...new Set(lessonTags.filter((tag) => tag.grade === grade).map((tag) => tag.unit))].sort();
-  const lessonOptions = [
-    ...new Set(
-      lessonTags.filter((tag) => tag.grade === grade && tag.unit === unit).map((tag) => tag.lesson)
-    ),
-  ].sort();
+  const gradeOptions = appendSelectedOption(
+    [...new Set(lessonTags.map((tag) => tag.grade))].sort(),
+    grade
+  );
+  const unitOptions = appendSelectedOption(
+    [...new Set(lessonTags.filter((tag) => tag.grade === grade).map((tag) => tag.unit))].sort(),
+    unit
+  );
+  const lessonOptions = appendSelectedOption(
+    [
+      ...new Set(
+        lessonTags.filter((tag) => tag.grade === grade && tag.unit === unit).map((tag) => tag.lesson)
+      ),
+    ].sort(),
+    lesson
+  );
 
   return (
     <div className="space-y-2 rounded-md border p-3">

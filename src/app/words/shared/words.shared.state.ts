@@ -38,6 +38,7 @@ import {
   listVocabPhrases,
   gradeVocabPhrase,
   nudgeWordFamiliarity,
+  listParagraphs,
 } from "@/lib/supabase-service";
 import { gradeBundledFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -164,6 +165,7 @@ import type {
   WordsLocaleStrings,
 } from "./words.shared.types";
 import { useAdminState } from "./state/useAdminState";
+import { useAddParagraphState } from "./state/useAddParagraphState";
 import { useFillTestReviewState } from "./state/useFillTestReviewState";
 import { useFlashcardReviewState } from "./state/useFlashcardReviewState";
 import { useWordsBaseState } from "./state/useWordsBaseState";
@@ -182,6 +184,7 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
   const flashcardState = useFlashcardReviewState();
   const fillTestState = useFillTestReviewState();
   const adminState = useAdminState();
+  const addParagraphState = useAddParagraphState();
 
   const {
     words,
@@ -332,6 +335,41 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     adminCreatingReviewTestSession,
     setAdminCreatingReviewTestSession,
   } = adminState;
+
+  const {
+    paragraphInput,
+    setParagraphInput,
+    paragraphTitle,
+    setParagraphTitle,
+    paragraphTruncated,
+    setParagraphTruncated,
+    paragraphSentences,
+    setParagraphSentences,
+    paragraphCharacterMatches,
+    setParagraphCharacterMatches,
+    paragraphPhraseMatches,
+    setParagraphPhraseMatches,
+    paragraphSelection,
+    setParagraphSelection,
+    paragraphSubmitting,
+    setParagraphSubmitting,
+    paragraphNotice,
+    setParagraphNotice,
+    paragraphTagSectionOpen,
+    setParagraphTagSectionOpen,
+    paragraphTagSelection,
+    setParagraphTagSelection,
+    paragraphs,
+    setParagraphs,
+    paragraphViewMode,
+    setParagraphViewMode,
+    paragraphFilterTitle,
+    setParagraphFilterTitle,
+    paragraphFilterSelectedTagIds,
+    setParagraphFilterSelectedTagIds,
+    paragraphSelectedId,
+    setParagraphSelectedId,
+  } = addParagraphState;
 
   const isDueReviewPage = page === "review";
   const isFlashcardReviewPage = page === "flashcard";
@@ -1183,7 +1221,18 @@ const gradeLabels = getGradeLabels(str);
     // resolve phrase targets -- same reason allFlashcardContents is loaded
     // unconditionally rather than only when a packaged session exists.
     await listVocabPhrases().then(setVocabPhrases).catch(() => setVocabPhrases([]));
-  }, [refreshDueWords, refreshWords, setPausedSessions, setReviewTestSessions, setVocabPhrases, setWordTagsMap]);
+    // Library-first default view on /words/add-paragraph needs the list
+    // populated on page load, not lazily -- mirrors vocabPhrases above.
+    await listParagraphs().then(setParagraphs).catch(() => setParagraphs([]));
+  }, [
+    refreshDueWords,
+    refreshWords,
+    setPausedSessions,
+    setReviewTestSessions,
+    setVocabPhrases,
+    setWordTagsMap,
+    setParagraphs,
+  ]);
 
   useEffect(() => {
     (async () => {
@@ -4433,6 +4482,38 @@ const gradeLabels = getGradeLabels(str);
     addTagLesson,
     setAddTagLesson,
     wordTagsMap,
+    paragraphInput,
+    setParagraphInput,
+    paragraphTitle,
+    setParagraphTitle,
+    paragraphTruncated,
+    setParagraphTruncated,
+    paragraphSentences,
+    setParagraphSentences,
+    paragraphCharacterMatches,
+    setParagraphCharacterMatches,
+    paragraphPhraseMatches,
+    setParagraphPhraseMatches,
+    paragraphSelection,
+    setParagraphSelection,
+    paragraphSubmitting,
+    setParagraphSubmitting,
+    paragraphNotice,
+    setParagraphNotice,
+    paragraphTagSectionOpen,
+    setParagraphTagSectionOpen,
+    paragraphTagSelection,
+    setParagraphTagSelection,
+    paragraphs,
+    setParagraphs,
+    paragraphViewMode,
+    setParagraphViewMode,
+    paragraphFilterTitle,
+    setParagraphFilterTitle,
+    paragraphFilterSelectedTagIds,
+    setParagraphFilterSelectedTagIds,
+    paragraphSelectedId,
+    setParagraphSelectedId,
   };
 
   const navItems = getNavItems(

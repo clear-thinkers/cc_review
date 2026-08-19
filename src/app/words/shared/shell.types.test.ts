@@ -9,6 +9,7 @@ describe("Shell & Navigation Types", () => {
   it("should allow creating NavPage values", () => {
     const pages: NavPage[] = [
       "add",
+      "addParagraph",
       "all",
       "review",
       "shop",
@@ -17,12 +18,13 @@ describe("Shell & Navigation Types", () => {
       "results",
       "prompts",
     ];
-    expect(pages).toHaveLength(8);
+    expect(pages).toHaveLength(9);
   });
 
   it("should allow creating WordsSectionPage values", () => {
     const pages: WordsSectionPage[] = [
       "add",
+      "addParagraph",
       "all",
       "review",
       "shop",
@@ -33,7 +35,7 @@ describe("Shell & Navigation Types", () => {
       "flashcard",
       "fillTest",
     ];
-    expect(pages).toHaveLength(10);
+    expect(pages).toHaveLength(11);
   });
 
   it("should allow creating NavItem objects", () => {

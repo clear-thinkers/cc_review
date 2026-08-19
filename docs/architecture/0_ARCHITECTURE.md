@@ -61,6 +61,35 @@ These rules govern all character ingestion via `/words/add`:
 12. Children cannot access `/words/add` — the route is blocked; tag UI is not visible to child profiles.
 13. Submitting Hanzi to `/words/add` also clears any matching `hidden_admin_targets` rows for that family, restoring previously deleted Content Admin rows for those characters.
 
+### Add Paragraph Rules (`/words/add-paragraph`)
+
+These rules govern the Phase 1 article-import route (Tier 1, Item I), added 2026-08-17. Spec: `docs/feature-specs/2026-08-17-add-paragraph-article-import.md`.
+
+1. `/words/add-paragraph` is parent/platform-admin only, matching `/words/add`'s role gate. Children are redirected, no error shown.
+2. A pasted submission is split into sentences (`splitIntoSentences`/`buildParagraphSentences` in `src/lib/paragraphParsing.ts`) on Chinese/ASCII sentence-ending punctuation and newlines; a blank line (2+ consecutive newlines) between two sentences sets `paragraphBreakBefore: true` on the following sentence, for faithful re-rendering only — it never affects round-building.
+3. Pasted input over 5,000 characters (`MAX_PARAGRAPH_INPUT_LENGTH`) is truncated to the first 5,000 characters with a notice, rather than blocked outright or left unbounded.
+4. Every Hanzi occurrence is triaged against `words` (`triageParagraphCharacters`); every substring matching an existing `vocab_phrases.phrase` is triaged against `vocab_phrases` (`triagePhrasesInText`), both in `src/lib/paragraphTriage.ts`. A character appearing multiple times produces one independently-selectable match per occurrence.
+5. Overlap resolution: when a known-phrase match and a character match cover the same text, the phrase always wins for both rendering and selection — the phrase renders/selects as one atomic unit, and its component characters are never independently selectable within that range. This merge lives in the UI layer (`ParagraphSpanSelector.tsx`'s `buildSentenceRenderTokens`), not in the pure triage functions.
+6. Selection is free — any span, known or unknown, character or phrase, can be selected via click or click-and-drag. Re-adding an already-known word/phrase is a harmless no-op skip, same as `/words/add`'s existing ingestion rules.
+7. A drag selection can only extend within one contiguous run of selectable (Hanzi) tokens — crossing a non-Hanzi token (punctuation, space) clamps the selection back to the anchor token alone rather than merging across the gap.
+8. On submit, a selected single-character span resolves against `words`; a selected multi-character span resolves against `vocab_phrases` — whether or not that exact range was already a known-phrase match. Ingestion reuses `addWords`/`addVocabPhrases` unmodified (Ingestion Rules 1–7 above apply identically: uncurated, `repetitions=0`, no flashcard content, Content Admin remains the separate curation step).
+9. An optional single Textbook → Grade → Unit → Lesson tag may be applied to the whole submitted batch (both newly-added and already-existing selected items), following the same all-or-nothing completeness rule as Ingestion Rule 9.
+10. The full pasted text and its parsed sentence/span structure persist to one `paragraphs` row per submission — never split into multiple rows regardless of how many paragraph breaks or sentences it contains. Only the spans the parent actually selected and submitted are recorded in `sentences[].spans[]`; a known-but-unselected triage match is not persisted as a span.
+11. Partial failure mid-submit (e.g. word/phrase insert succeeds but the `paragraphs` row fails to save) surfaces an error notice and keeps the pasted text in the textarea for retry; already-inserted words/phrases are never rolled back, matching the same non-atomic tolerance `/words/add`'s batch phrase flow already accepts.
+12. Phase 1 ships no way to view, edit, re-triage, or package a saved paragraph — it is write-only from the user's perspective until the separate Phase 2 spec's library page exists.
+
+Rules 13+ govern Phase 2 (library, re-import, test-mode prep — 2026-08-18). Spec: `docs/feature-specs/2026-08-17-paragraph-fill-test.md`. Still no new route — everything lives on `/words/add-paragraph`, now titled "Manage Paragraphs" in the nav. Still ships nothing playable: a saved test mode creates no `review_test_sessions` row; actually running one is a future Phase 3, not yet spec'd.
+
+13. `/words/add-paragraph` is library-first once the family has ≥1 saved paragraph; the blank-import form is the default only when the library is empty. A prominent "+ Import New Paragraph" button (not a buried link) is always available from the library view, and a "← Browse saved paragraphs" link is always available from the import form once the library is non-empty.
+14. The library list is filterable by title (case-insensitive substring match against `paragraphs.title`) and by tags — mirroring `/words/all`'s Tags (Cascade) multi-select filter exactly (OR logic, "None" option) — resolved against the **union of lesson tags across every one of a paragraph's resolved spans' underlying `words`/`vocab_phrases` rows**, since a paragraph carries no tags of its own.
+15. **Continue Import** re-triages an already-saved paragraph's immutable `raw_text` against the family's *current* `words`/`vocab_phrases` and lets the parent select and add new spans. It is strictly additive: previously-added spans on that paragraph are never removed or replaced, only appended to. The paragraph's title is editable in this flow (title-only saves, with no new span selection, are a valid submission). The raw text itself is never editable.
+16. Adding words/phrases from `/words/add-paragraph` (fresh import or Continue Import) triggers a full `refreshAllData()` (not just a local optimistic patch) immediately after the insert succeeds — required because a second submission later in the same browser session would otherwise re-triage against stale `words`/`vocab_phrases` state and attempt to re-insert something already added, which fails as a real Postgres unique-constraint conflict rather than the intended silent skip (`addWords`'s upsert `onConflict` target is `id`, which is always fresh client-side, not `hanzi`).
+17. **Prep Fill Test** splits Phase 1's single "known" token state into three for span-selection purposes: unknown (not in `words`/`vocab_phrases` at all), ineligible (a persisted span on *this* paragraph explicitly flagged `fillTestEligible: false` — currently unreachable, since nothing sets it false, kept correct for a future per-span toggle), and eligible (known to the family at all, **regardless of whether this specific paragraph has already tracked it as one of its own persisted spans**). Only eligible tokens are selectable as blanks. **Corrected 2026-08-19**: eligibility originally required the token to already be a persisted span on this specific paragraph, so a phrase curated and imported via a different paragraph wrongly showed as ineligible here — fixed to key off family-wide known status instead. See `docs/fix-log/build-fix-log-2026-08-19-paragraph-eligibility-scoped-too-narrowly.md`.
+18. Selecting an eligible token in Prep Fill Test carves it out of its rendered sentence position (leaving a numbered blank marker) into a word-bank block below all the sentences — a deliberate preview of the eventual child-facing blank layout. Numbering always reflects paragraph reading order (sentence index, then offset), never click/selection order, and is recomputed on every selection change. If the selected token wasn't already a persisted span on this paragraph, saving the test mode materializes one first (from the already-resolved `wordId`/`vocabPhraseId` triage found — no new `words`/`vocab_phrases` insert) via `updateParagraph`, before the test mode is created/updated to reference its id.
+19. A **test mode** (`paragraph_test_modes`) is a named, saved selection of blank span ids for one paragraph — nothing more. Saving one does not create a `review_test_sessions` row or anything runnable. A paragraph may have multiple test modes; test-mode names are unique **per paragraph**, not family-wide, so two different paragraphs may each have a test mode with the same name.
+20. An existing test mode's name and blank selection are both editable in place (not create/delete-only) via the same form used to create one, pre-populated from the test mode's saved state.
+21. Creating or renaming a test mode to a name already used by another test mode on the *same* paragraph is rejected with an inline error (surfaced from the DB's `(paragraph_id, name)` unique-constraint violation); renaming a test mode to its own current name is not a collision.
+
 ### All Characters Inventory Rules
 
 These rules govern the inventory view at `/words/all`:
@@ -395,7 +424,7 @@ These rules govern the two-layer authentication and session protection system:
 
 Route access enforced by client-side RouteGuard using session role:
 - **Child**: Can access review (flashcard and fill-test), all characters, quiz results. Cannot access add or admin (content curation restricted to parents).
-- **Parent**: Can access add, admin, all, results, review, flashcard. Cannot access fill-test (learning mode restricted to children).
+- **Parent**: Can access add, add-paragraph, admin, all, results, review, flashcard. Cannot access fill-test (learning mode restricted to children).
 - **Platform admin**: Full access (isPlatformAdmin flag bypasses role restrictions).
 
 Blocked routes are hidden from navigation (not shown as disabled). Direct URL access to blocked routes redirects to `/words/review` with no error message.
@@ -410,6 +439,7 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | Route | Child | Parent | Platform Admin |
 |---|---|---|---|
 | `/words/add` | ❌ | ✅ | ✅ |
+| `/words/add-paragraph` | ❌ | ✅ | ✅ |
 | `/words/all` | ✅ | ✅ | ✅ |
 | `/words/admin` | ❌ | ✅ | ✅ |
 | `/words/prompts` | ❌ | ✅ | ✅ |
@@ -560,6 +590,35 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `lesson_tag_id` | uuid | Foreign key → `lesson_tags.id`; cascades on delete |
 | `family_id` | uuid | Denormalized for RLS |
 | **Unique constraint** | | `(vocab_phrase_id, lesson_tag_id)` |
+
+**`paragraphs` table** — raw pasted article text + parsed sentence/span structure (Tier 1, Item I, Phase 1 — Article Import). Write-only from the user's perspective in Phase 1: no view/edit/package UI ships yet — it exists purely as fill-test source material for the separate Phase 2 spec
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `title` | text (nullable) | Optional; parent-entered or left null |
+| `raw_text` | text | Exactly as pasted, immutable source of truth |
+| `sentences` | jsonb | `ParagraphSentence[]` (`src/lib/paragraph.types.ts`), default `'[]'::jsonb`; each sentence carries `spans[]` — the character/phrase ranges the parent selected and added this submission, with `resolvedWordId`/`resolvedVocabPhraseId` baked in |
+| `created_by_user_id` | uuid | Foreign key → `users.id`; cascades on delete |
+| `created_at` | timestamptz | Server timestamp |
+| `updated_at` | timestamptz | Server timestamp |
+| **RLS Guarantee** | | Family-scoped read; insert/update/delete are parent (or platform admin) only — **not** family-scoped-for-children the way `vocab_phrases`' UPDATE policy is, since a paragraph is never graded or written to by a child |
+
+**`paragraph_test_modes` table** — named, reusable blank-selection templates per paragraph (Tier 1, Item I, Phase 2). Purely a saved selection of which of a paragraph's already-eligible spans should become fill-test blanks — creates nothing runnable on its own (no `review_test_sessions` row). Actually wiring a test mode into the quiz runtime is a future Phase 3, not yet built
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `paragraph_id` | uuid | Foreign key → `paragraphs.id`; cascades on delete |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete; denormalized for RLS |
+| `name` | text | Test mode display name |
+| `span_ids` | jsonb | `string[]` — `ParagraphSpan.id` values (from `paragraphs.sentences[].spans[]`) selected as blanks; default `'[]'::jsonb` |
+| `created_by_user_id` | uuid | Foreign key → `users.id`; cascades on delete |
+| `created_at` | timestamptz | Server timestamp |
+| `updated_at` | timestamptz | Server timestamp; a test mode is editable, not create/delete-only |
+| **Unique constraint** | | `(paragraph_id, name)` — **per-paragraph**, not family-wide; a deliberate departure from every other named/unique thing in this app (textbooks, lesson tags, `review_test_sessions`) |
+| **RLS Guarantee** | | Family-scoped read; insert/update/delete are parent (or platform admin) only — same posture as `paragraphs` |
 
 **`review_test_sessions` table** — active/completed packaged review sessions, scoped to family
 

@@ -1,6 +1,10 @@
 "use client";
 
 import AddSection from "./add/AddSection";
+import AddParagraphSection from "./add-paragraph/AddParagraphSection";
+import ParagraphLibrarySection from "./add-paragraph/ParagraphLibrarySection";
+import ContinueImportSection from "./add-paragraph/ContinueImportSection";
+import TestModeSection from "./add-paragraph/TestModeSection";
 import AdminSection from "./admin/AdminSection";
 import AllWordsSection from "./all/AllWordsSection";
 import DebugSection from "./debug/DebugSection";
@@ -29,6 +33,10 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
     <WordsShell vm={vm}>
       <HomeFlowSection vm={vm} />
       <AddSection vm={vm} />
+      <AddParagraphSection vm={vm} />
+      <ParagraphLibrarySection vm={vm} />
+      <ContinueImportSection vm={vm} />
+      <TestModeSection vm={vm} />
       <DueReviewSection vm={vm} />
       <ShopSection vm={vm} />
       <ShopAdminSection vm={vm} />

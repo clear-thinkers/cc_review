@@ -11,6 +11,8 @@
 import { supabase } from "./supabaseClient";
 import { getJwtAppMetadata } from "./decodeJwtPayload";
 import type { Word, VocabPhrase, VocabPhraseExample } from "./types";
+import type { Paragraph, ParagraphSentence, ParagraphSpan } from "./paragraph.types";
+import type { ParagraphTestMode } from "./paragraphTestMode.types";
 import type { FlashcardLlmResponse } from "./flashcardLlm";
 import type { QuizSession } from "./quiz.types";
 import type { Wallet } from "./wallet.types";
@@ -2017,4 +2019,330 @@ export async function getVocabPhraseLessonTagsForFamily(): Promise<VocabPhraseLe
     map.set(row.vocab_phrase_id, existing);
   }
   return map;
+}
+
+// ─── Internal: Paragraph row converters ─────────────────────────────────────
+
+interface SupabaseParagraphRow {
+  id: string;
+  family_id: string;
+  title: string | null;
+  raw_text: string;
+  sentences: unknown;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function normalizeParagraphSpans(value: unknown): ParagraphSpan[] {
+  if (!Array.isArray(value)) return [];
+  const result: ParagraphSpan[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const source = item as Record<string, unknown>;
+    const id = typeof source.id === "string" ? source.id : "";
+    const text = typeof source.text === "string" ? source.text : "";
+    const startOffset = typeof source.startOffset === "number" ? source.startOffset : NaN;
+    const endOffset = typeof source.endOffset === "number" ? source.endOffset : NaN;
+    const kind: "character" | "phrase" | null =
+      source.kind === "character" || source.kind === "phrase" ? source.kind : null;
+    if (!id || !text || !kind || !Number.isFinite(startOffset) || !Number.isFinite(endOffset)) {
+      continue;
+    }
+    result.push({
+      id,
+      text,
+      startOffset,
+      endOffset,
+      kind,
+      resolvedWordId: typeof source.resolvedWordId === "string" ? source.resolvedWordId : undefined,
+      resolvedVocabPhraseId:
+        typeof source.resolvedVocabPhraseId === "string" ? source.resolvedVocabPhraseId : undefined,
+      fillTestEligible: source.fillTestEligible === true,
+    });
+  }
+  return result;
+}
+
+/** Defensive parse of the `sentences` jsonb column, mirrors normalizeVocabPhraseExamples. */
+function normalizeParagraphSentences(value: unknown): ParagraphSentence[] {
+  if (!Array.isArray(value)) return [];
+  const result: ParagraphSentence[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const source = item as Record<string, unknown>;
+    const text = typeof source.text === "string" ? source.text : "";
+    const index = typeof source.index === "number" ? source.index : NaN;
+    if (!text || !Number.isFinite(index)) continue;
+    result.push({
+      index,
+      text,
+      paragraphBreakBefore: source.paragraphBreakBefore === true,
+      spans: normalizeParagraphSpans(source.spans),
+    });
+  }
+  return result;
+}
+
+function fromParagraphSentences(sentences: ParagraphSentence[]): unknown {
+  return sentences.map((sentence) => ({
+    index: sentence.index,
+    text: sentence.text,
+    paragraphBreakBefore: sentence.paragraphBreakBefore,
+    spans: sentence.spans.map((span) => ({
+      id: span.id,
+      text: span.text,
+      startOffset: span.startOffset,
+      endOffset: span.endOffset,
+      kind: span.kind,
+      resolvedWordId: span.resolvedWordId,
+      resolvedVocabPhraseId: span.resolvedVocabPhraseId,
+      fillTestEligible: span.fillTestEligible,
+    })),
+  }));
+}
+
+function toParagraph(row: SupabaseParagraphRow): Paragraph {
+  return {
+    id: row.id,
+    familyId: row.family_id,
+    title: row.title,
+    rawText: row.raw_text,
+    sentences: normalizeParagraphSentences(row.sentences),
+    createdByUserId: row.created_by_user_id,
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+  };
+}
+
+// ─── Paragraphs ───────────────────────────────────────────────────────────────
+//
+// Raw pasted article text + parsed sentence/span structure (Tier 1, Item I,
+// Phase 1 — Article Import). Write-only from the user's perspective in Phase
+// 1 — no update path ships yet (see
+// docs/feature-specs/2026-08-17-add-paragraph-article-import.md, Out of
+// scope). createParagraph does not itself write words/vocab_phrases rows —
+// the caller sequences addWords/addVocabPhrases and tag assignment BEFORE
+// calling this, baking resolved ids into `sentences`.
+
+export async function createParagraph(
+  rawText: string,
+  title: string | null,
+  sentences: ParagraphSentence[]
+): Promise<Paragraph> {
+  const { familyId, userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paragraphs")
+    .insert({
+      family_id: familyId,
+      title,
+      raw_text: rawText,
+      sentences: fromParagraphSentences(sentences),
+      created_by_user_id: userId,
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`createParagraph: ${error?.message ?? "insert failed"}`);
+  return toParagraph(data as SupabaseParagraphRow);
+}
+
+/** Unused by Phase 1 UI — needed by Phase 2's paragraph library page. */
+export async function listParagraphs(): Promise<Paragraph[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paragraphs")
+    .select("*")
+    .eq("family_id", familyId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`listParagraphs: ${error.message}`);
+  return (data as SupabaseParagraphRow[]).map(toParagraph);
+}
+
+export async function getParagraph(id: string): Promise<Paragraph | null> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paragraphs")
+    .select("*")
+    .eq("id", id)
+    .eq("family_id", familyId)
+    .maybeSingle();
+  if (error) throw new Error(`getParagraph: ${error.message}`);
+  return data ? toParagraph(data as SupabaseParagraphRow) : null;
+}
+
+export async function deleteParagraph(id: string): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase.from("paragraphs").delete().eq("id", id).eq("family_id", familyId);
+  if (error) throw new Error(`deleteParagraph: ${error.message}`);
+}
+
+/**
+ * Continue Import's write path -- the first thing to ever update an
+ * existing paragraph row. Only the provided fields are written; `sentences`
+ * is expected to already be the FULL merged array (existing + newly
+ * resolved spans), not a delta -- callers use the extended
+ * mergeResolvedSpansIntoSentences (addParagraphIngestion.ts) to build it.
+ */
+export async function updateParagraph(
+  id: string,
+  fields: { title?: string | null; sentences?: ParagraphSentence[] }
+): Promise<Paragraph> {
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if ("title" in fields) row.title = fields.title ?? null;
+  if ("sentences" in fields) row.sentences = fromParagraphSentences(fields.sentences ?? []);
+
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paragraphs")
+    .update(row)
+    .eq("id", id)
+    .eq("family_id", familyId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(`updateParagraph: ${error?.message ?? "update failed"}`);
+  return toParagraph(data as SupabaseParagraphRow);
+}
+
+// ─── Internal: ParagraphTestMode row converters ─────────────────────────────
+
+interface SupabaseParagraphTestModeRow {
+  id: string;
+  paragraph_id: string;
+  family_id: string;
+  name: string;
+  span_ids: unknown;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function normalizeSpanIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function toParagraphTestMode(row: SupabaseParagraphTestModeRow): ParagraphTestMode {
+  return {
+    id: row.id,
+    paragraphId: row.paragraph_id,
+    name: row.name,
+    spanIds: normalizeSpanIds(row.span_ids),
+    createdByUserId: row.created_by_user_id,
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+  };
+}
+
+/**
+ * Thrown by createParagraphTestMode/updateParagraphTestMode when the
+ * (paragraph_id, name) unique constraint is violated (Postgres code 23505)
+ * -- a distinguishable message body (no colon-prefixed function name) so UI
+ * callers can match on it directly to show an inline "name already used for
+ * this paragraph" field error, distinct from any other insert/update failure.
+ */
+export const PARAGRAPH_TEST_MODE_NAME_TAKEN = "paragraph_test_mode_name_taken";
+
+// ─── Paragraph Test Modes ────────────────────────────────────────────────────
+//
+// Named, reusable blank-selection templates per paragraph (Tier 1, Item I,
+// Phase 2). Purely a saved selection of which already-eligible paragraph
+// spans should become fill-test blanks -- creates nothing runnable on its
+// own (no review_test_sessions row). Name uniqueness is scoped to
+// (paragraph_id, name), not family-wide, unlike every other named/unique
+// thing in this app.
+
+/**
+ * All of the family's test modes across every paragraph, for the library
+ * list's per-paragraph test-mode count column -- one bulk query rather than
+ * one listParagraphTestModes call per paragraph row.
+ */
+export async function listAllParagraphTestModes(): Promise<ParagraphTestMode[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase.from("paragraph_test_modes").select("*").eq("family_id", familyId);
+  if (error) throw new Error(`listAllParagraphTestModes: ${error.message}`);
+  return (data as SupabaseParagraphTestModeRow[]).map(toParagraphTestMode);
+}
+
+export async function listParagraphTestModes(paragraphId: string): Promise<ParagraphTestMode[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paragraph_test_modes")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("paragraph_id", paragraphId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`listParagraphTestModes: ${error.message}`);
+  return (data as SupabaseParagraphTestModeRow[]).map(toParagraphTestMode);
+}
+
+export async function createParagraphTestMode(
+  paragraphId: string,
+  name: string,
+  spanIds: string[]
+): Promise<ParagraphTestMode> {
+  const trimmedName = name.trim();
+  if (!trimmedName) throw new Error("Test mode name is required.");
+  if (spanIds.length === 0) throw new Error("Select at least one span for the test mode.");
+
+  const { familyId, userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paragraph_test_modes")
+    .insert({
+      paragraph_id: paragraphId,
+      family_id: familyId,
+      name: trimmedName,
+      span_ids: spanIds,
+      created_by_user_id: userId,
+    })
+    .select("*")
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new Error(PARAGRAPH_TEST_MODE_NAME_TAKEN);
+    throw new Error(`createParagraphTestMode: ${error.message}`);
+  }
+  if (!data) throw new Error("createParagraphTestMode: insert failed");
+  return toParagraphTestMode(data as SupabaseParagraphTestModeRow);
+}
+
+export async function updateParagraphTestMode(
+  id: string,
+  fields: { name?: string; spanIds?: string[] }
+): Promise<ParagraphTestMode> {
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if ("name" in fields) {
+    const trimmedName = fields.name?.trim() ?? "";
+    if (!trimmedName) throw new Error("Test mode name is required.");
+    row.name = trimmedName;
+  }
+  if ("spanIds" in fields) {
+    if ((fields.spanIds ?? []).length === 0) {
+      throw new Error("Select at least one span for the test mode.");
+    }
+    row.span_ids = fields.spanIds;
+  }
+
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paragraph_test_modes")
+    .update(row)
+    .eq("id", id)
+    .eq("family_id", familyId)
+    .select("*")
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new Error(PARAGRAPH_TEST_MODE_NAME_TAKEN);
+    throw new Error(`updateParagraphTestMode: ${error.message}`);
+  }
+  if (!data) throw new Error("updateParagraphTestMode: update failed");
+  return toParagraphTestMode(data as SupabaseParagraphTestModeRow);
+}
+
+export async function deleteParagraphTestMode(id: string): Promise<void> {
+  const { familyId } = await getSessionMetadata();
+  const { error } = await supabase
+    .from("paragraph_test_modes")
+    .delete()
+    .eq("id", id)
+    .eq("family_id", familyId);
+  if (error) throw new Error(`deleteParagraphTestMode: ${error.message}`);
 }

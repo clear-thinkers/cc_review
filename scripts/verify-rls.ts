@@ -189,6 +189,8 @@ async function section1_tableAccessibility(): Promise<void> {
     'word_lesson_tags',
     'vocab_phrases',
     'vocab_phrase_lesson_tags',
+    'paragraphs',
+    'paragraph_test_modes',
   ];
 
   for (const table of tables) {
@@ -836,6 +838,247 @@ async function section6_vocabPhrases(): Promise<void> {
   }
 }
 
+// ─── Section 7: paragraphs RLS ──────────────────────────────────────────────
+//
+// paragraphs is parent-only for INSERT/UPDATE/DELETE — unlike vocab_phrases,
+// whose UPDATE policy is family-scoped so children can grade a phrase during
+// fill-test. A paragraph is never graded or written to by a child, so its
+// UPDATE policy is parent-scoped too (see supabase/migrations/20260817000000_paragraphs.sql).
+async function section7_paragraphs(): Promise<void> {
+  console.log('\n■ Section 7: paragraphs RLS');
+
+  if (!testFamilyAId || !testFamilyBId || !familyAParentClient || !familyAChildClient || !testParentAUserId) {
+    fail(
+      'section7 setup incomplete — Section 2/4 must have succeeded',
+      'testFamilyAId, testFamilyBId, testParentAUserId, and Section 4 clients must all be set'
+    );
+    return;
+  }
+
+  // ── Child cannot INSERT a paragraph (parent-only) ──
+  const { error: childInsertErr } = await familyAChildClient.from('paragraphs').insert({
+    family_id: testFamilyAId,
+    raw_text: `${TEST_TAG}_child`,
+    created_by_user_id: testChildAUserId,
+  });
+
+  if (childInsertErr) {
+    pass(`paragraphs child write scope: child JWT INSERT rejected by RLS: "${childInsertErr.message}"`);
+  } else {
+    fail('paragraphs child write scope: child JWT INSERT SUCCEEDED — parent-only policy not enforced!');
+  }
+
+  // ── Parent CAN INSERT a paragraph ──
+  const { data: paragraphRow, error: parentInsertErr } = await familyAParentClient
+    .from('paragraphs')
+    .insert({ family_id: testFamilyAId, raw_text: '我喜欢图书馆。', created_by_user_id: testParentAUserId })
+    .select('id')
+    .single();
+
+  if (parentInsertErr || !paragraphRow) {
+    fail('paragraphs parent scoped insert: parent JWT INSERT failed', parentInsertErr?.message);
+    return;
+  }
+  pass('paragraphs parent scoped insert: parent JWT INSERT succeeded');
+  const paragraphId = (paragraphRow as { id: string }).id;
+
+  // ── Cross-family isolation: unenriched session cannot read Family A's paragraph ──
+  const { data: unenrichedRead, error: unenrichedReadErr } = await anon
+    .from('paragraphs')
+    .select('id')
+    .eq('id', paragraphId);
+  if (unenrichedReadErr) {
+    pass(`paragraphs isolation: unenriched SELECT blocked by RLS error: "${unenrichedReadErr.message}"`);
+  } else if (!unenrichedRead || unenrichedRead.length === 0) {
+    pass('paragraphs isolation: unenriched session cannot read the paragraph');
+  } else {
+    fail('paragraphs isolation: unenriched session can read the paragraph — RLS not enforcing!');
+  }
+
+  // ── Child cannot UPDATE a paragraph (parent-only, unlike vocab_phrases) ──
+  const { data: childUpdateData, error: childUpdateErr } = await familyAChildClient
+    .from('paragraphs')
+    .update({ title: 'child edit' })
+    .eq('id', paragraphId)
+    .select('id');
+
+  if (childUpdateErr) {
+    pass(`paragraphs child write scope: child JWT UPDATE rejected by RLS: "${childUpdateErr.message}"`);
+  } else if (!childUpdateData || childUpdateData.length === 0) {
+    pass('paragraphs child write scope: child JWT UPDATE silently affected 0 rows');
+  } else {
+    fail('paragraphs child write scope: child JWT UPDATE SUCCEEDED — parent-only policy not enforced!');
+  }
+
+  // ── Parent CAN UPDATE their own family's paragraph ──
+  const { data: parentUpdateData, error: parentUpdateErr } = await familyAParentClient
+    .from('paragraphs')
+    .update({ title: 'parent edit' })
+    .eq('id', paragraphId)
+    .select('id');
+
+  if (parentUpdateErr || !parentUpdateData || parentUpdateData.length === 0) {
+    fail('paragraphs parent scoped update: parent JWT UPDATE failed or affected 0 rows', parentUpdateErr?.message);
+  } else {
+    pass('paragraphs parent scoped update: parent JWT UPDATE succeeded');
+  }
+
+  // ── Child cannot DELETE a paragraph (parent-only) ──
+  const { data: childDeleteData, error: childDeleteErr } = await familyAChildClient
+    .from('paragraphs')
+    .delete()
+    .eq('id', paragraphId)
+    .select('id');
+
+  if (childDeleteErr) {
+    pass(`paragraphs child write scope: child JWT DELETE rejected by RLS: "${childDeleteErr.message}"`);
+  } else if (!childDeleteData || childDeleteData.length === 0) {
+    pass('paragraphs child write scope: child JWT DELETE silently affected 0 rows');
+  } else {
+    fail('paragraphs child write scope: child JWT DELETE SUCCEEDED — parent-only policy not enforced!');
+  }
+}
+
+// ─── Section 8: paragraph_test_modes RLS ────────────────────────────────────
+//
+// Same posture as `paragraphs`: parent-only INSERT/UPDATE/DELETE, family-
+// scoped read. Also verifies the new (paragraph_id, name) unique constraint
+// -- a departure from every other named/unique thing in this app, which is
+// family-wide unique -- behaves as designed: same name rejected on the same
+// paragraph, but the same name succeeds on a second, different paragraph.
+async function section8_paragraphTestModes(): Promise<void> {
+  console.log('\n■ Section 8: paragraph_test_modes RLS');
+
+  if (!testFamilyAId || !testFamilyBId || !familyAParentClient || !familyAChildClient || !testParentAUserId) {
+    fail(
+      'section8 setup incomplete — Section 2/4 must have succeeded',
+      'testFamilyAId, testFamilyBId, testParentAUserId, and Section 4 clients must all be set'
+    );
+    return;
+  }
+
+  const { data: paragraphA, error: paragraphAErr } = await familyAParentClient
+    .from('paragraphs')
+    .insert({ family_id: testFamilyAId, raw_text: '第一篇短文。', created_by_user_id: testParentAUserId })
+    .select('id')
+    .single();
+  const { data: paragraphB, error: paragraphBErr } = await familyAParentClient
+    .from('paragraphs')
+    .insert({ family_id: testFamilyAId, raw_text: '第二篇短文。', created_by_user_id: testParentAUserId })
+    .select('id')
+    .single();
+
+  if (paragraphAErr || !paragraphA || paragraphBErr || !paragraphB) {
+    fail('section8 setup: creating two test paragraphs failed', paragraphAErr?.message ?? paragraphBErr?.message);
+    return;
+  }
+  const paragraphAId = (paragraphA as { id: string }).id;
+  const paragraphBId = (paragraphB as { id: string }).id;
+
+  // ── Child cannot INSERT a test mode (parent-only) ──
+  const { error: childInsertErr } = await familyAChildClient.from('paragraph_test_modes').insert({
+    paragraph_id: paragraphAId,
+    family_id: testFamilyAId,
+    name: `${TEST_TAG}_child`,
+    created_by_user_id: testChildAUserId,
+  });
+  if (childInsertErr) {
+    pass(`paragraph_test_modes child write scope: child JWT INSERT rejected by RLS: "${childInsertErr.message}"`);
+  } else {
+    fail('paragraph_test_modes child write scope: child JWT INSERT SUCCEEDED — parent-only policy not enforced!');
+  }
+
+  // ── Parent CAN INSERT a test mode ──
+  const { data: modeRow, error: parentInsertErr } = await familyAParentClient
+    .from('paragraph_test_modes')
+    .insert({
+      paragraph_id: paragraphAId,
+      family_id: testFamilyAId,
+      name: 'Quiz 1',
+      created_by_user_id: testParentAUserId,
+    })
+    .select('id')
+    .single();
+  if (parentInsertErr || !modeRow) {
+    fail('paragraph_test_modes parent scoped insert: parent JWT INSERT failed', parentInsertErr?.message);
+    return;
+  }
+  pass('paragraph_test_modes parent scoped insert: parent JWT INSERT succeeded');
+  const modeId = (modeRow as { id: string }).id;
+
+  // ── Unique constraint: same name on the SAME paragraph is rejected ──
+  const { error: duplicateSameParagraphErr } = await familyAParentClient.from('paragraph_test_modes').insert({
+    paragraph_id: paragraphAId,
+    family_id: testFamilyAId,
+    name: 'Quiz 1',
+    created_by_user_id: testParentAUserId,
+  });
+  if (duplicateSameParagraphErr) {
+    pass(
+      `paragraph_test_modes unique constraint: same name on the same paragraph rejected: "${duplicateSameParagraphErr.message}"`
+    );
+  } else {
+    fail('paragraph_test_modes unique constraint: duplicate (paragraph_id, name) INSERT SUCCEEDED — constraint not enforced!');
+  }
+
+  // ── Unique constraint: same name on a DIFFERENT paragraph succeeds (per-paragraph, not family-wide) ──
+  const { error: sameNameOtherParagraphErr } = await familyAParentClient.from('paragraph_test_modes').insert({
+    paragraph_id: paragraphBId,
+    family_id: testFamilyAId,
+    name: 'Quiz 1',
+    created_by_user_id: testParentAUserId,
+  });
+  if (sameNameOtherParagraphErr) {
+    fail(
+      'paragraph_test_modes unique constraint: same name on a DIFFERENT paragraph FAILED — constraint is wrongly family-wide',
+      sameNameOtherParagraphErr.message
+    );
+  } else {
+    pass('paragraph_test_modes unique constraint: same name on a different paragraph succeeded (per-paragraph scoping confirmed)');
+  }
+
+  // ── Cross-family isolation: unenriched session cannot read Family A's test mode ──
+  const { data: unenrichedRead, error: unenrichedReadErr } = await anon
+    .from('paragraph_test_modes')
+    .select('id')
+    .eq('id', modeId);
+  if (unenrichedReadErr) {
+    pass(`paragraph_test_modes isolation: unenriched SELECT blocked by RLS error: "${unenrichedReadErr.message}"`);
+  } else if (!unenrichedRead || unenrichedRead.length === 0) {
+    pass('paragraph_test_modes isolation: unenriched session cannot read the test mode');
+  } else {
+    fail('paragraph_test_modes isolation: unenriched session can read the test mode — RLS not enforcing!');
+  }
+
+  // ── Child cannot UPDATE a test mode (parent-only) ──
+  const { data: childUpdateData, error: childUpdateErr } = await familyAChildClient
+    .from('paragraph_test_modes')
+    .update({ name: 'child edit' })
+    .eq('id', modeId)
+    .select('id');
+  if (childUpdateErr) {
+    pass(`paragraph_test_modes child write scope: child JWT UPDATE rejected by RLS: "${childUpdateErr.message}"`);
+  } else if (!childUpdateData || childUpdateData.length === 0) {
+    pass('paragraph_test_modes child write scope: child JWT UPDATE silently affected 0 rows');
+  } else {
+    fail('paragraph_test_modes child write scope: child JWT UPDATE SUCCEEDED — parent-only policy not enforced!');
+  }
+
+  // ── Child cannot DELETE a test mode (parent-only) ──
+  const { data: childDeleteData, error: childDeleteErr } = await familyAChildClient
+    .from('paragraph_test_modes')
+    .delete()
+    .eq('id', modeId)
+    .select('id');
+  if (childDeleteErr) {
+    pass(`paragraph_test_modes child write scope: child JWT DELETE rejected by RLS: "${childDeleteErr.message}"`);
+  } else if (!childDeleteData || childDeleteData.length === 0) {
+    pass('paragraph_test_modes child write scope: child JWT DELETE silently affected 0 rows');
+  } else {
+    fail('paragraph_test_modes child write scope: child JWT DELETE SUCCEEDED — parent-only policy not enforced!');
+  }
+}
+
 // ─── Cleanup ───────────────────────────────────────────────────────────────
 async function cleanup(): Promise<void> {
   console.log('\n■ Cleanup: Removing synthetic test data');
@@ -885,6 +1128,8 @@ async function main(): Promise<void> {
     await section4_enrichedTests();
     await section5_reviewSessionProgress();
     await section6_vocabPhrases();
+    await section7_paragraphs();
+    await section8_paragraphTestModes();
   } finally {
     await cleanup();
   }

@@ -89,6 +89,7 @@ export function getNavItems(
     { href: "/words/add", label: `${str.nav.addCharacters}`, page: "add" },
     { href: "/words/all", label: `${str.nav.allCharacters}`, page: "all" },
     { href: "/words/admin", label: `${str.nav.contentAdmin}`, page: "admin" },
+    { href: "/words/add-paragraph", label: `${str.nav.addParagraph}`, page: "addParagraph" },
     { href: "/words/review", label: `${str.nav.dueReview}`, page: "review" },
     { href: "/words/results", label: `${str.nav.quizResults}`, page: "results" },
     { href: "/words/prompts", label: `${str.nav.aiPrompts}`, page: "prompts" },
