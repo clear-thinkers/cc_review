@@ -15,6 +15,7 @@ import {
   renderPhraseWithPinyin,
   renderSentenceWithPinyin,
   resolveDueReviewResume,
+  resolveParagraphQuizResume,
   resolvePackagedReviewResume,
   resolveQuizCompletionNotice,
   revalidateSavedQuizQueue,
@@ -27,6 +28,7 @@ import type { TestableVocabPhrase, TestableWord } from "../review/fill-test/fill
 import type { FlashcardContentEntry } from "@/lib/supabase-service";
 import type { FlashcardLlmResponse } from "@/lib/flashcardLlm";
 import type { ReviewSessionProgress } from "@/lib/reviewSessionProgress.types";
+import type { ParagraphQuizPage } from "@/lib/paragraphQuizBuilder";
 import type { VocabPhrase, Word } from "@/lib/types";
 import { wordsStrings } from "../words.strings";
 
@@ -927,6 +929,121 @@ describe("getPausedSessionRemainingCount", () => {
     expect(getPausedSessionRemainingCount(null)).toBe(0);
     expect(getPausedSessionRemainingCount({})).toBe(0);
     expect(getPausedSessionRemainingCount({ quizQueue: "not-an-array" })).toBe(0);
+  });
+});
+
+describe("resolveParagraphQuizResume", () => {
+  const PAGES: ParagraphQuizPage[] = [
+    {
+      pageIndex: 0,
+      sentences: [{ index: 0, text: "你好。", blankSpanIds: ["s0-0", "s0-1"] }],
+      bankSpanIds: ["s0-0", "s0-1"],
+    },
+    {
+      pageIndex: 1,
+      sentences: [{ index: 1, text: "再见。", blankSpanIds: ["s1-0"] }],
+      bankSpanIds: ["s1-0"],
+    },
+  ];
+
+  it("returns invalid for a malformed payload", () => {
+    expect(
+      resolveParagraphQuizResume({ progressData: { not: "shaped right" }, testModeId: "tm1", pages: PAGES })
+    ).toEqual({ status: "invalid" });
+    expect(resolveParagraphQuizResume({ progressData: null, testModeId: "tm1", pages: PAGES })).toEqual({
+      status: "invalid",
+    });
+  });
+
+  it("returns invalid when the saved testModeId doesn't match the session being resumed", () => {
+    const progressData = {
+      testModeId: "different-test-mode",
+      currentPageIndex: 0,
+      blankState: {},
+      sessionStartTime: null,
+    };
+    expect(resolveParagraphQuizResume({ progressData, testModeId: "tm1", pages: PAGES })).toEqual({
+      status: "invalid",
+    });
+  });
+
+  it("resumes on the saved page when it still has an unfilled blank", () => {
+    const progressData = {
+      testModeId: "tm1",
+      currentPageIndex: 0,
+      blankState: { "s0-0": { status: "correct", retryCount: 0 } },
+      sessionStartTime: 1000,
+    };
+    const resolved = resolveParagraphQuizResume({ progressData, testModeId: "tm1", pages: PAGES });
+    expect(resolved).toEqual({
+      status: "ready",
+      currentPageIndex: 0,
+      blankState: { "s0-0": { status: "correct", retryCount: 0 } },
+      sessionStartTime: 1000,
+    });
+  });
+
+  it("advances to the next page with remaining work when the saved page is now fully correct", () => {
+    const progressData = {
+      testModeId: "tm1",
+      currentPageIndex: 0,
+      blankState: {
+        "s0-0": { status: "correct", retryCount: 0 },
+        "s0-1": { status: "correct", retryCount: 1 },
+      },
+      sessionStartTime: null,
+    };
+    const resolved = resolveParagraphQuizResume({ progressData, testModeId: "tm1", pages: PAGES });
+    expect(resolved.status).toBe("ready");
+    expect(resolved.status === "ready" && resolved.currentPageIndex).toBe(1);
+  });
+
+  it("silently drops a saved blank id that no longer resolves in the current pages (deleted span)", () => {
+    const progressData = {
+      testModeId: "tm1",
+      currentPageIndex: 0,
+      blankState: { "s0-0": { status: "correct", retryCount: 0 }, "ghost-span": { status: "correct", retryCount: 0 } },
+      sessionStartTime: null,
+    };
+    const resolved = resolveParagraphQuizResume({ progressData, testModeId: "tm1", pages: PAGES });
+    expect(resolved.status).toBe("ready");
+    expect(resolved.status === "ready" && resolved.blankState).toEqual({
+      "s0-0": { status: "correct", retryCount: 0 },
+    });
+  });
+
+  it("returns empty when every blank across every page is already correct", () => {
+    const progressData = {
+      testModeId: "tm1",
+      currentPageIndex: 0,
+      blankState: {
+        "s0-0": { status: "correct", retryCount: 0 },
+        "s0-1": { status: "correct", retryCount: 0 },
+        "s1-0": { status: "correct", retryCount: 0 },
+      },
+      sessionStartTime: null,
+    };
+    expect(resolveParagraphQuizResume({ progressData, testModeId: "tm1", pages: PAGES })).toEqual({
+      status: "empty",
+    });
+  });
+
+  it("still resumes ready when the only saved blank state was for a since-deleted span, since the page's other blanks default to unfilled", () => {
+    const singlePage: ParagraphQuizPage[] = [
+      { pageIndex: 0, sentences: [{ index: 0, text: "你好。", blankSpanIds: ["s0-0"] }], bankSpanIds: ["s0-0"] },
+    ];
+    const progressData = {
+      testModeId: "tm1",
+      currentPageIndex: 0,
+      blankState: { "deleted-span": { status: "unfilled", retryCount: 0 } },
+      sessionStartTime: null,
+    };
+    expect(resolveParagraphQuizResume({ progressData, testModeId: "tm1", pages: singlePage })).toEqual({
+      status: "ready",
+      currentPageIndex: 0,
+      blankState: {},
+      sessionStartTime: null,
+    });
   });
 });
 

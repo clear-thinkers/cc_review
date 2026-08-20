@@ -20,6 +20,13 @@ export type ReviewTestSessionTargetDraft = {
   // the discriminator that tells the grading/runtime layer "this target
   // grades against vocab_phrases, not words."
   vocabPhraseId?: string;
+  // Set only for a paragraph-quiz blank target. Identifies which paragraph
+  // and which specific span (blank) this target represents -- the same
+  // word/phrase can legitimately appear as two different blanks in one
+  // paragraph, so paragraphSpanId (not just character/pronunciation) is
+  // part of the dedup key.
+  paragraphId?: string;
+  paragraphSpanId?: string;
 };
 
 export type ReviewTestSessionTarget = ReviewTestSessionTargetDraft & {
@@ -35,4 +42,8 @@ export type ReviewTestSession = {
   completedAt: number | null;
   completedByUserId: string | null;
   targets: ReviewTestSessionTarget[];
+  // Non-null discriminator: this ENTIRE session is a paragraph quiz packaged
+  // from that test mode. Never set alongside a session with ordinary
+  // character/phrase targets.
+  paragraphTestModeId: string | null;
 };

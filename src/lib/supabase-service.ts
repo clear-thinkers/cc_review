@@ -204,6 +204,7 @@ interface SupabaseReviewTestSessionRow {
   created_by_user_id: string;
   completed_at: string | null;
   completed_by_user_id: string | null;
+  paragraph_test_mode_id: string | null;
 }
 
 interface SupabaseReviewTestSessionTargetRow {
@@ -212,6 +213,8 @@ interface SupabaseReviewTestSessionTargetRow {
   pronunciation: string;
   display_order: number;
   vocab_phrase_id: string | null;
+  paragraph_id?: string | null;
+  paragraph_span_id?: string | null;
 }
 
 function normalizeReviewTestSessionDraftTargets(
@@ -223,7 +226,10 @@ function normalizeReviewTestSessionDraftTargets(
   for (const target of targets) {
     const character = target.character.trim();
     const pronunciation = target.pronunciation.trim();
-    const key = `${character}|${pronunciation}`;
+    // paragraphSpanId is folded into the dedup key (mirroring the DB unique
+    // constraint) so two different blanks for the same character/phrase
+    // aren't collapsed into one target before they even reach the DB.
+    const key = `${character}|${pronunciation}|${target.paragraphSpanId ?? ""}`;
     if (!character || !pronunciation || seenKeys.has(key)) {
       continue;
     }
@@ -234,6 +240,8 @@ function normalizeReviewTestSessionDraftTargets(
       pronunciation,
       key,
       ...(target.vocabPhraseId ? { vocabPhraseId: target.vocabPhraseId } : {}),
+      ...(target.paragraphId ? { paragraphId: target.paragraphId } : {}),
+      ...(target.paragraphSpanId ? { paragraphSpanId: target.paragraphSpanId } : {}),
     });
   }
 
@@ -249,9 +257,11 @@ function toReviewTestSessionTarget(
     sessionId: row.session_id,
     character,
     pronunciation,
-    key: `${character}|${pronunciation}`,
+    key: `${character}|${pronunciation}|${row.paragraph_span_id ?? ""}`,
     displayOrder: row.display_order,
     ...(row.vocab_phrase_id ? { vocabPhraseId: row.vocab_phrase_id } : {}),
+    ...(row.paragraph_id ? { paragraphId: row.paragraph_id } : {}),
+    ...(row.paragraph_span_id ? { paragraphSpanId: row.paragraph_span_id } : {}),
   };
 }
 
@@ -267,6 +277,7 @@ function toReviewTestSession(
     completedAt: row.completed_at ? new Date(row.completed_at).getTime() : null,
     completedByUserId: row.completed_by_user_id,
     targets,
+    paragraphTestModeId: row.paragraph_test_mode_id ?? null,
   };
 }
 
@@ -688,14 +699,20 @@ export async function gradeVocabPhrase(id: string): Promise<VocabPhrase> {
  * Correct-phrase-answer familiarity nudge for one of the phrase's own
  * component characters, if it already exists as a standalone `words` row.
  * Silently no-ops if the character was never added standalone — nothing to
- * nudge. Reuses the existing, unmodified calculateNextState with a "good"
- * grade (moderate strength — recognizing a character inside an
- * already-familiar phrase is weaker evidence than a direct cold-recall
- * test of that character alone). Deliberately does not increment
+ * nudge. Reuses the existing, unmodified calculateNextState with a
+ * caller-supplied tier (defaults to "good" for the ordinary phrase-round
+ * nudge, which never passes one — moderate strength, since recognizing a
+ * character inside an already-familiar phrase is weaker evidence than a
+ * direct cold-recall test of that character alone). The paragraph-quiz path
+ * passes its own earned tier instead. Deliberately does not increment
  * testCount, which is reserved for direct standalone tests of the
  * character, not incidental exposure via a phrase.
  */
-export async function nudgeWordFamiliarity(wordId: string, now = Date.now()): Promise<void> {
+export async function nudgeWordFamiliarity(
+  wordId: string,
+  tier: Grade = "good",
+  now = Date.now()
+): Promise<void> {
   const { data, error: readErr } = await supabase
     .from("words")
     .select("*")
@@ -705,7 +722,7 @@ export async function nudgeWordFamiliarity(wordId: string, now = Date.now()): Pr
   if (!data) return;
 
   const word = toWord(data as SupabaseWordRow);
-  const updated = calculateNextState(word, "good", now);
+  const updated = calculateNextState(word, tier, now);
   updated.reviewCount = (word.reviewCount ?? 0) + 1;
   updated.testCount = word.testCount ?? 0;
 
@@ -890,7 +907,9 @@ export async function listReviewTestSessions(): Promise<ReviewTestSession[]> {
   const { familyId } = await getSessionMetadata();
   const { data: sessionRows, error: sessionError } = await supabase
     .from("review_test_sessions")
-    .select("id, name, created_at, created_by_user_id, completed_at, completed_by_user_id")
+    .select(
+      "id, name, created_at, created_by_user_id, completed_at, completed_by_user_id, paragraph_test_mode_id"
+    )
     .eq("family_id", familyId)
     .is("completed_at", null)
     .order("created_at", { ascending: false });
@@ -904,7 +923,7 @@ export async function listReviewTestSessions(): Promise<ReviewTestSession[]> {
   const sessionIds = sessions.map((row) => row.id);
   const { data: targetRows, error: targetError } = await supabase
     .from("review_test_session_targets")
-    .select("session_id, character, pronunciation, display_order, vocab_phrase_id")
+    .select("session_id, character, pronunciation, display_order, vocab_phrase_id, paragraph_id, paragraph_span_id")
     .eq("family_id", familyId)
     .in("session_id", sessionIds)
     .order("display_order", { ascending: true });
@@ -924,7 +943,8 @@ export async function listReviewTestSessions(): Promise<ReviewTestSession[]> {
 
 export async function createReviewTestSession(
   name: string,
-  targets: ReviewTestSessionTargetDraft[]
+  targets: ReviewTestSessionTargetDraft[],
+  paragraphTestModeId?: string
 ): Promise<ReviewTestSession> {
   const trimmedName = name.trim();
   if (!trimmedName) {
@@ -947,6 +967,7 @@ export async function createReviewTestSession(
     family_id: familyId,
     name: trimmedName,
     created_by_user_id: userId,
+    paragraph_test_mode_id: paragraphTestModeId ?? null,
   });
   if (sessionError) throw new Error(`createReviewTestSession session: ${sessionError.message}`);
 
@@ -957,6 +978,8 @@ export async function createReviewTestSession(
     pronunciation: target.pronunciation,
     display_order: index,
     vocab_phrase_id: target.vocabPhraseId ?? null,
+    paragraph_id: target.paragraphId ?? null,
+    paragraph_span_id: target.paragraphSpanId ?? null,
   }));
   const { error: targetError } = await supabase
     .from("review_test_session_targets")
@@ -970,6 +993,7 @@ export async function createReviewTestSession(
     createdByUserId: userId,
     completedAt: null,
     completedByUserId: null,
+    paragraphTestModeId: paragraphTestModeId ?? null,
     targets: normalizedTargets.map((target, index) => ({
       sessionId,
       character: target.character,
@@ -977,6 +1001,8 @@ export async function createReviewTestSession(
       key: target.key,
       displayOrder: index,
       ...(target.vocabPhraseId ? { vocabPhraseId: target.vocabPhraseId } : {}),
+      ...(target.paragraphId ? { paragraphId: target.paragraphId } : {}),
+      ...(target.paragraphSpanId ? { paragraphSpanId: target.paragraphSpanId } : {}),
     })),
   };
 }
@@ -993,7 +1019,7 @@ export async function appendTargetsToReviewTestSession(
   const { familyId } = await getSessionMetadata();
   const { data: existingTargetRows, error: existingTargetsError } = await supabase
     .from("review_test_session_targets")
-    .select("session_id, character, pronunciation, display_order, vocab_phrase_id")
+    .select("session_id, character, pronunciation, display_order, vocab_phrase_id, paragraph_id, paragraph_span_id")
     .eq("family_id", familyId)
     .eq("session_id", sessionId)
     .order("display_order", { ascending: true });
@@ -1016,6 +1042,8 @@ export async function appendTargetsToReviewTestSession(
       pronunciation: target.pronunciation,
       display_order: nextDisplayOrder + index,
       vocab_phrase_id: target.vocabPhraseId ?? null,
+      paragraph_id: target.paragraphId ?? null,
+      paragraph_span_id: target.paragraphSpanId ?? null,
     }));
 
   if (targetRows.length === 0) {
@@ -2345,4 +2373,77 @@ export async function deleteParagraphTestMode(id: string): Promise<void> {
     .eq("id", id)
     .eq("family_id", familyId);
   if (error) throw new Error(`deleteParagraphTestMode: ${error.message}`);
+}
+
+// ─── Active packaged-session guards (paragraph-quiz Phase 3) ───────────────
+
+/**
+ * True while any test mode belonging to this paragraph has an active
+ * (completed_at is null) packaged session. Gates Delete Paragraph -- callers
+ * must check this BEFORE calling deleteParagraph, which itself performs no
+ * such check (paragraph_test_modes cascades to review_test_sessions on
+ * delete, so an unguarded delete would silently destroy an in-progress
+ * child's session).
+ */
+export async function hasActiveParagraphQuizSession(paragraphId: string): Promise<boolean> {
+  const { familyId } = await getSessionMetadata();
+  const { count, error } = await supabase
+    .from("review_test_sessions")
+    .select("id, paragraph_test_modes!inner(paragraph_id)", { count: "exact", head: true })
+    .eq("family_id", familyId)
+    .eq("paragraph_test_modes.paragraph_id", paragraphId)
+    .is("completed_at", null);
+  if (error) throw new Error(`hasActiveParagraphQuizSession: ${error.message}`);
+  return (count ?? 0) > 0;
+}
+
+/**
+ * True only while THIS SPECIFIC test mode has an active packaged session --
+ * narrower than hasActiveParagraphQuizSession above (a sibling test mode on
+ * the same paragraph with no active session of its own does not block this
+ * one). Gates Delete Test Mode.
+ */
+export async function hasActiveTestModeQuizSession(testModeId: string): Promise<boolean> {
+  const { familyId } = await getSessionMetadata();
+  const { count, error } = await supabase
+    .from("review_test_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("family_id", familyId)
+    .eq("paragraph_test_mode_id", testModeId)
+    .is("completed_at", null);
+  if (error) throw new Error(`hasActiveTestModeQuizSession: ${error.message}`);
+  return (count ?? 0) > 0;
+}
+
+/**
+ * Resolves every target referenced by any active (completed_at is null)
+ * packaged session in the family -- character, phrase, mixed, and
+ * paragraph-quiz sessions alike, since paragraph-quiz targets are ordinary
+ * rows in the same review_test_session_targets table. Gates /words/all's
+ * Delete actions (Characters and Phrases views): a character whose hanzi is
+ * in hanziSet, or a phrase whose id is in vocabPhraseIdSet, must not be
+ * deleted while referenced by an in-progress child session.
+ */
+export async function getActiveSessionTargetKeys(): Promise<{
+  hanziSet: Set<string>;
+  vocabPhraseIdSet: Set<string>;
+}> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("review_test_session_targets")
+    .select("character, vocab_phrase_id, review_test_sessions!inner(completed_at)")
+    .eq("family_id", familyId)
+    .is("review_test_sessions.completed_at", null);
+  if (error) throw new Error(`getActiveSessionTargetKeys: ${error.message}`);
+
+  const hanziSet = new Set<string>();
+  const vocabPhraseIdSet = new Set<string>();
+  for (const row of (data as { character: string; vocab_phrase_id: string | null }[] | null) ?? []) {
+    if (row.vocab_phrase_id) {
+      vocabPhraseIdSet.add(row.vocab_phrase_id);
+    } else {
+      hanziSet.add(row.character);
+    }
+  }
+  return { hanziSet, vocabPhraseIdSet };
 }

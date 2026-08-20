@@ -15,6 +15,7 @@ import ShopSection from "./shop/ShopSection";
 import ShopAdminSection from "./shop-admin/ShopAdminSection";
 import DueReviewSection from "./review/DueReviewSection";
 import FillTestReviewSection from "./review/fill-test/FillTestReviewSection";
+import ParagraphQuizReviewSection from "./review/paragraph-quiz/ParagraphQuizReviewSection";
 import FlashcardReviewSection from "./review/flashcard/FlashcardReviewSection";
 import { useLocale } from "../shared/locale";
 import WordsShell from "./shared/WordsShell";
@@ -42,6 +43,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
       <ShopAdminSection vm={vm} />
       <FlashcardReviewSection vm={vm} />
       <FillTestReviewSection vm={vm} />
+      <ParagraphQuizReviewSection vm={vm} />
       <AdminSection vm={vm} />
       <PromptsSection vm={vm} />
       <AllWordsSection vm={vm} />

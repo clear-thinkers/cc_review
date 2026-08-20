@@ -39,6 +39,8 @@ import {
   gradeVocabPhrase,
   nudgeWordFamiliarity,
   listParagraphs,
+  listAllParagraphTestModes,
+  getActiveSessionTargetKeys,
 } from "@/lib/supabase-service";
 import { gradeBundledFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -361,6 +363,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setParagraphTagSelection,
     paragraphs,
     setParagraphs,
+    paragraphTestModes,
+    setParagraphTestModes,
     paragraphViewMode,
     setParagraphViewMode,
     paragraphFilterTitle,
@@ -435,10 +439,17 @@ const gradeLabels = getGradeLabels(str);
     return new Map<string, ReviewTestSessionRuntime>(
       reviewTestSessions.map((sessionItem) => [
         sessionItem.id,
-        buildReviewTestSessionRuntime(sessionItem, words, allFlashcardContents, vocabPhrases),
+        buildReviewTestSessionRuntime(
+          sessionItem,
+          words,
+          allFlashcardContents,
+          vocabPhrases,
+          paragraphs,
+          paragraphTestModes
+        ),
       ])
     );
-  }, [allFlashcardContents, reviewTestSessions, vocabPhrases, words]);
+  }, [allFlashcardContents, paragraphTestModes, paragraphs, reviewTestSessions, vocabPhrases, words]);
 
   const activeReviewTestSession = useMemo(
     () =>
@@ -462,6 +473,10 @@ const gradeLabels = getGradeLabels(str);
   const activeReviewTestSessionQuizCount = activeReviewTestSessionRuntime?.quizWords.length ?? 0;
   const activeReviewTestSessionSkippedQuizCount =
     activeReviewTestSessionRuntime?.skippedQuizCharacters.length ?? 0;
+  // Self-gate for ParagraphQuizReviewSection: true only once the active
+  // packaged session resolved as a paragraph quiz with no error.
+  const activeReviewTestSessionParagraphQuizReady =
+    Boolean(activeReviewTestSessionRuntime?.paragraphQuiz) && !activeReviewTestSessionRuntime?.errorCode;
   const activeReviewTestSessionPronunciations = useMemo(() => {
     if (!currentFlashcardWord || !activeReviewTestSessionRuntime) {
       return [];
@@ -713,11 +728,24 @@ const gradeLabels = getGradeLabels(str);
       // quiz-ready.
       const readyPhraseCount =
         runtime?.vocabPhrases.filter(isVocabPhraseFillTestReady).length ?? 0;
+      // A paragraph-quiz session's blanks are "ready" the moment the
+      // session resolves with no error -- every blank's word/phrase target
+      // was already validated at packaging/resolution time (unlike a
+      // character target, there's no separate "has usable fill-test
+      // content" gate to check), so the whole blank count folds straight
+      // into quizReadyCount, same as readyPhraseCount above -- a
+      // paragraph-quiz session must never read as 0/0 either (the exact
+      // regression class the 2026-08-13 phrase bug was).
+      const paragraphQuizBlankCount =
+        runtime?.paragraphQuiz?.pages.reduce((sum, page) => sum + page.bankSpanIds.length, 0) ?? 0;
+      const paragraphQuizReady = Boolean(runtime?.paragraphQuiz) && !runtime?.errorCode;
       return {
         session: sessionItem,
         runtime,
-        characterCount: (runtime?.orderedWords.length ?? 0) + (runtime?.vocabPhrases.length ?? 0),
-        quizReadyCount: (runtime?.quizWords.length ?? 0) + readyPhraseCount,
+        characterCount:
+          (runtime?.orderedWords.length ?? 0) + (runtime?.vocabPhrases.length ?? 0) + paragraphQuizBlankCount,
+        quizReadyCount:
+          (runtime?.quizWords.length ?? 0) + readyPhraseCount + (paragraphQuizReady ? paragraphQuizBlankCount : 0),
       };
     });
   }, [reviewTestSessionRuntimeById, reviewTestSessions]);
@@ -1224,6 +1252,11 @@ const gradeLabels = getGradeLabels(str);
     // Library-first default view on /words/add-paragraph needs the list
     // populated on page load, not lazily -- mirrors vocabPhrases above.
     await listParagraphs().then(setParagraphs).catch(() => setParagraphs([]));
+    // Family-wide, unconditional -- buildReviewTestSessionRuntime needs
+    // every test mode to resolve a paragraph-quiz session from ANY page
+    // (Due Review, the fill-test entry point), not just
+    // /words/add-paragraph. Mirrors paragraphs/vocabPhrases above.
+    await listAllParagraphTestModes().then(setParagraphTestModes).catch(() => setParagraphTestModes([]));
   }, [
     refreshDueWords,
     refreshWords,
@@ -1232,6 +1265,7 @@ const gradeLabels = getGradeLabels(str);
     setVocabPhrases,
     setWordTagsMap,
     setParagraphs,
+    setParagraphTestModes,
   ]);
 
   useEffect(() => {
@@ -3318,6 +3352,12 @@ const gradeLabels = getGradeLabels(str);
   }
 
   async function removeWord(word: Pick<Word, "id" | "hanzi">) {
+    const { hanziSet } = await getActiveSessionTargetKeys();
+    if (hanziSet.has(word.hanzi)) {
+      window.alert(str.all.table.blockedByActiveSession);
+      return;
+    }
+
     const hasContent = await hasFlashcardContentForHanzi(word.hanzi);
     if (hasContent) {
       const confirmed = window.confirm(str.all.table.confirmDeleteWithContent);
@@ -3690,6 +3730,16 @@ const gradeLabels = getGradeLabels(str);
 
       if (activeReviewTestSessionRuntime.errorCode) {
         router.replace("/words/review?reviewTestSessionStatus=invalid");
+        return;
+      }
+
+      // A paragraph-quiz session's quizWords/vocabPhrases are always empty
+      // by design (buildReviewTestSessionRuntime never mixes a paragraph
+      // quiz with ordinary targets) -- ParagraphQuizReviewSection owns this
+      // session's page/blank state and autosave entirely via its own
+      // effects, so this effect (which only ever builds the ordinary
+      // quizQueue) must not touch state or redirect for one.
+      if (activeReviewTestSessionRuntime.paragraphQuiz) {
         return;
       }
 
@@ -4343,8 +4393,10 @@ const gradeLabels = getGradeLabels(str);
     flashcardHistory,
     flashcardSummary,
     activeReviewTestSession,
+    activeReviewTestSessionRuntime,
     activeReviewTestSessionQuizCount,
     activeReviewTestSessionSkippedQuizCount,
+    activeReviewTestSessionParagraphQuizReady,
     continueReviewTestSessionToQuiz,
     isFillTestReviewPage,
     skippedDueCount,
@@ -4506,6 +4558,8 @@ const gradeLabels = getGradeLabels(str);
     setParagraphTagSelection,
     paragraphs,
     setParagraphs,
+    paragraphTestModes,
+    setParagraphTestModes,
     paragraphViewMode,
     setParagraphViewMode,
     paragraphFilterTitle,

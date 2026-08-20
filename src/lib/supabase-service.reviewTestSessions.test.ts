@@ -112,12 +112,13 @@ describe("supabase-service review test sessions", () => {
         createdByUserId: "user-1",
         completedAt: null,
         completedByUserId: null,
+        paragraphTestModeId: null,
         targets: [
           {
             sessionId: "session-1",
             character: "alpha",
             pronunciation: "hao3",
-            key: "alpha|hao3",
+            key: "alpha|hao3|",
             displayOrder: 0,
           },
         ],
@@ -201,7 +202,57 @@ describe("supabase-service review test sessions", () => {
         pronunciation: "xue2",
         display_order: 1,
         vocab_phrase_id: null,
+        paragraph_id: null,
+        paragraph_span_id: null,
       },
+    ]);
+  });
+
+  it("creates a paragraph-quiz session with paragraph_test_mode_id and per-blank paragraph target fields", async () => {
+    const sessionInsert = vi.fn().mockResolvedValue({ error: null });
+    const targetInsert = vi.fn().mockResolvedValue({ error: null });
+
+    fromMock.mockImplementation((table: string) => {
+      if (table === "review_test_sessions") {
+        return { insert: sessionInsert };
+      }
+      if (table === "review_test_session_targets") {
+        return { insert: targetInsert };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    const session = await createReviewTestSession(
+      "Chapter 3 Quiz",
+      [
+        {
+          character: "图",
+          pronunciation: "tu2",
+          key: "unused",
+          paragraphId: "paragraph-1",
+          paragraphSpanId: "s0-0",
+        },
+        {
+          character: "图",
+          pronunciation: "tu2",
+          key: "unused",
+          paragraphId: "paragraph-1",
+          paragraphSpanId: "s0-5",
+        },
+      ],
+      "test-mode-1"
+    );
+
+    expect(session.paragraphTestModeId).toBe("test-mode-1");
+    // Same character/pronunciation twice, but different paragraphSpanId --
+    // both blanks must survive normalization, not collapse into one target.
+    expect(session.targets).toHaveLength(2);
+    expect(sessionInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ paragraph_test_mode_id: "test-mode-1" })
+    );
+    expect(targetInsert).toHaveBeenCalledWith([
+      expect.objectContaining({ paragraph_id: "paragraph-1", paragraph_span_id: "s0-0" }),
+      expect.objectContaining({ paragraph_id: "paragraph-1", paragraph_span_id: "s0-5" }),
     ]);
   });
 

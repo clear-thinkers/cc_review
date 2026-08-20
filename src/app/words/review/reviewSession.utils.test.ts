@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { FlashcardContentEntry } from "@/lib/supabase-service";
 import type { Word } from "@/lib/types";
+import type { Paragraph, ParagraphSpan } from "@/lib/paragraph.types";
+import type { ParagraphTestMode } from "@/lib/paragraphTestMode.types";
 import type { ReviewTestSession } from "./review.types";
 import {
   buildReviewTestSessionRuntime,
@@ -85,6 +87,7 @@ describe("buildReviewTestSessionRuntime", () => {
       createdByUserId: "user-1",
       completedAt: null,
       completedByUserId: null,
+      paragraphTestModeId: null,
       targets: [
         {
           sessionId: "session-1",
@@ -131,6 +134,7 @@ describe("buildReviewTestSessionRuntime", () => {
       createdByUserId: "user-1",
       completedAt: null,
       completedByUserId: null,
+      paragraphTestModeId: null,
       targets: [
         {
           sessionId: "session-2",
@@ -164,6 +168,7 @@ describe("buildReviewTestSessionRuntime", () => {
       createdByUserId: "user-1",
       completedAt: null,
       completedByUserId: null,
+      paragraphTestModeId: null,
       targets: [
         {
           sessionId: "session-3",
@@ -183,5 +188,110 @@ describe("buildReviewTestSessionRuntime", () => {
 
     expect(runtime.errorCode).toBe("duplicate_word");
     expect(runtime.errorCharacter).toBe("吃");
+  });
+});
+
+describe("buildReviewTestSessionRuntime — paragraph-quiz branch", () => {
+  function makeSpan(overrides: Partial<ParagraphSpan>): ParagraphSpan {
+    return {
+      id: "span-1",
+      text: "你",
+      startOffset: 0,
+      endOffset: 1,
+      kind: "character",
+      resolvedWordId: "w1",
+      fillTestEligible: true,
+      ...overrides,
+    };
+  }
+
+  const PARAGRAPH: Paragraph = {
+    id: "paragraph-1",
+    familyId: "family-1",
+    title: "Test",
+    rawText: "你好。",
+    sentences: [
+      {
+        index: 0,
+        text: "你好。",
+        paragraphBreakBefore: false,
+        spans: [
+          makeSpan({ id: "s0-0", text: "你", startOffset: 0, endOffset: 1, resolvedWordId: "w-you" }),
+          makeSpan({ id: "s0-1", text: "好", startOffset: 1, endOffset: 2, resolvedWordId: "w-hao" }),
+        ],
+      },
+    ],
+    createdByUserId: "user-1",
+    createdAt: 0,
+    updatedAt: 0,
+  };
+
+  const TEST_MODE: ParagraphTestMode = {
+    id: "test-mode-1",
+    paragraphId: "paragraph-1",
+    name: "Chapter 3",
+    spanIds: ["s0-0", "s0-1"],
+    createdByUserId: "user-1",
+    createdAt: 0,
+    updatedAt: 0,
+  };
+
+  function makeParagraphQuizSession(targetSpanIds: string[]): ReviewTestSession {
+    return {
+      id: "session-p1",
+      name: "Chapter 3 Quiz",
+      createdAt: Date.now(),
+      createdByUserId: "user-1",
+      completedAt: null,
+      completedByUserId: null,
+      paragraphTestModeId: "test-mode-1",
+      targets: targetSpanIds.map((spanId, index) => ({
+        sessionId: "session-p1",
+        character: spanId,
+        pronunciation: "",
+        key: `pk-${spanId}`,
+        displayOrder: index,
+        paragraphId: "paragraph-1",
+        paragraphSpanId: spanId,
+      })),
+    };
+  }
+
+  it("resolves the paragraph and test mode, building pages from the packaged span snapshot", () => {
+    const session = makeParagraphQuizSession(["s0-0", "s0-1"]);
+    const runtime = buildReviewTestSessionRuntime(session, [], [], [], [PARAGRAPH], [TEST_MODE]);
+
+    expect(runtime.errorCode).toBeNull();
+    expect(runtime.quizWords).toEqual([]);
+    expect(runtime.vocabPhrases).toEqual([]);
+    expect(runtime.paragraphQuiz).not.toBeNull();
+    expect(runtime.paragraphQuiz?.paragraph.id).toBe("paragraph-1");
+    expect(runtime.paragraphQuiz?.testMode.id).toBe("test-mode-1");
+    expect(runtime.paragraphQuiz?.pages).toHaveLength(1);
+    expect(runtime.paragraphQuiz?.pages[0]?.bankSpanIds).toHaveLength(2);
+  });
+
+  it("returns missing_paragraph_test_mode when the referenced test mode no longer exists", () => {
+    const session = makeParagraphQuizSession(["s0-0", "s0-1"]);
+    const runtime = buildReviewTestSessionRuntime(session, [], [], [], [PARAGRAPH], []);
+
+    expect(runtime.errorCode).toBe("missing_paragraph_test_mode");
+    expect(runtime.paragraphQuiz).toBeNull();
+  });
+
+  it("returns missing_paragraph when the test mode's paragraph no longer exists", () => {
+    const session = makeParagraphQuizSession(["s0-0", "s0-1"]);
+    const runtime = buildReviewTestSessionRuntime(session, [], [], [], [], [TEST_MODE]);
+
+    expect(runtime.errorCode).toBe("missing_paragraph");
+    expect(runtime.paragraphQuiz).toBeNull();
+  });
+
+  it("silently drops a packaged blank whose span no longer resolves on the paragraph, without erroring the whole session", () => {
+    const session = makeParagraphQuizSession(["s0-0", "deleted-span"]);
+    const runtime = buildReviewTestSessionRuntime(session, [], [], [], [PARAGRAPH], [TEST_MODE]);
+
+    expect(runtime.errorCode).toBeNull();
+    expect(runtime.paragraphQuiz?.pages[0]?.bankSpanIds).toEqual(["s0-0"]);
   });
 });

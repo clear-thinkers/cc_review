@@ -6,6 +6,7 @@ import { useLocale } from "@/app/shared/locale";
 import {
   assignVocabPhraseLessonTags,
   deleteVocabPhrase,
+  getActiveSessionTargetKeys,
   getVocabPhraseLessonTagsForFamily,
   listVocabPhrases,
 } from "@/lib/supabase-service";
@@ -297,6 +298,11 @@ export default function AllVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) 
 
   async function handleDeletePhrase(phrase: VocabPhrase): Promise<void> {
     try {
+      const { vocabPhraseIdSet } = await getActiveSessionTargetKeys();
+      if (vocabPhraseIdSet.has(phrase.id)) {
+        setNotice(phraseAllStr.deleteBlockedByActiveSession);
+        return;
+      }
       await deleteVocabPhrase(phrase.id);
       setPhrases((previous) => previous.filter((item) => item.id !== phrase.id));
       setSelectedIds((previous) => previous.filter((id) => id !== phrase.id));

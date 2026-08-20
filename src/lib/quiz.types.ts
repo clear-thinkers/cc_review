@@ -14,6 +14,16 @@ export type SessionGradeData = {
   // credit), and earn coins under a separate flat rule instead of the
   // character easy/good/hard/again table. See coins.ts.
   isVocabPhrase?: boolean;
+  // True for a paragraph-quiz blank entry. A session with ANY isParagraphBlank
+  // entry is treated as a paragraph quiz in its entirety (a session is never
+  // a mix) -- coins are computed as one session-level sum instead of the
+  // per-entry rules above. See calculateParagraphQuizSessionCoins in coins.ts.
+  isParagraphBlank?: boolean;
+  // Raw wrong-attempt count for a paragraph-blank entry before this blank was
+  // finally answered correctly. Only meaningful when isParagraphBlank is
+  // true -- the coin formula needs the sum across all blanks, which the
+  // bucketed tier (easy/good/hard) alone can't reconstruct.
+  retryCount?: number;
 };
 
 export type QuizSession = {
@@ -66,7 +76,9 @@ export function isValidGradeData(data: unknown): data is SessionGradeData {
     typeof g.hanzi === "string" &&
     isValidGrade(g.grade) &&
     (g.timestamp === undefined || typeof g.timestamp === "number") &&
-    (g.isVocabPhrase === undefined || typeof g.isVocabPhrase === "boolean")
+    (g.isVocabPhrase === undefined || typeof g.isVocabPhrase === "boolean") &&
+    (g.isParagraphBlank === undefined || typeof g.isParagraphBlank === "boolean") &&
+    (g.retryCount === undefined || typeof g.retryCount === "number")
   );
 }
 

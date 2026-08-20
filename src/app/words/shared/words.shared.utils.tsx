@@ -28,6 +28,8 @@ import { canAccessRoute } from "@/lib/permissions";
 import type { UserRole } from "@/lib/auth.types";
 import type { FlashcardContentEntry } from "@/lib/supabase-service";
 import type { ReviewSessionProgress } from "@/lib/reviewSessionProgress.types";
+import type { ParagraphQuizPage } from "@/lib/paragraphQuizBuilder";
+import type { ParagraphQuizBlankProgress, ParagraphQuizProgressData } from "../review/paragraph-quiz/paragraphQuiz.types";
 
 export const SLOT_INDICES: Array<0 | 1 | 2> = [0, 1, 2];
 export const QUIZ_SELECTION_MODES = ["all", "10", "20", "30", "manual"] as const;
@@ -1316,6 +1318,93 @@ export function getPausedSessionRemainingCount(progressData: unknown): number {
       ? Math.min(Math.max(0, resumeIndex), quizQueue.length)
       : 0;
   return quizQueue.length - boundedResumeIndex;
+}
+
+// ─── Paragraph-quiz resume (Phase 3) ────────────────────────────────────────
+
+function isParagraphQuizProgressData(value: unknown): value is ParagraphQuizProgressData {
+  if (!value || typeof value !== "object") return false;
+  const source = value as Record<string, unknown>;
+  if (typeof source.testModeId !== "string") return false;
+  if (typeof source.currentPageIndex !== "number" || !Number.isInteger(source.currentPageIndex)) return false;
+  if (source.sessionStartTime !== null && typeof source.sessionStartTime !== "number") return false;
+  if (!source.blankState || typeof source.blankState !== "object") return false;
+
+  return Object.values(source.blankState as Record<string, unknown>).every((entry) => {
+    if (!entry || typeof entry !== "object") return false;
+    const blank = entry as Record<string, unknown>;
+    return (
+      (blank.status === "correct" || blank.status === "unfilled") &&
+      typeof blank.retryCount === "number"
+    );
+  });
+}
+
+export type ParagraphQuizResumeResolution =
+  | {
+      status: "ready";
+      currentPageIndex: number;
+      blankState: Record<string, ParagraphQuizBlankProgress>;
+      sessionStartTime: number | null;
+    }
+  | { status: "empty" }
+  | { status: "invalid" };
+
+/**
+ * Resolves a saved paragraph-quiz review_session_progress row's
+ * progress_data into runtime state ready to resume. Re-validates the
+ * remaining (not-yet-correct) blanks against the paragraph's CURRENT pages
+ * (already re-resolved from the paragraph's current spans by
+ * buildReviewTestSessionRuntime/buildParagraphQuizPages -- a span deleted
+ * since packaging simply won't appear there) -- a stale saved blank id is
+ * dropped rather than trusted blind, mirroring revalidateSavedQuizQueue's
+ * precedent for the ordinary character/phrase path. If this empties the
+ * saved current page, resume advances to the first page that still has an
+ * unfilled blank rather than landing on a dead end; if the whole quiz has
+ * no remaining work at all, reports "empty".
+ */
+export function resolveParagraphQuizResume(params: {
+  progressData: unknown;
+  testModeId: string;
+  pages: ParagraphQuizPage[];
+}): ParagraphQuizResumeResolution {
+  if (!isParagraphQuizProgressData(params.progressData)) {
+    return { status: "invalid" };
+  }
+
+  const parsed = params.progressData;
+  if (parsed.testModeId !== params.testModeId) {
+    return { status: "invalid" };
+  }
+
+  const validSpanIds = new Set(params.pages.flatMap((page) => page.bankSpanIds));
+  const blankState: Record<string, ParagraphQuizBlankProgress> = {};
+  for (const [spanId, state] of Object.entries(parsed.blankState)) {
+    if (validSpanIds.has(spanId)) {
+      blankState[spanId] = state;
+    }
+  }
+
+  const pageHasRemainingBlank = (page: ParagraphQuizPage) =>
+    page.bankSpanIds.some((spanId) => (blankState[spanId]?.status ?? "unfilled") !== "correct");
+
+  const savedPage = params.pages[parsed.currentPageIndex];
+  let currentPageIndex = savedPage && pageHasRemainingBlank(savedPage) ? parsed.currentPageIndex : -1;
+
+  if (currentPageIndex === -1) {
+    currentPageIndex = params.pages.findIndex(pageHasRemainingBlank);
+  }
+
+  if (currentPageIndex === -1) {
+    return { status: "empty" };
+  }
+
+  return {
+    status: "ready",
+    currentPageIndex,
+    blankState,
+    sessionStartTime: parsed.sessionStartTime,
+  };
 }
 
 /**

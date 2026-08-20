@@ -48,6 +48,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     gradeLabels,
     allFlashcardContents,
     vocabPhrases,
+    activeReviewTestSessionRuntime,
   } = vm;
 
   // Celebration animation state
@@ -101,7 +102,11 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
       ? currentQuizWord.fillTest.vocabPhraseMembers.map((member) => member.phrase).join("、")
       : currentQuizWord?.hanzi;
 
-  if (!isFillTestReviewPage) {
+  // A paragraph-quiz session dispatches to ParagraphQuizReviewSection
+  // instead -- the "third branch, same /words/review/fill-test entry point"
+  // the feature spec calls for, with the two sibling sections acting as the
+  // branch dispatch (see WordsWorkspace.tsx).
+  if (!isFillTestReviewPage || activeReviewTestSessionRuntime?.paragraphQuiz) {
     return null;
   }
 

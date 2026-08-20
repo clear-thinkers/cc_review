@@ -4,6 +4,8 @@ import { useState } from "react";
 import type { QuizSession } from "./results.types";
 import type { ResultsLocaleStrings } from "./results.strings.types";
 import { computeSessionDisplayData } from "@/lib/results";
+import type { DialogAnchorRect } from "./SendFailedToSessionDialog";
+import { SessionCharacterListPopup, type SessionCharacterListPopupContent } from "./SessionCharacterListPopup";
 import styles from "./results.module.css";
 
 export interface SessionHistoryTableProps {
@@ -37,9 +39,10 @@ export function SessionHistoryTable({
 }: SessionHistoryTableProps) {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [expandedTestedSessionIds, setExpandedTestedSessionIds] = useState<Set<string>>(
-    () => new Set()
-  );
+  const [popup, setPopup] = useState<{
+    content: SessionCharacterListPopupContent;
+    anchorRect: DialogAnchorRect;
+  } | null>(null);
 
   const handleHeaderClick = (field: SortField) => {
     if (sortField === field) {
@@ -103,26 +106,24 @@ export function SessionHistoryTable({
     return className;
   };
 
-  const truncateCharacters = (chars: string[], maxLength = 10): string => {
-    if (chars.length <= maxLength) {
-      return chars.join("、");
-    }
-    return chars.slice(0, maxLength).join("、") + "…";
+  const openTestedPopup = (session: (typeof sortedData)[number], anchorRect: DOMRect) => {
+    const isParagraphQuiz = session.gradeData.some((entry) => entry.isParagraphBlank);
+    const content: SessionCharacterListPopupContent = isParagraphQuiz
+      ? {
+          kind: "paragraphBlanks",
+          title: strings.popup.paragraphBlanksTitle,
+          items: session.gradeData
+            .filter((entry) => entry.isParagraphBlank)
+            .map((entry) => ({ text: entry.hanzi, tier: entry.grade, retryCount: entry.retryCount ?? 0 })),
+        }
+      : { kind: "characters", title: strings.table.headers.testedCharacters, items: session.charactersTested };
+    setPopup({ content, anchorRect });
   };
 
-  const isCharacterListTruncated = (chars: string[], maxLength = 10): boolean => {
-    return chars.length > maxLength;
-  };
-
-  const toggleTestedCharacters = (sessionId: string) => {
-    setExpandedTestedSessionIds((current) => {
-      const next = new Set(current);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
-      return next;
+  const openFailedPopup = (session: (typeof sortedData)[number], anchorRect: DOMRect) => {
+    setPopup({
+      content: { kind: "characters", title: strings.table.headers.failedCharacters, items: session.charactersFailed },
+      anchorRect,
     });
   };
 
@@ -199,9 +200,6 @@ export function SessionHistoryTable({
             </thead>
             <tbody>
               {sortedData.map((session) => {
-                const isTestedExpanded = expandedTestedSessionIds.has(session.id);
-                const canExpandTestedCharacters = isCharacterListTruncated(session.charactersTested);
-
                 return (
                   <tr key={session.id} className={styles.sessionTableRow}>
                   <td className={styles.sessionTableCell}>{session.sessionDate}</td>
@@ -222,20 +220,13 @@ export function SessionHistoryTable({
                   </td>
                   <td className={styles.sessionTableCell + " " + styles.characters}>
                     {session.charactersTested.length > 0 ? (
-                      canExpandTestedCharacters ? (
-                        <button
-                          type="button"
-                          className={styles.characterListToggle}
-                          onClick={() => toggleTestedCharacters(session.id)}
-                          aria-expanded={isTestedExpanded}
-                        >
-                          {isTestedExpanded
-                            ? session.charactersTested.join("、")
-                            : truncateCharacters(session.charactersTested)}
-                        </button>
-                      ) : (
-                        session.charactersTested.join("、")
-                      )
+                      <button
+                        type="button"
+                        className={styles.characterListToggle}
+                        onClick={(event) => openTestedPopup(session, event.currentTarget.getBoundingClientRect())}
+                      >
+                        {strings.popup.viewAction} ({session.charactersTested.length})
+                      </button>
                     ) : (
                       strings.table.noCharacters
                     )}
@@ -244,25 +235,31 @@ export function SessionHistoryTable({
                     {session.charactersFailed.length}
                   </td>
                   <td className={styles.sessionTableCell + " " + styles.characters}>
-                    {session.charactersFailed.length > 0
-                      ? (
-                        <div className={styles.cellContentStack}>
-                          <span>{truncateCharacters(session.charactersFailed)}</span>
-                          <button
-                            type="button"
-                            className="btn-secondary rounded border-2 px-3 py-1 text-[11px] font-medium leading-none disabled:opacity-50"
-                            onClick={(event) =>
-                              onSendFailedToSession(session, event.currentTarget.getBoundingClientRect())
-                            }
-                            disabled={sendingSessionId === session.id}
-                          >
-                            {sendingSessionId === session.id
-                              ? strings.sendFailedToSession.dialog.submittingButton
-                              : strings.sendFailedToSession.button}
-                          </button>
-                        </div>
-                      )
-                      : strings.table.noCharacters}
+                    {session.charactersFailed.length > 0 ? (
+                      <div className={styles.cellContentStack}>
+                        <button
+                          type="button"
+                          className={styles.characterListToggle}
+                          onClick={(event) => openFailedPopup(session, event.currentTarget.getBoundingClientRect())}
+                        >
+                          {strings.popup.viewAction} ({session.charactersFailed.length})
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary rounded border-2 px-3 py-1 text-[11px] font-medium leading-none disabled:opacity-50"
+                          onClick={(event) =>
+                            onSendFailedToSession(session, event.currentTarget.getBoundingClientRect())
+                          }
+                          disabled={sendingSessionId === session.id}
+                        >
+                          {sendingSessionId === session.id
+                            ? strings.sendFailedToSession.dialog.submittingButton
+                            : strings.sendFailedToSession.button}
+                        </button>
+                      </div>
+                    ) : (
+                      strings.table.noCharacters
+                    )}
                   </td>
                   <td className={styles.sessionTableCell + " " + styles.numeric}>
                     {session.coinsEarned}
@@ -274,6 +271,14 @@ export function SessionHistoryTable({
           </table>
         </div>
       )}
+      {popup ? (
+        <SessionCharacterListPopup
+          strings={strings}
+          content={popup.content}
+          anchorRect={popup.anchorRect}
+          onClose={() => setPopup(null)}
+        />
+      ) : null}
     </div>
   );
 }

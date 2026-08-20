@@ -321,6 +321,38 @@ export const wordsStrings = {
       },
     },
 
+    // ============= PARAGRAPH QUIZ (Item I, Phase 3) =============
+    paragraphQuiz: {
+      pageTitle: "Paragraph Quiz",
+      pageLabel: "Paragraph quiz: {name}",
+      pageProgress: "Page {current} / {total}",
+      wordBankHeader: "Word Bank",
+      wordBankEmpty: "Every word on this page has been placed.",
+      dragInstruction: "Drag a word to a blank, or tap a word, then tap a blank.",
+      dropPlaceholder: "?",
+      stopButton: "Stop quiz",
+      completionMessage: "Paragraph quiz complete.",
+      emptyState: {
+        noSessionTitle: "No quiz session is active.",
+        noSessionBody: "Start from Due Review to choose a packaged paragraph quiz first.",
+        dueReviewButton: "Go to Due Review",
+        homeButton: "Back to App Flow",
+      },
+      warning: {
+        title: "Coins will be lost",
+        body: "If you stop or leave this quiz now, all {coins} coins earned so far will be lost.",
+        confirmLeave:
+          "If you leave this quiz now, all {coins} coins earned so far will be lost.\n\nDo you want to leave the quiz?",
+        stayButton: "Stay in quiz",
+        leaveButton: "Leave quiz",
+      },
+      reviewTestSession: {
+        completed: "Completed test session: {name}",
+        completeError: "Quiz finished, but the test session could not be marked complete: {name}",
+        returnToDueReviewButton: "Return to Due Review",
+      },
+    },
+
     // ============= QUIZ RESULTS PAGE =============
     results: {
       locale: "en",
@@ -351,6 +383,13 @@ export const wordsStrings = {
           coinsEarned: "Coins Earned",
         },
         noCharacters: "—",
+      },
+      popup: {
+        viewAction: "View",
+        closeButton: "Close",
+        paragraphBlanksTitle: "Blanks",
+        blankTierLabel: "Tier",
+        blankRetriesLabel: "Retries",
       },
       clearHistory: {
         button: "Clear History",
@@ -999,6 +1038,8 @@ export const wordsStrings = {
         },
         noPhrases: "No phrases yet.",
         deleteError: "Failed to delete. Please try again.",
+        deleteBlockedByActiveSession:
+          "This phrase is packaged in an active quiz session and can't be deleted. Finish or remove that session first.",
         filters: {
           phraseSearch: {
             label: "Phrase Search",
@@ -1095,6 +1136,8 @@ export const wordsStrings = {
         },
         confirmDeleteWithContent:
           "This character has saved flashcard content. Deleting it will also permanently remove all associated content. Continue?",
+        blockedByActiveSession:
+          "This character is packaged in an active quiz session and can't be deleted. Finish or remove that session first.",
       },
     },
 
@@ -1543,6 +1586,37 @@ export const wordsStrings = {
       },
     },
 
+    // ============= 短文填空测验（第 I 项，第三阶段）=============
+    paragraphQuiz: {
+      pageTitle: "短文填空测验",
+      pageLabel: "短文测验：{name}",
+      pageProgress: "第 {current} / {total} 页",
+      wordBankHeader: "词语库",
+      wordBankEmpty: "本页所有词语都已放置完成。",
+      dragInstruction: "拖动词语到空白处，或点击词语然后点击空白处。",
+      dropPlaceholder: "？",
+      stopButton: "停止测验",
+      completionMessage: "短文填空测验已完成。",
+      emptyState: {
+        noSessionTitle: "当前没有正在进行的测验。",
+        noSessionBody: "请先从待复习页面开始一个已打包的短文测验。",
+        dueReviewButton: "前往待复习",
+        homeButton: "返回使用流程",
+      },
+      warning: {
+        title: "离开会丢失金币",
+        body: "如果现在停止或离开本次测验，当前累计的 {coins} 个金币都会丢失。",
+        confirmLeave: "如果现在离开本次测验，当前累计的 {coins} 个金币都会丢失。\n\n要离开测验吗？",
+        stayButton: "继续测验",
+        leaveButton: "离开测验",
+      },
+      reviewTestSession: {
+        completed: "已完成测验：{name}",
+        completeError: "测验已完成，但无法把测验标记为已完成：{name}",
+        returnToDueReviewButton: "返回待复习",
+      },
+    },
+
     // ============= 测验结果页面 =============
     results: {
       locale: "zh",
@@ -1573,6 +1647,13 @@ export const wordsStrings = {
           coinsEarned: "获得金币",
         },
         noCharacters: "—",
+      },
+      popup: {
+        viewAction: "查看",
+        closeButton: "关闭",
+        paragraphBlanksTitle: "空格",
+        blankTierLabel: "等级",
+        blankRetriesLabel: "重试次数",
       },
       clearHistory: {
         button: "清除历史",
@@ -2207,6 +2288,7 @@ export const wordsStrings = {
         },
         noPhrases: "暂无词语。",
         deleteError: "删除失败，请重试。",
+        deleteBlockedByActiveSession: "该词语已打包在一个正在进行的测验中，无法删除。请先完成或移除该测验。",
         filters: {
           phraseSearch: {
             label: "词语搜索",
@@ -2303,6 +2385,7 @@ export const wordsStrings = {
         },
         confirmDeleteWithContent:
           "该汉字已有保存的闪卡内容。删除后，相关内容将一并永久移除。是否继续？",
+        blockedByActiveSession: "该汉字已打包在一个正在进行的测验中，无法删除。请先完成或移除该测验。",
       },
     },
 

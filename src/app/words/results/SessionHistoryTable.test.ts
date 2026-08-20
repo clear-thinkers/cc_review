@@ -2,37 +2,24 @@
  * SessionHistoryTable — focused logic tests
  *
  * @testing-library/react is not available in this project.
- * Tests cover the three stable, self-contained behaviors:
- *   1. truncateCharacters — the character-list display helper
- *   2. isCharacterListTruncated — tested-cell expansion guard
- *   3. Sort state machine — field selection and direction toggling
- *   4. Sort comparator — ordering rows by each supported field
- *   5. Clear-button visibility — hideDestructiveActions + empty-session guard
+ * Tests cover the stable, self-contained behaviors:
+ *   1. Tested/Failed popup content-building — characters vs. paragraph-blank branch
+ *   2. Sort state machine — field selection and direction toggling
+ *   3. Sort comparator — ordering rows by each supported field
+ *   4. Clear-button visibility — hideDestructiveActions + empty-session guard
  *
  * Logic is mirrored inline from the component source. If the component
  * logic changes, update these mirrors and tests together.
  */
 
 import { describe, expect, it } from "vitest";
-import type { SessionDisplayData } from "./results.types";
+import type { SessionDisplayData, SessionGradeData } from "./results.types";
 import { calculateAnchoredDialogPosition } from "./SendFailedToSessionDialog";
+import type { SessionCharacterListPopupContent } from "./SessionCharacterListPopup";
 
 // ---------------------------------------------------------------------------
 // Mirrors of component-internal logic
 // ---------------------------------------------------------------------------
-
-/** Mirror of SessionHistoryTable.truncateCharacters (maxLength default = 10) */
-function truncateCharacters(chars: string[], maxLength = 10): string {
-  if (chars.length <= maxLength) {
-    return chars.join("、");
-  }
-  return chars.slice(0, maxLength).join("、") + "…";
-}
-
-/** Mirror of SessionHistoryTable.isCharacterListTruncated */
-function isCharacterListTruncated(chars: string[], maxLength = 10): boolean {
-  return chars.length > maxLength;
-}
 
 type SortField =
   | "createdAt"
@@ -134,67 +121,73 @@ function makeDisplayRow(overrides: Partial<SessionDisplayData> = {}): SessionDis
 }
 
 // ---------------------------------------------------------------------------
-// 1. truncateCharacters
+// 1. Tested/Failed popup content-building
 // ---------------------------------------------------------------------------
 
-describe("truncateCharacters", () => {
-  it("returns empty string for empty array", () => {
-    expect(truncateCharacters([])).toBe("");
+/** Mirror of SessionHistoryTable.openTestedPopup's content-building branch */
+function buildTestedPopupContent(
+  session: Pick<SessionDisplayData, "gradeData" | "charactersTested">,
+  labels: { paragraphBlanksTitle: string; testedCharactersTitle: string }
+): SessionCharacterListPopupContent {
+  const isParagraphQuiz = session.gradeData.some((entry) => entry.isParagraphBlank);
+  if (isParagraphQuiz) {
+    return {
+      kind: "paragraphBlanks",
+      title: labels.paragraphBlanksTitle,
+      items: session.gradeData
+        .filter((entry) => entry.isParagraphBlank)
+        .map((entry) => ({ text: entry.hanzi, tier: entry.grade, retryCount: entry.retryCount ?? 0 })),
+    };
+  }
+  return { kind: "characters", title: labels.testedCharactersTitle, items: session.charactersTested };
+}
+
+function makeGradeEntry(overrides: Partial<SessionGradeData> = {}): SessionGradeData {
+  return { wordId: "w1", hanzi: "你", grade: "easy", ...overrides };
+}
+
+describe("tested popup content-building", () => {
+  it("builds a plain characters list for an ordinary (non-paragraph-quiz) session", () => {
+    const content = buildTestedPopupContent(
+      { gradeData: [makeGradeEntry()], charactersTested: ["你", "好"] },
+      { paragraphBlanksTitle: "Blanks", testedCharactersTitle: "Tested Characters" }
+    );
+    expect(content).toEqual({ kind: "characters", title: "Tested Characters", items: ["你", "好"] });
   });
 
-  it("joins with '、' when count is below the limit", () => {
-    expect(truncateCharacters(["你", "好"])).toBe("你、好");
+  it("builds a paragraph-blanks list (text/tier/retryCount) when any grade entry is isParagraphBlank", () => {
+    const content = buildTestedPopupContent(
+      {
+        gradeData: [
+          makeGradeEntry({ hanzi: "你", grade: "easy", isParagraphBlank: true, retryCount: 0 }),
+          makeGradeEntry({ hanzi: "好", grade: "hard", isParagraphBlank: true, retryCount: 2 }),
+        ],
+        charactersTested: ["你", "好"],
+      },
+      { paragraphBlanksTitle: "Blanks", testedCharactersTitle: "Tested Characters" }
+    );
+    expect(content).toEqual({
+      kind: "paragraphBlanks",
+      title: "Blanks",
+      items: [
+        { text: "你", tier: "easy", retryCount: 0 },
+        { text: "好", tier: "hard", retryCount: 2 },
+      ],
+    });
   });
 
-  it("joins without truncation when count equals the limit (10)", () => {
-    const chars = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
-    expect(truncateCharacters(chars)).toBe("一、二、三、四、五、六、七、八、九、十");
-    expect(truncateCharacters(chars)).not.toContain("…");
-  });
-
-  it("truncates to first 10 and appends '…' when count exceeds the limit", () => {
-    const chars = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一"];
-    const result = truncateCharacters(chars);
-    expect(result).toBe("一、二、三、四、五、六、七、八、九、十…");
-    expect(result).not.toContain("十一");
-  });
-
-  it("respects a custom maxLength", () => {
-    const chars = ["甲", "乙", "丙", "丁"];
-    expect(truncateCharacters(chars, 3)).toBe("甲、乙、丙…");
-    expect(truncateCharacters(chars, 4)).toBe("甲、乙、丙、丁");
-  });
-
-  it("single character — no separator, no truncation", () => {
-    expect(truncateCharacters(["你"])).toBe("你");
+  it("defaults retryCount to 0 when a paragraph-blank entry omits it", () => {
+    const content = buildTestedPopupContent(
+      { gradeData: [makeGradeEntry({ isParagraphBlank: true, retryCount: undefined })], charactersTested: ["你"] },
+      { paragraphBlanksTitle: "Blanks", testedCharactersTitle: "Tested Characters" }
+    );
+    expect(content.kind).toBe("paragraphBlanks");
+    expect(content.kind === "paragraphBlanks" && content.items[0]?.retryCount).toBe(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 2. isCharacterListTruncated
-// ---------------------------------------------------------------------------
-
-describe("isCharacterListTruncated", () => {
-  it("returns false when a tested-character list fits without ellipsis", () => {
-    expect(isCharacterListTruncated([])).toBe(false);
-    expect(isCharacterListTruncated(["一", "二"])).toBe(false);
-  });
-
-  it("returns false when a tested-character list exactly matches the default limit", () => {
-    expect(isCharacterListTruncated(["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"])).toBe(
-      false
-    );
-  });
-
-  it("returns true when a tested-character list needs an ellipsis", () => {
-    expect(isCharacterListTruncated(["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一"])).toBe(
-      true
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 3. Sort state machine
+// 2. Sort state machine
 // ---------------------------------------------------------------------------
 
 describe("sort state machine", () => {
@@ -236,7 +229,7 @@ describe("sort state machine", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. Sort comparator
+// 3. Sort comparator
 // ---------------------------------------------------------------------------
 
 describe("sort comparator", () => {
@@ -314,7 +307,7 @@ describe("sort comparator", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 5. Clear-button visibility
+// 4. Clear-button visibility
 // ---------------------------------------------------------------------------
 
 describe("clear-button visibility", () => {

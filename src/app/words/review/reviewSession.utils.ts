@@ -1,11 +1,28 @@
 import type { FlashcardContentEntry } from "@/lib/supabase-service";
 import type { VocabPhrase, Word } from "@/lib/types";
+import type { Paragraph } from "@/lib/paragraph.types";
+import type { ParagraphTestMode } from "@/lib/paragraphTestMode.types";
+import { buildParagraphQuizPages } from "@/lib/paragraphQuizBuilder";
 import type {
   ReviewTestSession,
   ReviewTestSessionRuntime,
   ReviewTestSessionTargetDraft,
 } from "./review.types";
 import { buildFillTestFromSavedContent, getMemorizationProbability } from "../shared/words.shared.utils";
+
+/** The 5 non-paragraphQuiz fields every early-return branch shares, empty/zeroed. */
+function emptyRuntimeFields(): Pick<
+  ReviewTestSessionRuntime,
+  "orderedWords" | "quizWords" | "vocabPhrases" | "packagedPronunciationsByCharacter" | "skippedQuizCharacters"
+> {
+  return {
+    orderedWords: [],
+    quizWords: [],
+    vocabPhrases: [],
+    packagedPronunciationsByCharacter: {},
+    skippedQuizCharacters: [],
+  };
+}
 
 export function sortReviewTestSessionTargets(
   targets: ReviewTestSessionTargetDraft[],
@@ -38,8 +55,54 @@ export function buildReviewTestSessionRuntime(
   session: ReviewTestSession,
   words: Word[],
   allFlashcardContents: FlashcardContentEntry[],
-  vocabPhrases: VocabPhrase[] = []
+  vocabPhrases: VocabPhrase[] = [],
+  paragraphs: Paragraph[] = [],
+  paragraphTestModes: ParagraphTestMode[] = []
 ): ReviewTestSessionRuntime {
+  const orderedTargets = [...session.targets].sort(
+    (left, right) => left.displayOrder - right.displayOrder
+  );
+
+  // A paragraph-quiz session is discriminated at the SESSION level (never
+  // mixed with ordinary character/phrase targets), so it's resolved via a
+  // third branch here, parallel to (not interleaved with) the
+  // character/phrase resolution below.
+  if (session.paragraphTestModeId) {
+    const testMode = paragraphTestModes.find((mode) => mode.id === session.paragraphTestModeId);
+    if (!testMode) {
+      return {
+        ...emptyRuntimeFields(),
+        errorCode: "missing_paragraph_test_mode",
+        errorCharacter: null,
+        paragraphQuiz: null,
+      };
+    }
+
+    const paragraph = paragraphs.find((candidate) => candidate.id === testMode.paragraphId);
+    if (!paragraph) {
+      return {
+        ...emptyRuntimeFields(),
+        errorCode: "missing_paragraph",
+        errorCharacter: null,
+        paragraphQuiz: null,
+      };
+    }
+
+    // The packaged snapshot, not the test mode's current spanIds — editing
+    // a test mode after packaging never retroactively changes an
+    // already-packaged session (see feature spec, Out of Scope).
+    const blankSpanIds = orderedTargets
+      .map((target) => target.paragraphSpanId)
+      .filter((id): id is string => Boolean(id));
+
+    return {
+      ...emptyRuntimeFields(),
+      errorCode: null,
+      errorCharacter: null,
+      paragraphQuiz: { paragraph, testMode, pages: buildParagraphQuizPages(paragraph, blankSpanIds) },
+    };
+  }
+
   const wordsByCharacter = new Map<string, Word[]>();
   const contentByKey = new Map<string, FlashcardContentEntry>();
   const groupedTargets = new Map<string, ReviewTestSession["targets"]>();
@@ -56,10 +119,6 @@ export function buildReviewTestSessionRuntime(
     contentByKey.set(entry.key, entry);
   }
 
-  const orderedTargets = [...session.targets].sort(
-    (left, right) => left.displayOrder - right.displayOrder
-  );
-
   // Vocab-phrase targets are resolved separately from character targets —
   // a phrase target maps 1:1 to a vocab_phrases row via vocabPhraseId, so
   // there is no "group by character, then multiple pronunciations" step
@@ -73,13 +132,10 @@ export function buildReviewTestSessionRuntime(
     const phrase = target.vocabPhraseId ? vocabPhrasesById.get(target.vocabPhraseId) : undefined;
     if (!phrase) {
       return {
-        orderedWords: [],
-        quizWords: [],
-        vocabPhrases: [],
-        packagedPronunciationsByCharacter: {},
-        skippedQuizCharacters: [],
+        ...emptyRuntimeFields(),
         errorCode: "missing_vocab_phrase",
         errorCharacter: target.character,
+        paragraphQuiz: null,
       };
     }
     resolvedVocabPhrases.push(phrase);
@@ -98,25 +154,19 @@ export function buildReviewTestSessionRuntime(
     const matchingWords = wordsByCharacter.get(character) ?? [];
     if (matchingWords.length === 0) {
       return {
-        orderedWords: [],
-        quizWords: [],
-        vocabPhrases: [],
-        packagedPronunciationsByCharacter: {},
-        skippedQuizCharacters: [],
+        ...emptyRuntimeFields(),
         errorCode: "missing_word",
         errorCharacter: character,
+        paragraphQuiz: null,
       };
     }
 
     if (matchingWords.length > 1) {
       return {
-        orderedWords: [],
-        quizWords: [],
-        vocabPhrases: [],
-        packagedPronunciationsByCharacter: {},
-        skippedQuizCharacters: [],
+        ...emptyRuntimeFields(),
         errorCode: "duplicate_word",
         errorCharacter: character,
+        paragraphQuiz: null,
       };
     }
 
@@ -155,5 +205,6 @@ export function buildReviewTestSessionRuntime(
     skippedQuizCharacters,
     errorCode: null,
     errorCharacter: null,
+    paragraphQuiz: null,
   };
 }

@@ -1,4 +1,7 @@
 import type { VocabPhrase, Word } from "@/lib/types";
+import type { Paragraph } from "@/lib/paragraph.types";
+import type { ParagraphTestMode } from "@/lib/paragraphTestMode.types";
+import type { ParagraphQuizPage } from "@/lib/paragraphQuizBuilder";
 import type { TestableWord } from "./fill-test/fillTest.types";
 
 // Session record types are owned by the lib/service layer; re-exported here for UI callers.
@@ -25,6 +28,8 @@ export type ReviewTestSessionRuntimeErrorCode =
   | "missing_word"
   | "duplicate_word"
   | "missing_vocab_phrase"
+  | "missing_paragraph"
+  | "missing_paragraph_test_mode"
   | null;
 
 export type ReviewTestSessionRuntime = {
@@ -41,4 +46,8 @@ export type ReviewTestSessionRuntime = {
   skippedQuizCharacters: string[];
   errorCode: ReviewTestSessionRuntimeErrorCode;
   errorCharacter: string | null;
+  // Non-null only when session.paragraphTestModeId is set -- a paragraph-quiz
+  // session's quizWords/vocabPhrases above stay empty (it never carries
+  // ordinary character/phrase targets alongside a paragraph quiz).
+  paragraphQuiz: { paragraph: Paragraph; testMode: ParagraphTestMode; pages: ParagraphQuizPage[] } | null;
 };

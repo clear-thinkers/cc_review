@@ -36,6 +36,13 @@ export type ResultsLocaleStrings = {
     };
     noCharacters: string;
   };
+  popup: {
+    viewAction: string;
+    closeButton: string;
+    paragraphBlanksTitle: string;
+    blankTierLabel: string;
+    blankRetriesLabel: string;
+  };
   clearHistory: {
     button: string;
     title: string;

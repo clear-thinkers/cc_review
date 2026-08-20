@@ -2,8 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/app/shared/locale";
-import { getVocabPhraseLessonTagsForFamily, listAllParagraphTestModes } from "@/lib/supabase-service";
+import {
+  deleteParagraph,
+  getVocabPhraseLessonTagsForFamily,
+  hasActiveParagraphQuizSession,
+  listAllParagraphTestModes,
+} from "@/lib/supabase-service";
 import type { VocabPhraseLessonTagsMap, WordLessonTagsMap } from "@/lib/tagging.types";
+import type { Paragraph } from "@/lib/paragraph.types";
 import type { ParagraphTestMode } from "@/lib/paragraphTestMode.types";
 import { matchesParagraphTitleFilter, resolveParagraphTagIds } from "@/lib/paragraphLibrary";
 import {
@@ -14,6 +20,7 @@ import {
 } from "../shared/tagFilter.utils";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import { addParagraphStrings } from "./addParagraph.strings";
+import ConfirmDeleteDialog from "../shared/ConfirmDeleteDialog";
 
 export default function ParagraphLibrarySection({ vm }: { vm: WordsWorkspaceVM }) {
   const locale = useLocale();
@@ -22,6 +29,9 @@ export default function ParagraphLibrarySection({ vm }: { vm: WordsWorkspaceVM }
 
   const [vocabPhraseTagsMap, setVocabPhraseTagsMap] = useState<VocabPhraseLessonTagsMap>(new Map());
   const [testModesByParagraphId, setTestModesByParagraphId] = useState<Map<string, ParagraphTestMode[]>>(new Map());
+  const [notice, setNotice] = useState<string | null>(null);
+  const [deleteChecking, setDeleteChecking] = useState<string | null>(null);
+  const [confirmingDeleteParagraph, setConfirmingDeleteParagraph] = useState<Paragraph | null>(null);
 
   useEffect(() => {
     // This section stays mounted (self-gates on vm.paragraphViewMode by
@@ -102,6 +112,29 @@ export default function ParagraphLibrarySection({ vm }: { vm: WordsWorkspaceVM }
     return paragraph.sentences.reduce((sum, sentence) => sum + sentence.spans.length, 0);
   }
 
+  async function handleDeleteClick(paragraph: Paragraph) {
+    setNotice(null);
+    setDeleteChecking(paragraph.id);
+    try {
+      const blocked = await hasActiveParagraphQuizSession(paragraph.id);
+      if (blocked) {
+        setNotice(libStr.deleteBlockedNotice);
+        return;
+      }
+      setConfirmingDeleteParagraph(paragraph);
+    } finally {
+      setDeleteChecking(null);
+    }
+  }
+
+  async function confirmDeleteParagraph() {
+    if (!confirmingDeleteParagraph) return;
+    const id = confirmingDeleteParagraph.id;
+    await deleteParagraph(id);
+    vm.setParagraphs((previous) => previous.filter((paragraph) => paragraph.id !== id));
+    setConfirmingDeleteParagraph(null);
+  }
+
   if (vm.page !== "addParagraph" || vm.paragraphViewMode !== "library") {
     return null;
   }
@@ -118,6 +151,8 @@ export default function ParagraphLibrarySection({ vm }: { vm: WordsWorkspaceVM }
           {libStr.importNewButton}
         </button>
       </div>
+
+      {notice ? <p className="text-sm text-blue-700">{notice}</p> : null}
 
       {vm.paragraphs.length === 0 ? (
         <p className="text-sm text-gray-500">{libStr.emptyState}</p>
@@ -242,6 +277,14 @@ export default function ParagraphLibrarySection({ vm }: { vm: WordsWorkspaceVM }
                     >
                       {libStr.prepFillTestAction}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteClick(paragraph)}
+                      disabled={deleteChecking === paragraph.id}
+                      className="btn-destructive rounded-md border-2 px-3 py-1 text-xs disabled:opacity-50"
+                    >
+                      {libStr.deleteAction}
+                    </button>
                   </div>
                 </li>
               ))}
@@ -249,6 +292,17 @@ export default function ParagraphLibrarySection({ vm }: { vm: WordsWorkspaceVM }
           )}
         </>
       )}
+
+      {confirmingDeleteParagraph ? (
+        <ConfirmDeleteDialog
+          title={libStr.deleteConfirmTitle}
+          body={libStr.deleteConfirmBody}
+          confirmLabel={libStr.deleteAction}
+          cancelLabel={libStr.cancelButton}
+          onConfirm={confirmDeleteParagraph}
+          onCancel={() => setConfirmingDeleteParagraph(null)}
+        />
+      ) : null}
     </section>
   );
 }

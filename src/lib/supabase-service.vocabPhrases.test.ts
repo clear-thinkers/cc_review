@@ -330,12 +330,62 @@ describe("supabase-service vocab phrases", () => {
     let call = 0;
     fromMock.mockImplementation(() => (call++ === 0 ? selectBuilder : updateBuilder));
 
-    await nudgeWordFamiliarity("word-1", now);
+    await nudgeWordFamiliarity("word-1", "good", now);
 
     expect(updateBuilder.update).toHaveBeenCalledTimes(1);
     const writtenRow = updateBuilder.update.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(writtenRow.review_count).toBe(11);
     expect(writtenRow.test_count).toBe(7); // unchanged — not a direct standalone test
     expect(writtenRow.ease).toBeGreaterThan(8); // stability increased via calculateNextState("good")
+  });
+
+  it("nudgeWordFamiliarity honors an explicit tier (paragraph-quiz path) instead of the default 'good'", async () => {
+    const now = new Date("2026-08-19T00:00:00.000Z").getTime();
+    const wordRow = {
+      id: "word-1",
+      family_id: "family-1",
+      hanzi: "图",
+      created_at: "2026-01-01T00:00:00.000Z",
+      repetitions: 3,
+      interval_days: 8,
+      ease: 8,
+      next_review_at: now,
+      review_count: 10,
+      test_count: 7,
+      fill_test: null,
+    };
+
+    function makeSelectBuilder() {
+      const builder = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn() };
+      builder.select.mockReturnValue(builder);
+      builder.eq.mockReturnValue(builder);
+      builder.maybeSingle.mockResolvedValue({ data: wordRow, error: null });
+      return builder;
+    }
+    function makeUpdateBuilder() {
+      const builder = { update: vi.fn(), eq: vi.fn().mockResolvedValue({ error: null }) };
+      builder.update.mockReturnValue(builder);
+      return builder;
+    }
+
+    const easyUpdate = makeUpdateBuilder();
+    let call = 0;
+    fromMock.mockImplementation(() => (call++ === 0 ? makeSelectBuilder() : easyUpdate));
+    await nudgeWordFamiliarity("word-1", "easy", now);
+    const easyRow = easyUpdate.update.mock.calls[0]?.[0] as Record<string, unknown>;
+
+    const goodUpdate = makeUpdateBuilder();
+    call = 0;
+    fromMock.mockImplementation(() => (call++ === 0 ? makeSelectBuilder() : goodUpdate));
+    await nudgeWordFamiliarity("word-1", "good", now);
+    const goodRow = goodUpdate.update.mock.calls[0]?.[0] as Record<string, unknown>;
+
+    // An "easy" nudge should raise stability (ease, repurposed as
+    // stabilityDays -- see scheduler.ts) more than a "good" nudge --
+    // confirms the tier param actually reaches calculateNextState rather
+    // than always applying the hardcoded "good" grade.
+    expect(easyRow.ease).toBeGreaterThan(goodRow.ease as number);
+    expect(easyRow.test_count).toBe(7);
+    expect(goodRow.test_count).toBe(7);
   });
 });

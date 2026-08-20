@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Paragraph, ParagraphSentence } from "@/lib/paragraph.types";
+import type { ParagraphTestMode } from "@/lib/paragraphTestMode.types";
 import type { CharacterTriageMatch, PhraseTriageMatch } from "@/lib/paragraphTriage";
 import type { TagCascadeSelection } from "../TagCascadePicker";
 import type { ParagraphViewMode } from "../../add-paragraph/addParagraph.types";
@@ -44,6 +45,12 @@ export function useAddParagraphState() {
   // state (with the same "+ Import New Paragraph" CTA) when the list is
   // empty or still loading, so a single static default here is sufficient.
   const [paragraphs, setParagraphs] = useState<Paragraph[]>([]);
+  // Family-wide test modes (Phase 3) -- needed on ANY page, not just
+  // /words/add-paragraph, since buildReviewTestSessionRuntime must resolve
+  // a paragraph-quiz session's test mode from Due Review / the fill-test
+  // entry point too. Mirrors why paragraphs above is loaded unconditionally
+  // in refreshAll rather than lazily by ParagraphLibrarySection alone.
+  const [paragraphTestModes, setParagraphTestModes] = useState<ParagraphTestMode[]>([]);
   const [paragraphViewMode, setParagraphViewMode] = useState<ParagraphViewMode>("library");
   const [paragraphFilterTitle, setParagraphFilterTitle] = useState("");
   const [paragraphFilterSelectedTagIds, setParagraphFilterSelectedTagIds] = useState<string[]>([]);
@@ -74,6 +81,8 @@ export function useAddParagraphState() {
     setParagraphTagSelection,
     paragraphs,
     setParagraphs,
+    paragraphTestModes,
+    setParagraphTestModes,
     paragraphViewMode,
     setParagraphViewMode,
     paragraphFilterTitle,

@@ -52,6 +52,7 @@ describe("Review Queue Types", () => {
       createdByUserId: "user-1",
       completedAt: null,
       completedByUserId: null,
+      paragraphTestModeId: null,
       targets: [
         {
           sessionId: "session-1",
@@ -106,6 +107,7 @@ describe("Review Queue Types", () => {
       skippedQuizCharacters: [],
       errorCode: null,
       errorCharacter: null,
+      paragraphQuiz: null,
     };
 
     expect(runtime.quizWords[0]?.fillTest.phrases).toHaveLength(3);
