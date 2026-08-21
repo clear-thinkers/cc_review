@@ -193,6 +193,31 @@ describe("mergePendingSpansIntoSentences", () => {
     const result = mergePendingSpansIntoSentences(sentences, []);
     expect(result).toEqual(sentences);
   });
+
+  it("skips a new span whose id already exists on that sentence instead of appending a duplicate", () => {
+    // Re-materializing the same not-yet-persisted token twice (e.g. saving
+    // a test mode again before local paragraph state refreshed) previously
+    // produced two spans sharing one id, which the runtime quiz then
+    // rendered as two identically-keyed word-bank entries for the same word
+    // (see build-fix-log-2026-08-20-paragraph-quiz-bank-duplicate-blank.md).
+    const existing = { ...sentences[0] } as ParagraphSentence;
+    existing.spans = [
+      { id: "s0-0-2", text: "帮助", startOffset: 0, endOffset: 2, kind: "phrase", resolvedVocabPhraseId: "vp1", fillTestEligible: true },
+    ];
+    const duplicateSpan: ParagraphSpan = {
+      id: "s0-0-2",
+      text: "帮助",
+      startOffset: 0,
+      endOffset: 2,
+      kind: "phrase",
+      resolvedVocabPhraseId: "vp1",
+      fillTestEligible: true,
+    };
+
+    const result = mergePendingSpansIntoSentences([existing, sentences[1]], [duplicateSpan]);
+    expect(result[0]?.spans).toHaveLength(1);
+    expect(result[0]).toBe(existing);
+  });
 });
 
 describe("assignBlankDisplayIndexes", () => {

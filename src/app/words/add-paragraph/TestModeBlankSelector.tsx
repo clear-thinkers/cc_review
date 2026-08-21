@@ -107,6 +107,16 @@ export function resolvePendingSpan(
  * persisting via updateParagraph -- a sibling to addParagraphIngestion.ts's
  * mergeResolvedSpansIntoSentences, but over already-built ParagraphSpan
  * objects rather than ResolvedParagraphSpan resolution output.
+ *
+ * Idempotent by span id: a new span whose id already exists on that
+ * sentence is skipped rather than appended a second time. computeSpanId is
+ * deterministic (a pure function of sentence/offset), so re-materializing
+ * the same not-yet-persisted token twice -- e.g. saving a test mode again
+ * before local paragraph state has refreshed, or a second test mode
+ * independently selecting the same token -- previously produced two span
+ * objects sharing one id, which the runtime quiz then rendered as two
+ * identically-keyed word-bank buttons for the same word (see
+ * build-fix-log-2026-08-20-paragraph-quiz-bank-duplicate-blank.md).
  */
 export function mergePendingSpansIntoSentences(
   sentences: ParagraphSentence[],
@@ -121,12 +131,17 @@ export function mergePendingSpansIntoSentences(
     spansBySentenceIndex.set(parsed.sentenceIndex, list);
   }
 
-  return sentences.map((sentence) => ({
-    ...sentence,
-    spans: [...sentence.spans, ...(spansBySentenceIndex.get(sentence.index) ?? [])].sort(
-      (a, b) => a.startOffset - b.startOffset
-    ),
-  }));
+  return sentences.map((sentence) => {
+    const existingIds = new Set(sentence.spans.map((span) => span.id));
+    const additions = (spansBySentenceIndex.get(sentence.index) ?? []).filter(
+      (span) => !existingIds.has(span.id)
+    );
+    if (additions.length === 0) return sentence;
+    return {
+      ...sentence,
+      spans: [...sentence.spans, ...additions].sort((a, b) => a.startOffset - b.startOffset),
+    };
+  });
 }
 
 export type SpanPosition = { sentenceIndex: number; startOffset: number };

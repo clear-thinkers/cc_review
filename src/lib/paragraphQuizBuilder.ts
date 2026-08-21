@@ -47,10 +47,15 @@ function toBlank(span: ParagraphSpan, sentenceIndex: number): ParagraphQuizBlank
  * spans, in paragraph reading order. A span id that no longer resolves on
  * this paragraph (deleted/edited since the test mode was packaged) is
  * silently dropped -- mirrors the skip-invalid-silently precedent used
- * elsewhere (e.g. resultsReviewTestSession.ts, paragraphLibrary.ts).
+ * elsewhere (e.g. resultsReviewTestSession.ts, paragraphLibrary.ts). A span
+ * id seen more than once (a corrupted paragraph with a duplicated span --
+ * see build-fix-log-2026-08-20-paragraph-quiz-bank-duplicate-blank.md) is
+ * also silently collapsed to its first occurrence, so a stale duplicate can
+ * never render two identical word-bank entries sharing one React key.
  */
 export function resolveParagraphQuizBlanks(paragraph: Paragraph, blankSpanIds: string[]): ParagraphQuizBlank[] {
   const wanted = new Set(blankSpanIds);
+  const seen = new Set<string>();
   const blanks: ParagraphQuizBlank[] = [];
 
   for (const sentence of paragraph.sentences) {
@@ -58,6 +63,8 @@ export function resolveParagraphQuizBlanks(paragraph: Paragraph, blankSpanIds: s
       .filter((span) => wanted.has(span.id))
       .sort((a, b) => a.startOffset - b.startOffset);
     for (const span of sentenceSpans) {
+      if (seen.has(span.id)) continue;
+      seen.add(span.id);
       blanks.push(toBlank(span, sentence.index));
     }
   }

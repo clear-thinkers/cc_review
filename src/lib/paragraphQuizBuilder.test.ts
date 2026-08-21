@@ -72,6 +72,26 @@ describe("resolveParagraphQuizBlanks", () => {
     expect(blanks.map((b) => b.spanId)).toEqual(["s0-0"]);
   });
 
+  it("collapses a duplicated span id (corrupted paragraph data) to a single blank", () => {
+    // Two distinct span objects sharing the same id -- the shape a stale
+    // double-materialization bug in mergePendingSpansIntoSentences used to
+    // produce (see build-fix-log-2026-08-20-paragraph-quiz-bank-duplicate-blank.md).
+    const paragraph = makeParagraph([
+      {
+        index: 0,
+        text: "帮助帮助",
+        paragraphBreakBefore: false,
+        spans: [
+          makeSpan({ id: "s0-0-2", text: "帮助", startOffset: 0, endOffset: 2, resolvedWordId: "w1" }),
+          makeSpan({ id: "s0-0-2", text: "帮助", startOffset: 0, endOffset: 2, resolvedWordId: "w1" }),
+        ],
+      },
+    ]);
+    const blanks = resolveParagraphQuizBlanks(paragraph, ["s0-0-2"]);
+    expect(blanks).toHaveLength(1);
+    expect(blanks[0]?.spanId).toBe("s0-0-2");
+  });
+
   it("populates wordId/vocabPhraseId from resolvedWordId/resolvedVocabPhraseId", () => {
     const paragraph = makeParagraph([
       {
