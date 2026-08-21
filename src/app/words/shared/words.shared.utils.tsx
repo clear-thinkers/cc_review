@@ -1320,9 +1320,35 @@ export function getPausedSessionRemainingCount(progressData: unknown): number {
   return quizQueue.length - boundedResumeIndex;
 }
 
+/**
+ * The "blanks remaining" count for a paused PARAGRAPH-QUIZ session row.
+ * getPausedSessionRemainingCount above only understands the ordinary
+ * quizQueue/resumeIndex shape -- a paragraph-quiz row's progress_data is
+ * shaped as ParagraphQuizProgressData (testModeId/currentPageIndex/
+ * blankState) instead, which has no quizQueue at all, so that function
+ * always silently fell through to 0 for these rows.
+ *
+ * blankState only ever gains an entry once a blank has been attempted (see
+ * ParagraphQuizReviewSection.tsx's handlePlacement) -- an untouched blank
+ * has no entry -- so remaining is simply totalBlanks (the session's full
+ * blank count, from the already-resolved runtime paragraphQuiz.pages, the
+ * same source the quiz itself plays from) minus however many entries are
+ * currently marked "correct".
+ */
+export function getPausedParagraphQuizRemainingBlankCount(
+  progressData: unknown,
+  totalBlanks: number
+): number {
+  if (!isParagraphQuizProgressData(progressData)) return 0;
+  const correctCount = Object.values(progressData.blankState).filter(
+    (entry) => entry.status === "correct"
+  ).length;
+  return Math.max(0, totalBlanks - correctCount);
+}
+
 // ─── Paragraph-quiz resume (Phase 3) ────────────────────────────────────────
 
-function isParagraphQuizProgressData(value: unknown): value is ParagraphQuizProgressData {
+export function isParagraphQuizProgressData(value: unknown): value is ParagraphQuizProgressData {
   if (!value || typeof value !== "object") return false;
   const source = value as Record<string, unknown>;
   if (typeof source.testModeId !== "string") return false;

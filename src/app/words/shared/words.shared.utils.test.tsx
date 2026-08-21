@@ -9,6 +9,7 @@ import {
   cloneFillTest,
   filterPausedSessionsForViewer,
   findFlashcardPhrasePinyin,
+  getPausedParagraphQuizRemainingBlankCount,
   getPausedSessionRemainingCount,
   isVocabPhraseFillTestReady,
   isVocabPhraseRoundQuizWord,
@@ -929,6 +930,56 @@ describe("getPausedSessionRemainingCount", () => {
     expect(getPausedSessionRemainingCount(null)).toBe(0);
     expect(getPausedSessionRemainingCount({})).toBe(0);
     expect(getPausedSessionRemainingCount({ quizQueue: "not-an-array" })).toBe(0);
+  });
+
+  it("returns 0 for a paragraph-quiz-shaped progressData (no quizQueue at all -- see getPausedParagraphQuizRemainingBlankCount)", () => {
+    const paragraphQuizProgressData = {
+      testModeId: "tm-1",
+      currentPageIndex: 0,
+      sessionStartTime: 0,
+      blankState: { "s0-0-1": { status: "correct", retryCount: 0 } },
+    };
+    expect(getPausedSessionRemainingCount(paragraphQuizProgressData)).toBe(0);
+  });
+});
+
+describe("getPausedParagraphQuizRemainingBlankCount", () => {
+  it("subtracts the correct-status blank count from the total", () => {
+    const progressData = {
+      testModeId: "tm-1",
+      currentPageIndex: 0,
+      sessionStartTime: 0,
+      blankState: {
+        "s0-0-1": { status: "correct", retryCount: 0 },
+        "s0-2-3": { status: "unfilled", retryCount: 1 },
+      },
+    };
+    // 5 total blanks, 1 answered correctly so far -- 4 remain.
+    expect(getPausedParagraphQuizRemainingBlankCount(progressData, 5)).toBe(4);
+  });
+
+  it("returns the full total when blankState is empty (nothing attempted yet)", () => {
+    const progressData = { testModeId: "tm-1", currentPageIndex: 0, sessionStartTime: null, blankState: {} };
+    expect(getPausedParagraphQuizRemainingBlankCount(progressData, 3)).toBe(3);
+  });
+
+  it("returns 0 (not negative) when every blank is already correct", () => {
+    const progressData = {
+      testModeId: "tm-1",
+      currentPageIndex: 1,
+      sessionStartTime: 0,
+      blankState: {
+        "s0-0-1": { status: "correct", retryCount: 0 },
+        "s0-2-3": { status: "correct", retryCount: 2 },
+      },
+    };
+    expect(getPausedParagraphQuizRemainingBlankCount(progressData, 2)).toBe(0);
+  });
+
+  it("returns 0 for progressData that isn't paragraph-quiz-shaped (e.g. the ordinary quizQueue shape)", () => {
+    expect(getPausedParagraphQuizRemainingBlankCount({ quizQueue: [{}, {}], resumeIndex: 0 }, 5)).toBe(0);
+    expect(getPausedParagraphQuizRemainingBlankCount(null, 5)).toBe(0);
+    expect(getPausedParagraphQuizRemainingBlankCount({}, 5)).toBe(0);
   });
 });
 

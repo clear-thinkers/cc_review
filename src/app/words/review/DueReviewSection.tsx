@@ -9,6 +9,7 @@ import { taggingStrings } from "../shared/tagging.strings";
 import {
   filterPausedSessionsForViewer,
   getErrorMessage,
+  getPausedParagraphQuizRemainingBlankCount,
   getPausedSessionRemainingCount,
   selectLowestFamiliarityWords,
 } from "../shared/words.shared.utils";
@@ -231,6 +232,39 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
     () => new Map(reviewTestSessionRows.map((row) => [row.session.id, row.session.name])),
     [reviewTestSessionRows]
   );
+
+  // A paragraph-quiz session's progress_data has no quizQueue at all (it's
+  // shaped as ParagraphQuizProgressData instead), so its total blank count
+  // isn't in progress_data -- it comes from the same already-resolved
+  // runtime.paragraphQuiz.pages the quiz itself plays from (row.characterCount
+  // on a paragraph-quiz row IS its blank count, since orderedWords/vocabPhrases
+  // are always empty for these sessions -- see reviewTestSessionRows above).
+  const paragraphQuizTotalBlanksBySessionId = useMemo(
+    () =>
+      new Map(
+        reviewTestSessionRows
+          .filter((row) => row.runtime?.paragraphQuiz)
+          .map((row) => [row.session.id, row.characterCount])
+      ),
+    [reviewTestSessionRows]
+  );
+
+  function getPausedSessionRemainingLabel(row: WordsWorkspaceVM["pausedSessions"][number]): string {
+    const totalBlanks =
+      row.sourceType === "packaged" && row.packagedSessionId
+        ? paragraphQuizTotalBlanksBySessionId.get(row.packagedSessionId)
+        : undefined;
+    if (totalBlanks !== undefined) {
+      return str.due.pausedSessions.remainingBlanks.replace(
+        "{count}",
+        String(getPausedParagraphQuizRemainingBlankCount(row.progressData, totalBlanks))
+      );
+    }
+    return str.due.pausedSessions.remaining.replace(
+      "{count}",
+      String(getPausedSessionRemainingCount(row.progressData))
+    );
+  }
 
   function getPausedSessionLabel(row: WordsWorkspaceVM["pausedSessions"][number]): string {
     if (row.sourceType === "packaged") {
@@ -463,12 +497,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                         formatDateTime(row.lastSavedAt)
                       )}
                     </td>
-                    <td className="px-3 py-2">
-                      {str.due.pausedSessions.remaining.replace(
-                        "{count}",
-                        String(getPausedSessionRemainingCount(row.progressData))
-                      )}
-                    </td>
+                    <td className="px-3 py-2">{getPausedSessionRemainingLabel(row)}</td>
                     {canAccessFillTest ? (
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-2">
