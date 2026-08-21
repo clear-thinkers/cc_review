@@ -121,6 +121,41 @@ function isTokenWithinRange(token: SentenceRenderToken, range: ParagraphSpanRang
   return range.startOffset <= token.startOffset && token.endOffset <= range.endOffset;
 }
 
+/**
+ * Groups adjacent tokens that resolve to the SAME committed selectedRanges
+ * entry into one render group, so a multi-character phrase selection can be
+ * drawn as one continuous pill instead of N individually-bordered boxes
+ * that just happen to sit next to each other — without this, a selected
+ * two-character phrase was visually indistinguishable from two separately
+ * selected single characters. A group of length 1 covers both an
+ * unselected token and a selection that happens to be exactly one
+ * character wide; only length > 1 is a real merged-phrase group.
+ */
+export function groupTokensForSelection(
+  tokens: SentenceRenderToken[],
+  selectedRanges: ParagraphSpanRange[]
+): { tokens: SentenceRenderToken[]; indices: number[] }[] {
+  const rangeKeyForToken = (token: SentenceRenderToken): string | null => {
+    if (token.kind === "text") return null;
+    const range = selectedRanges.find((r) => isTokenWithinRange(token, r));
+    return range ? `${range.startOffset}-${range.endOffset}` : null;
+  };
+
+  const groups: { key: string | null; tokens: SentenceRenderToken[]; indices: number[] }[] = [];
+  tokens.forEach((token, index) => {
+    const key = rangeKeyForToken(token);
+    const last = groups[groups.length - 1];
+    if (key !== null && last && last.key === key) {
+      last.tokens.push(token);
+      last.indices.push(index);
+    } else {
+      groups.push({ key, tokens: [token], indices: [index] });
+    }
+  });
+
+  return groups.map(({ tokens: groupTokens, indices }) => ({ tokens: groupTokens, indices }));
+}
+
 export type ParagraphSpanSelectorProps = {
   sentence: ParagraphSentence;
   characterMatches: CharacterTriageMatch[];
@@ -130,6 +165,8 @@ export type ParagraphSpanSelectorProps = {
   vocabPhrasePinyinByPhrase: Map<string, string>;
   str: AddParagraphStrings["selector"];
 };
+
+const TOKEN_INDEX_ATTR = "data-token-index";
 
 export default function ParagraphSpanSelector({
   sentence,
@@ -161,12 +198,38 @@ export default function ParagraphSpanSelector({
       setDragHoverIndex(null);
     }
 
+    /**
+     * Touch has no hover event — a moving finger never fires mouseenter on
+     * the elements it passes over — so dragging on a touchscreen is tracked
+     * by hit-testing the point under the finger directly. preventDefault
+     * here is what stops the page from scrolling once a drag has started
+     * (registered non-passive so the call is actually allowed to take
+     * effect); the listener only exists while a drag is in progress, so
+     * ordinary scrolling outside an active drag is completely unaffected.
+     */
+    function handleTouchMove(event: TouchEvent) {
+      const touch = event.touches[0];
+      if (!touch) return;
+      const hit = document.elementFromPoint(touch.clientX, touch.clientY);
+      const tokenEl = hit instanceof Element ? hit.closest(`[${TOKEN_INDEX_ATTR}]`) : null;
+      if (!tokenEl) return;
+      event.preventDefault();
+      const index = Number(tokenEl.getAttribute(TOKEN_INDEX_ATTR));
+      if (!Number.isNaN(index)) setDragHoverIndex(index);
+    }
+
     window.addEventListener("mouseup", finishDrag);
-    return () => window.removeEventListener("mouseup", finishDrag);
+    window.addEventListener("touchend", finishDrag);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    return () => {
+      window.removeEventListener("mouseup", finishDrag);
+      window.removeEventListener("touchend", finishDrag);
+      window.removeEventListener("touchmove", handleTouchMove);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragAnchorIndex, dragHoverIndex]);
 
-  function handleTokenMouseDown(tokenIndex: number, token: SentenceRenderToken) {
+  function handleTokenDragStart(tokenIndex: number, token: SentenceRenderToken) {
     if (token.kind === "text") return;
     setDragAnchorIndex(tokenIndex);
     setDragHoverIndex(tokenIndex);
@@ -179,7 +242,41 @@ export default function ParagraphSpanSelector({
 
   return (
     <span className="inline-flex flex-wrap items-end gap-0.5 select-none" title={str.legendKnown}>
-      {tokens.map((token, tokenIndex) => {
+      {groupTokensForSelection(tokens, selectedRanges).map((group) => {
+        if (group.tokens.length > 1) {
+          const range: ParagraphSpanRange = {
+            startOffset: group.tokens[0].startOffset,
+            endOffset: group.tokens[group.tokens.length - 1].endOffset,
+          };
+          const text = group.tokens.map((t) => t.text).join("");
+
+          const deselectGroup = () => {
+            onSelectionChange(toggleSelectionRange(selectedRanges, range));
+          };
+
+          return (
+            <span
+              key={`${range.startOffset}-${range.endOffset}-phrase`}
+              role="button"
+              tabIndex={0}
+              aria-pressed
+              aria-label={`${text} (${str.legendSelected})`}
+              className="inline-flex cursor-pointer rounded px-1 py-0.5 border-2 border-[#3d6cff] bg-[#dbe6ff]"
+              onClick={deselectGroup}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                deselectGroup();
+              }}
+            >
+              {text}
+            </span>
+          );
+        }
+
+        const token = group.tokens[0];
+        const tokenIndex = group.indices[0];
+
         if (token.kind === "text") {
           return (
             <span key={`${token.startOffset}-text`} className="text-base">
@@ -206,13 +303,15 @@ export default function ParagraphSpanSelector({
         return (
           <span
             key={`${token.startOffset}-${token.endOffset}`}
+            data-token-index={tokenIndex}
             role="button"
             tabIndex={0}
             aria-pressed={isSelected}
             aria-label={ariaLabel}
             className={`${baseClass} ${colorClass}`}
-            onMouseDown={() => handleTokenMouseDown(tokenIndex, token)}
+            onMouseDown={() => handleTokenDragStart(tokenIndex, token)}
             onMouseEnter={() => handleTokenMouseEnter(tokenIndex, token)}
+            onTouchStart={() => handleTokenDragStart(tokenIndex, token)}
             onKeyDown={(event) => {
               if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();

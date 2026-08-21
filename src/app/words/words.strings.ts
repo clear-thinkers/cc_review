@@ -1040,6 +1040,13 @@ export const wordsStrings = {
         deleteError: "Failed to delete. Please try again.",
         deleteBlockedByActiveSession:
           "This phrase is packaged in an active quiz session and can't be deleted. Finish or remove that session first.",
+        confirmDeleteSelected: "Delete {count} selected phrase(s)? This cannot be undone.",
+        deleteSelectedSuccess: "Deleted {count} phrase(s).",
+        deleteSelectedBlockedNotice:
+          "{count} selected phrase(s) are packaged in an active quiz session and were skipped. Finish or remove that session first.",
+        deleteSelectedAllBlocked:
+          "All selected phrases are packaged in an active quiz session and can't be deleted. Finish or remove that session first.",
+        deleteSelectedError: "Could not delete the selected phrases. Please try again.",
         filters: {
           phraseSearch: {
             label: "Phrase Search",
@@ -1129,15 +1136,26 @@ export const wordsStrings = {
           reset: "Reset",
           resetting: "Resetting...",
           delete: "Delete",
+          deleteSelected: "Delete Selected",
+          deletingSelected: "Deleting...",
         },
         tooltips: {
           reset: "Reset as new (Date Added = now)",
           delete: "Delete",
+          deleteSelected: "Delete all selected characters. Any saved flashcard content is also removed.",
         },
         confirmDeleteWithContent:
           "This character has saved flashcard content. Deleting it will also permanently remove all associated content. Continue?",
         blockedByActiveSession:
           "This character is packaged in an active quiz session and can't be deleted. Finish or remove that session first.",
+        confirmDeleteSelected:
+          "Delete {count} selected character(s)? Any saved flashcard content for these characters will also be permanently removed. This cannot be undone.",
+        deleteSelectedSuccess: "Deleted {count} character(s).",
+        deleteSelectedBlockedNotice:
+          "{count} selected character(s) are packaged in an active quiz session and were skipped. Finish or remove that session first.",
+        deleteSelectedAllBlocked:
+          "All selected characters are packaged in an active quiz session and can't be deleted. Finish or remove that session first.",
+        deleteSelectedError: "Could not delete the selected characters. Please try again.",
       },
     },
 
@@ -2289,6 +2307,11 @@ export const wordsStrings = {
         noPhrases: "暂无词语。",
         deleteError: "删除失败，请重试。",
         deleteBlockedByActiveSession: "该词语已打包在一个正在进行的测验中，无法删除。请先完成或移除该测验。",
+        confirmDeleteSelected: "删除已选择的 {count} 个词语？此操作无法撤销。",
+        deleteSelectedSuccess: "已删除 {count} 个词语。",
+        deleteSelectedBlockedNotice: "已选择的 {count} 个词语已打包在一个正在进行的测验中，已跳过。请先完成或移除该测验。",
+        deleteSelectedAllBlocked: "所选词语均已打包在一个正在进行的测验中，无法删除。请先完成或移除该测验。",
+        deleteSelectedError: "删除所选词语失败，请重试。",
         filters: {
           phraseSearch: {
             label: "词语搜索",
@@ -2378,14 +2401,24 @@ export const wordsStrings = {
           reset: "重置",
           resetting: "重置中...",
           delete: "删除",
+          deleteSelected: "删除所选",
+          deletingSelected: "删除中...",
         },
         tooltips: {
           reset: "重置为新字（添加日期为当前时间）",
           delete: "删除",
+          deleteSelected: "删除所有已选择的汉字。相关闪卡内容也会一并移除。",
         },
         confirmDeleteWithContent:
           "该汉字已有保存的闪卡内容。删除后，相关内容将一并永久移除。是否继续？",
         blockedByActiveSession: "该汉字已打包在一个正在进行的测验中，无法删除。请先完成或移除该测验。",
+        confirmDeleteSelected:
+          "删除已选择的 {count} 个汉字？这些汉字保存的闪卡内容也会一并永久移除。此操作无法撤销。",
+        deleteSelectedSuccess: "已删除 {count} 个汉字。",
+        deleteSelectedBlockedNotice:
+          "已选择的 {count} 个汉字已打包在一个正在进行的测验中，已跳过。请先完成或移除该测验。",
+        deleteSelectedAllBlocked: "所选汉字均已打包在一个正在进行的测验中，无法删除。请先完成或移除该测验。",
+        deleteSelectedError: "删除所选汉字失败，请重试。",
       },
     },
 

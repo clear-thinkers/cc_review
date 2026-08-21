@@ -56,6 +56,7 @@ export default function AllVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) 
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tagSectionOpen, setTagSectionOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   const [sortKey, setSortKey] = useState<PhraseSortKey>("createdAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -308,6 +309,54 @@ export default function AllVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) 
       setSelectedIds((previous) => previous.filter((id) => id !== phrase.id));
     } catch {
       setNotice(phraseAllStr.deleteError);
+    }
+  }
+
+  async function handleBatchDeleteSelected(): Promise<void> {
+    setNotice(null);
+
+    if (selectedIds.length === 0) {
+      setNotice(str.admin.vocabPhrases.packageSection.noSelection);
+      return;
+    }
+
+    const selectedPhrases = phrases.filter((phrase) => selectedIds.includes(phrase.id));
+    if (selectedPhrases.length === 0) {
+      setSelectedIds([]);
+      return;
+    }
+
+    const { vocabPhraseIdSet } = await getActiveSessionTargetKeys();
+    const blockedPhrases = selectedPhrases.filter((phrase) => vocabPhraseIdSet.has(phrase.id));
+    const deletablePhrases = selectedPhrases.filter((phrase) => !vocabPhraseIdSet.has(phrase.id));
+
+    if (deletablePhrases.length === 0) {
+      setNotice(phraseAllStr.deleteSelectedAllBlocked);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      phraseAllStr.confirmDeleteSelected.replace("{count}", String(deletablePhrases.length))
+    );
+    if (!confirmed) return;
+
+    setBatchDeleting(true);
+    try {
+      await Promise.all(deletablePhrases.map((phrase) => deleteVocabPhrase(phrase.id)));
+      const deletedIds = new Set(deletablePhrases.map((phrase) => phrase.id));
+      setPhrases((previous) => previous.filter((phrase) => !deletedIds.has(phrase.id)));
+      setSelectedIds((previous) => previous.filter((id) => blockedPhrases.some((phrase) => phrase.id === id)));
+
+      const successMessage = phraseAllStr.deleteSelectedSuccess.replace("{count}", String(deletablePhrases.length));
+      setNotice(
+        blockedPhrases.length > 0
+          ? `${successMessage} ${phraseAllStr.deleteSelectedBlockedNotice.replace("{count}", String(blockedPhrases.length))}`
+          : successMessage
+      );
+    } catch {
+      setNotice(phraseAllStr.deleteSelectedError);
+    } finally {
+      setBatchDeleting(false);
     }
   }
 
@@ -625,17 +674,28 @@ export default function AllVocabPhraseSection({ vm }: { vm: WordsWorkspaceVM }) 
       )}
 
       {!isChild ? (
-        <p className="text-sm text-gray-600">
-          {hasActiveFilters ? (
-            <>
-              {str.all.table.summary.filteredLabel} <span className="font-semibold text-blue-700">{filteredPhrases.length}</span>
-            </>
-          ) : (
-            str.all.table.summary.noFiltersApplied
-          )}
-          {str.all.table.summary.separator}
-          {str.all.table.summary.selectedLabel} <span className="font-semibold text-blue-700">{selectedIds.length}</span>
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-gray-600">
+            {hasActiveFilters ? (
+              <>
+                {str.all.table.summary.filteredLabel} <span className="font-semibold text-blue-700">{filteredPhrases.length}</span>
+              </>
+            ) : (
+              str.all.table.summary.noFiltersApplied
+            )}
+            {str.all.table.summary.separator}
+            {str.all.table.summary.selectedLabel} <span className="font-semibold text-blue-700">{selectedIds.length}</span>
+          </p>
+          <button
+            type="button"
+            className="rounded-full border-2 px-4 py-1 text-sm font-medium btn-destructive disabled:opacity-50"
+            onClick={() => void handleBatchDeleteSelected()}
+            disabled={selectedIds.length === 0 || batchDeleting}
+            title={str.all.table.tooltips.deleteSelected}
+          >
+            {batchDeleting ? str.all.table.buttons.deletingSelected : str.all.table.buttons.deleteSelected}
+          </button>
+        </div>
       ) : null}
 
       {loading ? (

@@ -8,9 +8,11 @@
  */
 import { describe, expect, it } from "vitest";
 import type { CharacterTriageMatch, PhraseTriageMatch } from "@/lib/paragraphTriage";
+import type { ParagraphSpanRange } from "./addParagraph.types";
 import {
   buildSentenceRenderTokens,
   computeDragSelectionRange,
+  groupTokensForSelection,
   type SentenceRenderToken,
 } from "./ParagraphSpanSelector";
 
@@ -95,5 +97,43 @@ describe("computeDragSelectionRange", () => {
 
   it("supports dragging backwards (current index before anchor index)", () => {
     expect(computeDragSelectionRange(tokens, 1, 0)).toEqual({ startOffset: 0, endOffset: 2 });
+  });
+});
+
+describe("groupTokensForSelection", () => {
+  const tokens: SentenceRenderToken[] = [
+    { kind: "character", startOffset: 0, endOffset: 1, text: "刘", wordId: null },
+    { kind: "character", startOffset: 1, endOffset: 2, text: "备", wordId: null },
+    { kind: "text", startOffset: 2, endOffset: 3, text: "，" },
+    { kind: "character", startOffset: 3, endOffset: 4, text: "关", wordId: "w-guan" },
+  ];
+
+  it("keeps every token in its own group when nothing is selected", () => {
+    const groups = groupTokensForSelection(tokens, []);
+    expect(groups).toHaveLength(4);
+    expect(groups.every((g) => g.tokens.length === 1)).toBe(true);
+  });
+
+  it("merges adjacent tokens covered by the same selected range into one group", () => {
+    const selectedRanges: ParagraphSpanRange[] = [{ startOffset: 0, endOffset: 2 }];
+    const groups = groupTokensForSelection(tokens, selectedRanges);
+    expect(groups.map((g) => g.tokens.length)).toEqual([2, 1, 1]);
+    expect(groups[0].tokens.map((t) => t.text)).toEqual(["刘", "备"]);
+    expect(groups[0].indices).toEqual([0, 1]);
+  });
+
+  it("does not merge two independently-selected single-character ranges", () => {
+    const selectedRanges: ParagraphSpanRange[] = [
+      { startOffset: 0, endOffset: 1 },
+      { startOffset: 1, endOffset: 2 },
+    ];
+    const groups = groupTokensForSelection(tokens, selectedRanges);
+    expect(groups.map((g) => g.tokens.length)).toEqual([1, 1, 1, 1]);
+  });
+
+  it("never merges a selected token with an adjacent unselected token", () => {
+    const selectedRanges: ParagraphSpanRange[] = [{ startOffset: 0, endOffset: 1 }];
+    const groups = groupTokensForSelection(tokens, selectedRanges);
+    expect(groups.map((g) => g.tokens.length)).toEqual([1, 1, 1, 1]);
   });
 });

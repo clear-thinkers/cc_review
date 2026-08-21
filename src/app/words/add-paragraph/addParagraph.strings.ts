@@ -27,7 +27,8 @@ export const addParagraphStrings = {
     saveError:
       "The paragraph text couldn't be saved, but any selected characters/phrases above were still added. Please try again.",
     tagAssignError: "Items were added, but assigning the tag failed. Please try again.",
-    selectionHint: "Click a character, or click and drag across several, to select it. Click again to deselect.",
+    selectionHint:
+      "Click a character, or click and drag across several (press and drag on a touchscreen), to select it. Click again to deselect.",
     selector: {
       legendKnown: "Known",
       legendUnknown: "Unknown",
@@ -132,7 +133,7 @@ export const addParagraphStrings = {
     allSuccess: "已添加 {count} 项。",
     saveError: "短文文本保存失败，但上方已选中的汉字/词语仍已添加。请重试。",
     tagAssignError: "内容已添加，但标签分配失败。请重试。",
-    selectionHint: "点击一个汉字，或点击并拖动经过多个汉字来选择；再次点击可取消选择。",
+    selectionHint: "点击一个汉字，或点击并拖动经过多个汉字来选择（在触屏设备上按住并拖动手指）；再次点击可取消选择。",
     selector: {
       legendKnown: "已认识",
       legendUnknown: "未认识",

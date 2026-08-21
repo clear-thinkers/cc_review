@@ -4,7 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "@/lib/authContext";
 import { useLocale } from "@/app/shared/locale";
 import { taggingStrings } from "../shared/tagging.strings";
-import { assignWordLessonTags, clearWordLessonTags, createLessonTagIfNew, createTextbook, listLessonTags, listTextbooks, putWord } from "@/lib/supabase-service";
+import {
+  assignWordLessonTags,
+  clearWordLessonTags,
+  createLessonTagIfNew,
+  createTextbook,
+  deleteFlashcardContentByHanzi,
+  deleteWord,
+  getActiveSessionTargetKeys,
+  hasFlashcardContentForHanzi,
+  listLessonTags,
+  listTextbooks,
+  putWord,
+} from "@/lib/supabase-service";
 import type { LessonTag, Textbook } from "../shared/tagging.types";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
@@ -59,6 +71,8 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [editorSaving, setEditorSaving] = useState(false);
   const [editorAction, setEditorAction] = useState<"add" | "update" | null>(null);
   const [batchResetting, setBatchResetting] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [tagClearing, setTagClearing] = useState(false);
   const [batchTagSectionOpen, setBatchTagSectionOpen] = useState(false);
 
@@ -444,6 +458,62 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
       console.error("[all-reset] Batch reset failed", error);
     } finally {
       setBatchResetting(false);
+    }
+  }
+
+  async function handleBatchDeleteSelected(): Promise<void> {
+    setDeleteNotice(null);
+
+    if (selectedWordIds.length === 0) {
+      setDeleteNotice(allEditorStr.noSelection);
+      return;
+    }
+
+    const selectedWords = words.filter((word) => selectedWordIds.includes(word.id));
+    if (selectedWords.length === 0) {
+      setSelectedWordIds([]);
+      return;
+    }
+
+    const { hanziSet } = await getActiveSessionTargetKeys();
+    const blockedWords = selectedWords.filter((word) => hanziSet.has(word.hanzi));
+    const deletableWords = selectedWords.filter((word) => !hanziSet.has(word.hanzi));
+
+    if (deletableWords.length === 0) {
+      setDeleteNotice(str.all.table.deleteSelectedAllBlocked);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      str.all.table.confirmDeleteSelected.replace("{count}", String(deletableWords.length))
+    );
+    if (!confirmed) return;
+
+    setBatchDeleting(true);
+    try {
+      await Promise.all(
+        deletableWords.map(async (word) => {
+          const hasContent = await hasFlashcardContentForHanzi(word.hanzi);
+          if (hasContent) {
+            await deleteFlashcardContentByHanzi(word.hanzi);
+          }
+          await deleteWord(word.id);
+        })
+      );
+      await refreshAllData();
+      setSelectedWordIds((previous) => previous.filter((id) => blockedWords.some((word) => word.id === id)));
+
+      const successMessage = str.all.table.deleteSelectedSuccess.replace("{count}", String(deletableWords.length));
+      setDeleteNotice(
+        blockedWords.length > 0
+          ? `${successMessage} ${str.all.table.deleteSelectedBlockedNotice.replace("{count}", String(blockedWords.length))}`
+          : successMessage
+      );
+    } catch (error) {
+      console.error("[all-delete] Batch delete failed", error);
+      setDeleteNotice(str.all.table.deleteSelectedError);
+    } finally {
+      setBatchDeleting(false);
     }
   }
 
@@ -1245,11 +1315,21 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                 type="button"
                 className="rounded-full border-2 px-4 py-1 text-sm font-medium btn-caution disabled:opacity-50"
                 onClick={() => void handleBatchResetSelected()}
-                disabled={selectedWordIds.length === 0 || batchResetting || editorSaving || tagClearing}
+                disabled={selectedWordIds.length === 0 || batchResetting || batchDeleting || editorSaving || tagClearing}
                 title={str.all.table.tooltips.reset}
               >
                 {batchResetting ? str.all.table.buttons.resetting : str.all.table.buttons.reset}
               </button>
+              <button
+                type="button"
+                className="rounded-full border-2 px-4 py-1 text-sm font-medium btn-destructive disabled:opacity-50"
+                onClick={() => void handleBatchDeleteSelected()}
+                disabled={selectedWordIds.length === 0 || batchDeleting || batchResetting || editorSaving || tagClearing}
+                title={str.all.table.tooltips.deleteSelected}
+              >
+                {batchDeleting ? str.all.table.buttons.deletingSelected : str.all.table.buttons.deleteSelected}
+              </button>
+              {deleteNotice ? <p className="w-full text-sm text-blue-700">{deleteNotice}</p> : null}
             </div>
           ) : null}
           <div className="overflow-x-auto rounded-lg border">
