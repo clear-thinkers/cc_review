@@ -160,6 +160,48 @@ describe("buildReviewTestSessionRuntime", () => {
     expect(runtime.skippedQuizCharacters).toEqual(["学"]);
   });
 
+  it("resolves fill-test content even when target.key carries the paragraph-span dedup suffix", () => {
+    // Regression test: toReviewTestSessionTarget (supabase-service.ts) builds
+    // target.key as `character|pronunciation|paragraphSpanId-or-empty` for
+    // EVERY target, including ordinary (non-paragraph) character targets,
+    // where paragraphSpanId is always empty -- producing a trailing "|" that
+    // never matches contentByKey's plain `character|pronunciation` entries.
+    // Content resolution must key off target.character/target.pronunciation
+    // directly, not target.key, or every packaged session reads 0 quiz-ready.
+    const session: ReviewTestSession = {
+      id: "session-4",
+      name: "Real DB round-trip shape",
+      createdAt: Date.now(),
+      createdByUserId: "user-1",
+      completedAt: null,
+      completedByUserId: null,
+      paragraphTestModeId: null,
+      targets: [
+        {
+          sessionId: "session-4",
+          character: "好",
+          pronunciation: "hao3",
+          key: "好|hao3|",
+          displayOrder: 0,
+        },
+      ],
+    };
+
+    const runtime = buildReviewTestSessionRuntime(
+      session,
+      [makeWord("word-4", "好", 2, 1)],
+      [
+        makeContent("好", "hao3", [
+          { phrase: "好吃", example: "这个很好吃。", includeInFillTest: true },
+        ]),
+      ]
+    );
+
+    expect(runtime.errorCode).toBeNull();
+    expect(runtime.quizWords).toHaveLength(1);
+    expect(runtime.skippedQuizCharacters).toEqual([]);
+  });
+
   it("blocks when duplicate words exist for the same character", () => {
     const session: ReviewTestSession = {
       id: "session-3",

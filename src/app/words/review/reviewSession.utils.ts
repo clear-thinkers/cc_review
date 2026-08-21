@@ -179,8 +179,15 @@ export function buildReviewTestSessionRuntime(
 
     orderedWords.push(word);
 
+    // Look up by plain character|pronunciation, NOT target.key -- target.key
+    // now carries a trailing |paragraphSpanId segment (added for paragraph-
+    // quiz blank dedup), but flashcard_contents rows (and contentByKey,
+    // built from getAllFlashcardContents()) are keyed by character|pronunciation
+    // only. A character target's paragraphSpanId is always empty, so
+    // target.key would never match and every character silently read as
+    // not-quiz-ready.
     const fillTestContentEntries = targets
-      .map((target) => contentByKey.get(target.key))
+      .map((target) => contentByKey.get(`${target.character}|${target.pronunciation}`))
       .filter((entry): entry is FlashcardContentEntry => Boolean(entry));
     const fillTest = buildFillTestFromSavedContent(
       fillTestContentEntries.map((entry) => entry.content)
