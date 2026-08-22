@@ -1355,6 +1355,14 @@ export function isParagraphQuizProgressData(value: unknown): value is ParagraphQ
   if (typeof source.currentPageIndex !== "number" || !Number.isInteger(source.currentPageIndex)) return false;
   if (source.sessionStartTime !== null && typeof source.sessionStartTime !== "number") return false;
   if (!source.blankState || typeof source.blankState !== "object") return false;
+  if (
+    source.wrongDragCounts !== undefined &&
+    (source.wrongDragCounts === null ||
+      typeof source.wrongDragCounts !== "object" ||
+      Object.values(source.wrongDragCounts as Record<string, unknown>).some((count) => typeof count !== "number"))
+  ) {
+    return false;
+  }
 
   return Object.values(source.blankState as Record<string, unknown>).every((entry) => {
     if (!entry || typeof entry !== "object") return false;
@@ -1371,6 +1379,7 @@ export type ParagraphQuizResumeResolution =
       status: "ready";
       currentPageIndex: number;
       blankState: Record<string, ParagraphQuizBlankProgress>;
+      wrongDragCounts: Record<string, number>;
       sessionStartTime: number | null;
     }
   | { status: "empty" }
@@ -1411,6 +1420,13 @@ export function resolveParagraphQuizResume(params: {
     }
   }
 
+  const wrongDragCounts: Record<string, number> = {};
+  for (const [spanId, count] of Object.entries(parsed.wrongDragCounts ?? {})) {
+    if (validSpanIds.has(spanId)) {
+      wrongDragCounts[spanId] = count;
+    }
+  }
+
   const pageHasRemainingBlank = (page: ParagraphQuizPage) =>
     page.bankSpanIds.some((spanId) => (blankState[spanId]?.status ?? "unfilled") !== "correct");
 
@@ -1429,6 +1445,7 @@ export function resolveParagraphQuizResume(params: {
     status: "ready",
     currentPageIndex,
     blankState,
+    wrongDragCounts,
     sessionStartTime: parsed.sessionStartTime,
   };
 }

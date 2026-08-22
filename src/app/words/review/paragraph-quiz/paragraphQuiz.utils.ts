@@ -13,7 +13,14 @@
 import type { ParagraphQuizPage } from "@/lib/paragraphQuizBuilder";
 import { deriveParagraphBlankTier } from "@/lib/paragraphQuizBuilder";
 import type { SessionGradeData } from "@/lib/quiz.types";
-import type { ParagraphQuizBlankProgress, ParagraphQuizHistoryItem } from "./paragraphQuiz.types";
+import type { Word, VocabPhrase } from "@/lib/types";
+import type { FlashcardContentEntry } from "@/lib/supabase-service";
+import type {
+  ParagraphQuizBlankProgress,
+  ParagraphQuizCharacterRevealContent,
+  ParagraphQuizHistoryItem,
+  ParagraphQuizPhraseRevealContent,
+} from "./paragraphQuiz.types";
 
 export function isPageComplete(
   page: ParagraphQuizPage,
@@ -57,3 +64,55 @@ export function buildParagraphQuizGradeData(historyItems: ParagraphQuizHistoryIt
 
 /** Convenience wrapper: retryCount -> tier, re-exported so callers only import from this module. */
 export { deriveParagraphBlankTier };
+
+/**
+ * Reveal-after-3-bounces (feature spec 2026-08-22). A blank's word bank item
+ * "bounces back" on every wrong drop, bumping retryCount (handlePlacement in
+ * ParagraphQuizReviewSection.tsx) -- reveal becomes available once that
+ * count reaches 3. Purely a display gate: it never affects
+ * deriveParagraphBlankTier or any grading/coin path above.
+ */
+const REVEAL_RETRY_THRESHOLD = 3;
+
+export function isRevealEligible(retryCount: number): boolean {
+  return retryCount >= REVEAL_RETRY_THRESHOLD;
+}
+
+/**
+ * All flashcard_contents entries sharing this word's hanzi, stacked --
+ * resolved 2026-08-22: never guesses which pronunciation is "the" one for
+ * this blank. Returns null (not an empty-entries object) when the character
+ * has no curated content yet, mirroring the codebase's existing
+ * skip-invalid-silently precedent (e.g. resultsReviewTestSession.ts).
+ */
+export function resolveCharacterRevealContent(
+  word: Word,
+  allFlashcardContents: FlashcardContentEntry[]
+): ParagraphQuizCharacterRevealContent | null {
+  const entries = allFlashcardContents
+    .filter((entry) => entry.character === word.hanzi)
+    .map((entry) => ({ pronunciation: entry.pronunciation, meanings: entry.content.meanings }));
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return { kind: "character", hanzi: word.hanzi, entries };
+}
+
+/**
+ * Resolved 2026-08-22: shows only the FIRST include_in_fill_test example
+ * (deterministic), a deliberate deviation from the ordinary phrase-round
+ * quiz's random-example-selection precedent -- reproducibility beats
+ * variety for a read-only reveal popup.
+ */
+export function resolvePhraseRevealContent(vocabPhrase: VocabPhrase): ParagraphQuizPhraseRevealContent {
+  return {
+    kind: "phrase",
+    phrase: vocabPhrase.phrase,
+    pinyin: vocabPhrase.pinyin ?? "",
+    meaningZh: vocabPhrase.meaningZh,
+    meaningEn: vocabPhrase.meaningEn,
+    example: vocabPhrase.examples.find((example) => example.includeInFillTest),
+  };
+}

@@ -1006,6 +1006,19 @@ describe("resolveParagraphQuizResume", () => {
     });
   });
 
+  it("returns invalid when wrongDragCounts is present but malformed (non-number value)", () => {
+    const progressData = {
+      testModeId: "tm1",
+      currentPageIndex: 0,
+      blankState: {},
+      wrongDragCounts: { "s0-0": "three" },
+      sessionStartTime: null,
+    };
+    expect(resolveParagraphQuizResume({ progressData, testModeId: "tm1", pages: PAGES })).toEqual({
+      status: "invalid",
+    });
+  });
+
   it("returns invalid when the saved testModeId doesn't match the session being resumed", () => {
     const progressData = {
       testModeId: "different-test-mode",
@@ -1030,6 +1043,7 @@ describe("resolveParagraphQuizResume", () => {
       status: "ready",
       currentPageIndex: 0,
       blankState: { "s0-0": { status: "correct", retryCount: 0 } },
+      wrongDragCounts: {},
       sessionStartTime: 1000,
     });
   });
@@ -1093,8 +1107,34 @@ describe("resolveParagraphQuizResume", () => {
       status: "ready",
       currentPageIndex: 0,
       blankState: {},
+      wrongDragCounts: {},
       sessionStartTime: null,
     });
+  });
+
+  it("carries wrongDragCounts through for still-valid span ids and drops stale ones (fix 2, feature spec 2026-08-22)", () => {
+    const progressData = {
+      testModeId: "tm1",
+      currentPageIndex: 0,
+      blankState: {},
+      wrongDragCounts: { "s0-0": 3, "s0-1": 1, "ghost-span": 5 },
+      sessionStartTime: null,
+    };
+    const resolved = resolveParagraphQuizResume({ progressData, testModeId: "tm1", pages: PAGES });
+    expect(resolved.status).toBe("ready");
+    expect(resolved.status === "ready" && resolved.wrongDragCounts).toEqual({ "s0-0": 3, "s0-1": 1 });
+  });
+
+  it("defaults wrongDragCounts to {} when resuming a progress row saved before this field existed", () => {
+    const progressData = {
+      testModeId: "tm1",
+      currentPageIndex: 0,
+      blankState: { "s0-0": { status: "correct", retryCount: 0 } },
+      sessionStartTime: null,
+    };
+    const resolved = resolveParagraphQuizResume({ progressData, testModeId: "tm1", pages: PAGES });
+    expect(resolved.status).toBe("ready");
+    expect(resolved.status === "ready" && resolved.wrongDragCounts).toEqual({});
   });
 });
 

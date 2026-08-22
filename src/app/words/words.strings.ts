@@ -333,6 +333,12 @@ export const wordsStrings = {
       dropPlaceholder: "?",
       stopButton: "Stop quiz",
       completionMessage: "Paragraph quiz complete.",
+      reveal: {
+        badgeLabel: "Hint",
+        pronunciationLabel: "Pronunciation",
+        popupCloseButton: "Close",
+        noContentMessage: "No extra info for this word yet.",
+      },
       emptyState: {
         noSessionTitle: "No quiz session is active.",
         noSessionBody: "Start from Due Review to choose a packaged paragraph quiz first.",
@@ -1617,6 +1623,12 @@ export const wordsStrings = {
       dropPlaceholder: "？",
       stopButton: "停止测验",
       completionMessage: "短文填空测验已完成。",
+      reveal: {
+        badgeLabel: "提示",
+        pronunciationLabel: "读音",
+        popupCloseButton: "关闭",
+        noContentMessage: "这个词还没有更多内容。",
+      },
       emptyState: {
         noSessionTitle: "当前没有正在进行的测验。",
         noSessionBody: "请先从待复习页面开始一个已打包的短文测验。",

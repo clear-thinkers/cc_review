@@ -4,9 +4,56 @@ import {
   findNextIncompletePageIndex,
   isPageComplete,
   isQuizComplete,
+  isRevealEligible,
+  resolveCharacterRevealContent,
+  resolvePhraseRevealContent,
 } from "./paragraphQuiz.utils";
 import type { ParagraphQuizPage } from "@/lib/paragraphQuizBuilder";
 import type { ParagraphQuizBlankProgress, ParagraphQuizHistoryItem } from "./paragraphQuiz.types";
+import type { Word, VocabPhrase } from "@/lib/types";
+import type { FlashcardContentEntry } from "@/lib/supabase-service";
+
+function makeWord(overrides: Partial<Word> = {}): Word {
+  return {
+    id: "word-1",
+    hanzi: "你",
+    createdAt: 0,
+    repetitions: 0,
+    intervalDays: 0,
+    ease: 21,
+    nextReviewAt: 0,
+    ...overrides,
+  };
+}
+
+function makeFlashcardEntry(overrides: Partial<FlashcardContentEntry> = {}): FlashcardContentEntry {
+  return {
+    key: "你|nǐ",
+    character: "你",
+    pronunciation: "nǐ",
+    content: {
+      character: "你",
+      pronunciation: "nǐ",
+      meanings: [{ definition: "你", definition_en: "you", phrases: [] }],
+    },
+    updatedAt: 0,
+    ...overrides,
+  };
+}
+
+function makeVocabPhrase(overrides: Partial<VocabPhrase> = {}): VocabPhrase {
+  return {
+    id: "phrase-1",
+    phrase: "图书馆",
+    pinyin: "tú shū guǎn",
+    meaningZh: "藏书的地方",
+    meaningEn: "library",
+    examples: [],
+    testCount: 0,
+    createdAt: 0,
+    ...overrides,
+  };
+}
 
 function makePage(spanIds: string[], pageIndex = 0): ParagraphQuizPage {
   return {
@@ -106,5 +153,79 @@ describe("buildParagraphQuizGradeData", () => {
 
   it("returns an empty array for an empty session", () => {
     expect(buildParagraphQuizGradeData([])).toEqual([]);
+  });
+});
+
+describe("isRevealEligible", () => {
+  it.each([
+    [0, false],
+    [1, false],
+    [2, false],
+    [3, true],
+    [4, true],
+  ])("retryCount %i -> %s", (retryCount, expected) => {
+    expect(isRevealEligible(retryCount)).toBe(expected);
+  });
+});
+
+describe("resolveCharacterRevealContent", () => {
+  it("returns null when the character has no flashcard_contents entries", () => {
+    expect(resolveCharacterRevealContent(makeWord(), [])).toBeNull();
+  });
+
+  it("resolves a single matching entry", () => {
+    const entry = makeFlashcardEntry();
+    expect(resolveCharacterRevealContent(makeWord(), [entry])).toEqual({
+      kind: "character",
+      hanzi: "你",
+      entries: [{ pronunciation: "nǐ", meanings: entry.content.meanings }],
+    });
+  });
+
+  it("shows every matching pronunciation entry stacked, never picks just one", () => {
+    const entryA = makeFlashcardEntry({ pronunciation: "nǐ" });
+    const entryB = makeFlashcardEntry({ pronunciation: "ní" });
+    const unrelated = makeFlashcardEntry({ character: "好", pronunciation: "hǎo" });
+    const content = resolveCharacterRevealContent(makeWord(), [entryA, entryB, unrelated]);
+    expect(content?.entries).toHaveLength(2);
+    expect(content?.entries.map((e) => e.pronunciation)).toEqual(["nǐ", "ní"]);
+  });
+});
+
+describe("resolvePhraseRevealContent", () => {
+  it("carries phrase text, pinyin, and both meanings through unchanged", () => {
+    const content = resolvePhraseRevealContent(makeVocabPhrase());
+    expect(content).toMatchObject({
+      kind: "phrase",
+      phrase: "图书馆",
+      pinyin: "tú shū guǎn",
+      meaningZh: "藏书的地方",
+      meaningEn: "library",
+    });
+  });
+
+  it("falls back to an empty pinyin string when the phrase has none", () => {
+    const content = resolvePhraseRevealContent(makeVocabPhrase({ pinyin: undefined }));
+    expect(content.pinyin).toBe("");
+  });
+
+  it("picks only the FIRST include_in_fill_test example, not a random one", () => {
+    const content = resolvePhraseRevealContent(
+      makeVocabPhrase({
+        examples: [
+          { zh: "skip me", pinyin: "", includeInFillTest: false },
+          { zh: "first eligible", pinyin: "p1", includeInFillTest: true },
+          { zh: "second eligible", pinyin: "p2", includeInFillTest: true },
+        ],
+      })
+    );
+    expect(content.example?.zh).toBe("first eligible");
+  });
+
+  it("leaves example undefined when no example is fill-test eligible", () => {
+    const content = resolvePhraseRevealContent(
+      makeVocabPhrase({ examples: [{ zh: "not eligible", pinyin: "", includeInFillTest: false }] })
+    );
+    expect(content.example).toBeUndefined();
   });
 });

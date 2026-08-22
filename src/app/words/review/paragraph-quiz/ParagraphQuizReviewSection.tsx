@@ -16,8 +16,9 @@ import {
   saveReviewSessionProgress,
 } from "@/lib/supabase-service";
 import { extractUniqueHanzi, resolveParagraphQuizResume } from "../../shared/words.shared.utils";
-import { buildParagraphQuizGradeData, isPageComplete, isQuizComplete } from "./paragraphQuiz.utils";
+import { buildParagraphQuizGradeData, isPageComplete, isQuizComplete, isRevealEligible } from "./paragraphQuiz.utils";
 import type { ParagraphQuizBlankProgress, ParagraphQuizHistoryItem, ParagraphQuizProgressData } from "./paragraphQuiz.types";
+import ParagraphQuizRevealPopup from "./ParagraphQuizRevealPopup";
 
 /**
  * Genuinely new quiz UI (Item I, Phase 3) -- not a reuse of the existing
@@ -31,12 +32,21 @@ import type { ParagraphQuizBlankProgress, ParagraphQuizHistoryItem, ParagraphQui
  * feature spec calls for, avoiding a second new-route boundary.
  */
 export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
-  const { isFillTestReviewPage, str, activeReviewTestSession, activeReviewTestSessionRuntime, words } = vm;
+  const {
+    isFillTestReviewPage,
+    str,
+    activeReviewTestSession,
+    activeReviewTestSessionRuntime,
+    words,
+    vocabPhrases,
+    allFlashcardContents,
+  } = vm;
   const paragraphQuiz = activeReviewTestSessionRuntime?.paragraphQuiz ?? null;
   const pqStr = str.paragraphQuiz;
 
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [blankState, setBlankState] = useState<Record<string, ParagraphQuizBlankProgress>>({});
+  const [wrongDragCounts, setWrongDragCounts] = useState<Record<string, number>>({});
   const [history, setHistory] = useState<ParagraphQuizHistoryItem[]>([]);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [selectedBankSpanId, setSelectedBankSpanId] = useState<string | null>(null);
@@ -44,6 +54,7 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
   const [wrongSpanId, setWrongSpanId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [revealOpenSpanId, setRevealOpenSpanId] = useState<string | null>(null);
   const loadedSessionIdRef = useRef<string | null>(null);
 
   const blanksBySpanId = useMemo((): Map<string, ParagraphQuizBlank> => {
@@ -73,6 +84,7 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
           if (resolved.status === "ready" && !cancelled) {
             setCurrentPageIndex(resolved.currentPageIndex);
             setBlankState(resolved.blankState);
+            setWrongDragCounts(resolved.wrongDragCounts);
             setSessionStartTime(resolved.sessionStartTime ?? Date.now());
             resumed = true;
           }
@@ -83,6 +95,7 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
       if (!cancelled && !resumed) {
         setCurrentPageIndex(0);
         setBlankState({});
+        setWrongDragCounts({});
         setHistory([]);
         setSessionStartTime(Date.now());
       }
@@ -93,12 +106,17 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
     };
   }, [activeReviewTestSession, paragraphQuiz]);
 
-  function autosave(nextPageIndex: number, nextBlankState: Record<string, ParagraphQuizBlankProgress>) {
+  function autosave(
+    nextPageIndex: number,
+    nextBlankState: Record<string, ParagraphQuizBlankProgress>,
+    nextWrongDragCounts: Record<string, number> = wrongDragCounts
+  ) {
     if (!activeReviewTestSession || !paragraphQuiz) return;
     const payload: ParagraphQuizProgressData = {
       testModeId: paragraphQuiz.testMode.id,
       currentPageIndex: nextPageIndex,
       blankState: nextBlankState,
+      wrongDragCounts: nextWrongDragCounts,
       sessionStartTime,
     };
     saveReviewSessionProgress({
@@ -147,23 +165,38 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
     setDraggingSpanId(null);
 
     if (bankSpanId !== targetSpanId) {
-      // Wrong drop: bounce back, bump retryCount only -- no grading dispatch
-      // at all, matching the "wrong answer touches no character state"
-      // precedent. Still autosaved so a paused-mid-page resume doesn't
-      // undercount retries already made.
+      // Wrong drop: bounce back to the bank. Bumps TWO independent counters:
+      // blankState[targetSpanId].retryCount (grading tier -- keyed by which
+      // BLANK was missed, whichever bank item caused it) and
+      // wrongDragCounts[bankSpanId] (reveal-after-3-bounces eligibility --
+      // keyed by which BANK ITEM was dragged wrong, cumulative across every
+      // blank it was tried on, fix 2 / feature spec 2026-08-22). No grading
+      // dispatch at all, matching the "wrong answer touches no character
+      // state" precedent. Functional setState (not a direct closure read)
+      // for both, since rapid consecutive wrong drops aren't guarded by
+      // `submitting` the way a correct placement is.
       setWrongSpanId(targetSpanId);
       setTimeout(() => setWrongSpanId((current) => (current === targetSpanId ? null : current)), 400);
+
+      let nextBlankState: Record<string, ParagraphQuizBlankProgress> = blankState;
       setBlankState((previous) => {
-        const next = {
+        nextBlankState = {
           ...previous,
           [targetSpanId]: {
             status: "unfilled" as const,
             retryCount: (previous[targetSpanId]?.retryCount ?? 0) + 1,
           },
         };
-        autosave(currentPageIndex, next);
-        return next;
+        return nextBlankState;
       });
+
+      let nextWrongDragCounts: Record<string, number> = wrongDragCounts;
+      setWrongDragCounts((previous) => {
+        nextWrongDragCounts = { ...previous, [bankSpanId]: (previous[bankSpanId] ?? 0) + 1 };
+        return nextWrongDragCounts;
+      });
+
+      autosave(currentPageIndex, nextBlankState, nextWrongDragCounts);
       return;
     }
 
@@ -322,23 +355,46 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
           <p className="text-sm text-gray-500">{pqStr.wordBankEmpty}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {bankItems.map((blank) => (
-              <button
-                key={blank.spanId}
-                type="button"
-                draggable
-                disabled={submitting}
-                onDragStart={() => setDraggingSpanId(blank.spanId)}
-                onDragEnd={() => setDraggingSpanId(null)}
-                onClick={() => setSelectedBankSpanId((current) => (current === blank.spanId ? null : blank.spanId))}
-                className={
-                  "rounded-md border-2 px-3 py-1 text-sm " +
-                  (selectedBankSpanId === blank.spanId ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-white")
-                }
-              >
-                {blank.text}
-              </button>
-            ))}
+            {bankItems.map((blank) => {
+              const wrongDragCount = wrongDragCounts[blank.spanId] ?? 0;
+              const revealEligible = isRevealEligible(wrongDragCount);
+              return (
+                <span key={blank.spanId} className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    draggable
+                    disabled={submitting}
+                    onDragStart={() => setDraggingSpanId(blank.spanId)}
+                    onDragEnd={() => setDraggingSpanId(null)}
+                    onClick={() =>
+                      setSelectedBankSpanId((current) => (current === blank.spanId ? null : blank.spanId))
+                    }
+                    className={
+                      "rounded-md border-2 px-3 py-1 text-sm " +
+                      (selectedBankSpanId === blank.spanId
+                        ? "border-blue-500 bg-blue-50"
+                        : revealEligible
+                          ? "border-purple-500 bg-purple-50 text-purple-900"
+                          : "border-gray-300 bg-white")
+                    }
+                  >
+                    {blank.text}
+                  </button>
+                  {revealEligible ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setRevealOpenSpanId(blank.spanId);
+                      }}
+                      className="rounded-full border border-purple-400 bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800"
+                    >
+                      {pqStr.reveal.badgeLabel}
+                    </button>
+                  ) : null}
+                </span>
+              );
+            })}
           </div>
         )}
       </div>
@@ -347,6 +403,23 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
       <button type="button" onClick={handleStop} className="btn-destructive rounded-md border-2 px-3 py-2">
         {pqStr.stopButton}
       </button>
+
+      {revealOpenSpanId
+        ? (() => {
+            const revealBlank = blanksBySpanId.get(revealOpenSpanId);
+            if (!revealBlank) return null;
+            return (
+              <ParagraphQuizRevealPopup
+                blank={revealBlank}
+                words={words}
+                vocabPhrases={vocabPhrases}
+                allFlashcardContents={allFlashcardContents}
+                str={str}
+                onClose={() => setRevealOpenSpanId(null)}
+              />
+            );
+          })()
+        : null}
     </section>
   );
 }
