@@ -15,6 +15,8 @@
  *   ✅ Quiz session immutability     → Section 4c (UPDATE on quiz_sessions affects 0 rows)
  *   ✅ review_session_progress RLS   → Section 5 (family-scoped read incl. cross-family
  *                                       isolation, user-scoped insert/update/delete)
+ *   ✅ shop_ingredient_rewards RLS   → Section 9 (family-scoped read incl. cross-family
+ *                                       isolation, user-scoped insert, no update/delete)
  *
  * Env vars (auto-loaded from .env.local if present):
  *   NEXT_PUBLIC_SUPABASE_URL        — Supabase project URL
@@ -1079,6 +1081,201 @@ async function section8_paragraphTestModes(): Promise<void> {
   }
 }
 
+// ─── Section 9: shop_ingredient_rewards RLS ─────────────────────────────────
+//
+// Paragraph-quiz ingredient reward (feature spec 2026-08-22-paragraph-quiz-
+// ingredient-reward.md): family-scoped read (parent visibility into a
+// child's rewards, same shape as review_session_progress), user-scoped
+// insert (a family member can only insert a row attributed to themselves --
+// the app never calls this directly, only reward_random_ingredients does,
+// but RLS still must reject an insert impersonating another user_id), and
+// NO update/delete policy at all -- immutable, like quiz_sessions.
+async function section9_shopIngredientRewards(): Promise<void> {
+  console.log('\n■ Section 9: shop_ingredient_rewards RLS');
+
+  if (!testFamilyAId || !testFamilyBId || !familyAParentClient || !familyAChildClient || !testChildAUserId || !testParentAUserId) {
+    fail(
+      'section9 setup incomplete — Section 2/4 must have succeeded',
+      'testFamilyAId, testFamilyBId, testChildAUserId, testParentAUserId, and Section 4 clients must all be set'
+    );
+    return;
+  }
+
+  // ── Setup: throwaway ingredient-price catalog row + quiz session, both via admin ──
+  const testIngredientKey = `${TEST_TAG}_ingredient`;
+  const { error: ingredientPriceErr } = await admin
+    .from('shop_ingredient_prices')
+    .insert({ ingredient_key: testIngredientKey, cost_coins: 1 });
+  if (ingredientPriceErr) {
+    fail('section9 setup: service role INSERT shop_ingredient_prices row', ingredientPriceErr.message);
+    return;
+  }
+
+  const testSessionId = `${TEST_TAG}_reward_session`;
+  const { error: sessionErr } = await admin.from('quiz_sessions').insert({
+    id: testSessionId,
+    user_id: testChildAUserId,
+    family_id: testFamilyAId,
+    session_type: 'fill-test',
+    grade_data: [],
+    fully_correct_count: 0,
+    failed_count: 0,
+    partially_correct_count: 0,
+    total_grades: 0,
+    duration_seconds: 0,
+    coins_earned: 0,
+  });
+  if (sessionErr) {
+    fail('section9 setup: service role INSERT quiz_sessions row', sessionErr.message);
+    await admin.from('shop_ingredient_prices').delete().eq('ingredient_key', testIngredientKey);
+    return;
+  }
+
+  // ── Setup: a Family B parent user + JWT-enriched client (self-contained, mirrors Section 5) ──
+  let familyBParentClient: SupabaseClient | null = null;
+  let authUserParentBId: string | null = null;
+  const { data: parentBRow, error: parentBErr } = await admin
+    .from('users')
+    .insert({ family_id: testFamilyBId, name: `${TEST_TAG}_parent_b_s9`, role: 'parent' })
+    .select('id')
+    .single();
+  if (parentBErr || !parentBRow) {
+    fail('section9 setup: service role INSERT parent user for Family B', parentBErr?.message);
+  } else {
+    try {
+      const parentBResult = await createTestAuthClient({
+        email: `${TEST_TAG}-parent-b-s9@test.invalid`,
+        familyId: testFamilyBId,
+        userId: (parentBRow as { id: string }).id,
+        role: 'parent',
+      });
+      familyBParentClient = parentBResult.client;
+      authUserParentBId = parentBResult.authUserId;
+    } catch (e: unknown) {
+      fail('section9 setup: Family B auth client creation failed', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // ── Child CAN insert a reward row attributed to themselves ──
+  const { data: rewardRow, error: childOwnInsertErr } = await familyAChildClient
+    .from('shop_ingredient_rewards')
+    .insert({
+      user_id: testChildAUserId,
+      family_id: testFamilyAId,
+      ingredient_key: testIngredientKey,
+      quiz_session_id: testSessionId,
+    })
+    .select('id')
+    .single();
+  if (childOwnInsertErr || !rewardRow) {
+    fail('shop_ingredient_rewards user scoped insert: child JWT INSERT for own user_id failed', childOwnInsertErr?.message);
+  } else {
+    pass('shop_ingredient_rewards user scoped insert: child JWT INSERT for own user_id succeeded');
+  }
+  const rewardId = rewardRow ? (rewardRow as { id: string }).id : null;
+
+  // ── Child CANNOT insert a reward row impersonating another family member's user_id ──
+  const { data: impersonatedInsertData, error: impersonatedInsertErr } = await familyAChildClient
+    .from('shop_ingredient_rewards')
+    .insert({
+      user_id: testParentAUserId,
+      family_id: testFamilyAId,
+      ingredient_key: testIngredientKey,
+      quiz_session_id: testSessionId,
+    })
+    .select('id');
+  if (impersonatedInsertErr) {
+    pass(`shop_ingredient_rewards user scoped insert: child JWT INSERT for another user_id rejected by RLS: "${impersonatedInsertErr.message}"`);
+  } else if (!impersonatedInsertData || impersonatedInsertData.length === 0) {
+    pass('shop_ingredient_rewards user scoped insert: child JWT INSERT for another user_id silently inserted 0 rows');
+  } else {
+    fail('shop_ingredient_rewards user scoped insert: child JWT INSERT for another user_id SUCCEEDED — user scoping not enforced!');
+  }
+
+  if (rewardId) {
+    // ── Family-scoped read: parent JWT can read the child's reward row ──
+    const { data: parentRead, error: parentReadErr } = await familyAParentClient
+      .from('shop_ingredient_rewards')
+      .select('id')
+      .eq('id', rewardId);
+    if (parentReadErr) {
+      fail('shop_ingredient_rewards family scoped read: parent JWT SELECT failed', parentReadErr.message);
+    } else if (parentRead && parentRead.length > 0) {
+      pass('shop_ingredient_rewards family scoped read: parent JWT can read child\'s reward row');
+    } else {
+      fail('shop_ingredient_rewards family scoped read: parent JWT SELECT returned 0 rows — read policy not enforced!');
+    }
+
+    // ── Cross-family isolation: Family B cannot read Family A's reward row ──
+    if (familyBParentClient) {
+      const { data: familyBRead, error: familyBReadErr } = await familyBParentClient
+        .from('shop_ingredient_rewards')
+        .select('id')
+        .eq('id', rewardId);
+      if (familyBReadErr) {
+        pass(`shop_ingredient_rewards cross-family isolation: Family B JWT SELECT blocked by RLS error: "${familyBReadErr.message}"`);
+      } else if (!familyBRead || familyBRead.length === 0) {
+        pass('shop_ingredient_rewards cross-family isolation: Family B JWT cannot read Family A\'s reward row');
+      } else {
+        fail('shop_ingredient_rewards cross-family isolation: Family B JWT can read Family A\'s reward row — RLS not enforcing!');
+      }
+    }
+
+    // ── Unenriched session cannot read ──
+    const { data: unenrichedRead, error: unenrichedReadErr } = await anon
+      .from('shop_ingredient_rewards')
+      .select('id')
+      .eq('id', rewardId);
+    if (unenrichedReadErr) {
+      pass(`shop_ingredient_rewards isolation: unenriched SELECT blocked by RLS error: "${unenrichedReadErr.message}"`);
+    } else if (!unenrichedRead || unenrichedRead.length === 0) {
+      pass('shop_ingredient_rewards isolation: unenriched session cannot read the reward row');
+    } else {
+      fail('shop_ingredient_rewards isolation: unenriched session can read the reward row — RLS not enforcing!');
+    }
+
+    // ── Immutable: no UPDATE policy, child's own UPDATE silently affects 0 rows ──
+    const { data: updateData, error: updateErr } = await familyAChildClient
+      .from('shop_ingredient_rewards')
+      .update({ ingredient_key: testIngredientKey })
+      .eq('id', rewardId)
+      .select('id');
+    if (updateErr) {
+      pass(`shop_ingredient_rewards immutability: UPDATE rejected by RLS: "${updateErr.message}"`);
+    } else if (!updateData || updateData.length === 0) {
+      pass('shop_ingredient_rewards immutability: UPDATE silently affected 0 rows (immutable)');
+    } else {
+      fail('shop_ingredient_rewards immutability: UPDATE SUCCEEDED — record was mutated!');
+    }
+
+    // ── Immutable: no DELETE policy, child's own DELETE silently affects 0 rows ──
+    const { data: deleteData, error: deleteErr } = await familyAChildClient
+      .from('shop_ingredient_rewards')
+      .delete()
+      .eq('id', rewardId)
+      .select('id');
+    if (deleteErr) {
+      pass(`shop_ingredient_rewards immutability: DELETE rejected by RLS: "${deleteErr.message}"`);
+    } else if (!deleteData || deleteData.length === 0) {
+      pass('shop_ingredient_rewards immutability: DELETE silently affected 0 rows (immutable)');
+    } else {
+      fail('shop_ingredient_rewards immutability: DELETE SUCCEEDED — record was removed!');
+    }
+  }
+
+  // ── Section-local cleanup: throwaway catalog row + Family B auth user ──
+  // (shop_ingredient_rewards/quiz_sessions rows cascade-delete with the test
+  // families in the global cleanup() below; shop_ingredient_prices has no
+  // family_id and does not, so it needs its own cleanup here.)
+  await admin.from('shop_ingredient_prices').delete().eq('ingredient_key', testIngredientKey);
+  if (authUserParentBId) {
+    const { error: authDelErr } = await admin.auth.admin.deleteUser(authUserParentBId);
+    if (authDelErr) {
+      console.error(`  ⚠️  Failed to delete Section 9 Family B auth user: ${authDelErr.message}`);
+    }
+  }
+}
+
 // ─── Cleanup ───────────────────────────────────────────────────────────────
 async function cleanup(): Promise<void> {
   console.log('\n■ Cleanup: Removing synthetic test data');
@@ -1130,6 +1327,7 @@ async function main(): Promise<void> {
     await section6_vocabPhrases();
     await section7_paragraphs();
     await section8_paragraphTestModes();
+    await section9_shopIngredientRewards();
   } finally {
     await cleanup();
   }

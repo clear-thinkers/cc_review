@@ -49,6 +49,13 @@ export type ShopIngredientPrice = {
   iconPath?: string | null;
 };
 
+/** One ingredient rewarded by reward_random_ingredients (paragraph-quiz ingredient reward, 2026-08-22). */
+export type RewardedIngredient = {
+  ingredientKey: string;
+  labelI18n?: ShopLocalizedValue<string>;
+  iconPath?: string | null;
+};
+
 export type ShopTransactionAction = "unlock_recipe";
 
 export type ShopTransaction = {

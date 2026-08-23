@@ -6,6 +6,9 @@ import type { ParagraphQuizBlank } from "@/lib/paragraphQuizBuilder";
 import { deriveParagraphBlankTier, resolveParagraphQuizBlanks } from "@/lib/paragraphQuizBuilder";
 import { calculateSessionCoins } from "@/lib/coins";
 import type { QuizSession } from "@/lib/quiz.types";
+import type { RewardedIngredient } from "@/lib/shop.types";
+import { resolveShopLocalizedString } from "@/lib/shop";
+import { useLocale } from "@/app/shared/locale";
 import {
   completeReviewTestSession,
   gradeVocabPhrase,
@@ -13,10 +16,17 @@ import {
   loadReviewSessionProgress,
   nudgeWordFamiliarity,
   recordQuizSession,
+  rewardRandomIngredients,
   saveReviewSessionProgress,
 } from "@/lib/supabase-service";
 import { extractUniqueHanzi, resolveParagraphQuizResume } from "../../shared/words.shared.utils";
-import { buildParagraphQuizGradeData, isPageComplete, isQuizComplete, isRevealEligible } from "./paragraphQuiz.utils";
+import {
+  buildParagraphQuizGradeData,
+  buildRewardHeadline,
+  isPageComplete,
+  isQuizComplete,
+  isRevealEligible,
+} from "./paragraphQuiz.utils";
 import type { ParagraphQuizBlankProgress, ParagraphQuizHistoryItem, ParagraphQuizProgressData } from "./paragraphQuiz.types";
 import ParagraphQuizRevealPopup from "./ParagraphQuizRevealPopup";
 
@@ -43,6 +53,7 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
   } = vm;
   const paragraphQuiz = activeReviewTestSessionRuntime?.paragraphQuiz ?? null;
   const pqStr = str.paragraphQuiz;
+  const locale = useLocale();
 
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [blankState, setBlankState] = useState<Record<string, ParagraphQuizBlankProgress>>({});
@@ -55,6 +66,7 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [revealOpenSpanId, setRevealOpenSpanId] = useState<string | null>(null);
+  const [rewardedIngredients, setRewardedIngredients] = useState<RewardedIngredient[] | null>(null);
   const loadedSessionIdRef = useRef<string | null>(null);
 
   const blanksBySpanId = useMemo((): Map<string, ParagraphQuizBlank> => {
@@ -128,8 +140,25 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
     }).catch((error) => console.error("Failed to autosave paragraph-quiz progress", error));
   }
 
+  async function completeSessionAndReturn() {
+    if (!activeReviewTestSession) return;
+    try {
+      await completeReviewTestSession(activeReviewTestSession.id);
+      vm.returnToDueReviewAfterReviewTestSession("completed", activeReviewTestSession.name);
+    } catch (error) {
+      console.error("Failed to complete paragraph-quiz review test session:", error);
+      setNotice(pqStr.reviewTestSession.completeError.replace("{name}", activeReviewTestSession.name));
+    }
+  }
+
+  function handleRewardContinue() {
+    setRewardedIngredients(null);
+    void completeSessionAndReturn();
+  }
+
   async function finishSession() {
     if (!activeReviewTestSession) return;
+    let quizSessionId: string | null = null;
     try {
       const gradeData = buildParagraphQuizGradeData(history);
       const durationSeconds = sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : 0;
@@ -146,17 +175,28 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
         coinsEarned: calculateSessionCoins(gradeData),
       };
       await recordQuizSession(session);
+      quizSessionId = session.id;
     } catch (error) {
       console.error("Failed to save paragraph-quiz session:", error);
     }
 
-    try {
-      await completeReviewTestSession(activeReviewTestSession.id);
-      vm.returnToDueReviewAfterReviewTestSession("completed", activeReviewTestSession.name);
-    } catch (error) {
-      console.error("Failed to complete paragraph-quiz review test session:", error);
-      setNotice(pqStr.reviewTestSession.completeError.replace("{name}", activeReviewTestSession.name));
+    // Ingredient reward (feature spec 2026-08-22-paragraph-quiz-ingredient-reward.md):
+    // a failure here, or an empty result (no unlocked recipes / empty pool /
+    // already rewarded), must never block normal completion -- fall straight
+    // through to completeSessionAndReturn exactly as before this feature.
+    if (quizSessionId) {
+      try {
+        const rewards = await rewardRandomIngredients(quizSessionId);
+        if (rewards.length > 0) {
+          setRewardedIngredients(rewards);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to reward ingredients for paragraph-quiz session:", error);
+      }
     }
+
+    await completeSessionAndReturn();
   }
 
   async function handlePlacement(bankSpanId: string, targetSpanId: string) {
@@ -271,6 +311,57 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
 
   if (!isFillTestReviewPage || !paragraphQuiz) {
     return null;
+  }
+
+  if (rewardedIngredients) {
+    const rewardStr = pqStr.reward;
+    const headline = buildRewardHeadline(rewardedIngredients.length, rewardStr);
+
+    return (
+      <section className="space-y-3 rounded-lg border p-4">
+        <h2 className="font-medium">{pqStr.pageLabel.replace("{name}", activeReviewTestSession?.name ?? "")}</h2>
+        <div className="relative flex flex-col items-center gap-5 overflow-hidden rounded-3xl border-2 border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-8 shadow-[0_18px_38px_rgba(166,128,42,0.14)]">
+          <div className="text-center">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#8b6f2f]">{rewardStr.eyebrow}</p>
+            <h1 className="mt-1 text-2xl font-extrabold text-[#24423a]">{headline}</h1>
+            <p className="mt-1 text-sm text-[#6b5a3a]">{rewardStr.subtext}</p>
+          </div>
+
+          <div className="grid w-full max-w-lg grid-cols-3 gap-4">
+            {rewardedIngredients.map((ingredient) => {
+              const label = resolveShopLocalizedString(
+                ingredient.labelI18n ?? { en: ingredient.ingredientKey, zh: ingredient.ingredientKey },
+                locale,
+                ingredient.ingredientKey
+              );
+              return (
+                <div
+                  key={ingredient.ingredientKey}
+                  className="flex flex-col items-center gap-2 rounded-2xl border border-[#eadfbe] bg-white p-3 shadow-[0_8px_18px_rgba(166,128,42,0.08)]"
+                >
+                  <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-2">
+                    {ingredient.iconPath ? (
+                      <img src={ingredient.iconPath} alt={label} className="h-full w-full object-contain" />
+                    ) : (
+                      <span className="text-center text-[10px] font-semibold text-[#9a8f79]">{label}</span>
+                    )}
+                  </div>
+                  <span className="text-center text-sm font-bold text-gray-900">{label}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleRewardContinue}
+            className="btn-primary rounded-full border-2 px-8 py-3 text-base font-bold"
+          >
+            {rewardStr.continueButton}
+          </button>
+        </div>
+      </section>
+    );
   }
 
   const page = paragraphQuiz.pages[currentPageIndex];

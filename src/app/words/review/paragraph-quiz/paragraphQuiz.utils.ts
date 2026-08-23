@@ -116,3 +116,15 @@ export function resolvePhraseRevealContent(vocabPhrase: VocabPhrase): ParagraphQ
     example: vocabPhrase.examples.find((example) => example.includeInFillTest),
   };
 }
+
+/**
+ * Ingredient-reward panel headline (feature spec 2026-08-22-paragraph-quiz-
+ * ingredient-reward.md) -- singular/plural English needs picking a different
+ * string, not just interpolating a count into one template.
+ */
+export function buildRewardHeadline(
+  count: number,
+  strings: { headlineSingular: string; headlinePlural: string }
+): string {
+  return count === 1 ? strings.headlineSingular : strings.headlinePlural.replace("{count}", String(count));
+}

@@ -339,6 +339,13 @@ export const wordsStrings = {
         popupCloseButton: "Close",
         noContentMessage: "No extra info for this word yet.",
       },
+      reward: {
+        eyebrow: "Quiz complete!",
+        headlineSingular: "You earned 1 ingredient!",
+        headlinePlural: "You earned {count} ingredients!",
+        subtext: "Take them back to the kitchen to cook something new.",
+        continueButton: "Continue",
+      },
       emptyState: {
         noSessionTitle: "No quiz session is active.",
         noSessionBody: "Start from Due Review to choose a packaged paragraph quiz first.",
@@ -1628,6 +1635,13 @@ export const wordsStrings = {
         pronunciationLabel: "读音",
         popupCloseButton: "关闭",
         noContentMessage: "这个词还没有更多内容。",
+      },
+      reward: {
+        eyebrow: "测验完成！",
+        headlineSingular: "你获得了 1 个食材！",
+        headlinePlural: "你获得了 {count} 个食材！",
+        subtext: "把它们带回厨房，做点新东西吧！",
+        continueButton: "继续",
       },
       emptyState: {
         noSessionTitle: "当前没有正在进行的测验。",

@@ -25,6 +25,7 @@ import type {
   CoinRedemption,
   RedeemCoinsResult,
   CoinBreakdown,
+  RewardedIngredient,
 } from "./shop.types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade, GradeResult } from "./scheduler";
@@ -1417,6 +1418,51 @@ export async function unlockShopRecipe(recipeId: string): Promise<UnlockShopReci
   });
   if (error) throw new Error(`unlockShopRecipe: ${error.message}`);
   return normalizeUnlockShopRecipeResult(data);
+}
+
+interface SupabaseRewardedIngredientRow {
+  ingredient_key: string;
+  label_i18n?: unknown;
+  icon_path?: string | null;
+}
+
+function toRewardedIngredient(row: SupabaseRewardedIngredientRow): RewardedIngredient {
+  return {
+    ingredientKey: canonicalizeShopIngredientKey(row.ingredient_key),
+    ...(typeof row.icon_path === "string"
+      ? { iconPath: row.icon_path.trim() || null }
+      : {}),
+    ...(row.label_i18n && typeof row.label_i18n === "object"
+      ? {
+          labelI18n: {
+            en:
+              typeof (row.label_i18n as { en?: unknown }).en === "string"
+                ? ((row.label_i18n as { en: string }).en ?? "").trim()
+                : "",
+            zh:
+              typeof (row.label_i18n as { zh?: unknown }).zh === "string"
+                ? ((row.label_i18n as { zh: string }).zh ?? "").trim()
+                : "",
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * Rewards up to 3 (server-decided, see reward_random_ingredients) random,
+ * distinct ingredients pooled across every recipe the caller has unlocked,
+ * for finishing a paragraph-quiz session (paragraph-quiz-ingredient-reward,
+ * 2026-08-22). Returns an empty array when nothing is unlocked, the pool is
+ * empty, or this quiz_session_id was already rewarded -- never an error for
+ * those cases. Callers must not treat an empty result as a failure.
+ */
+export async function rewardRandomIngredients(quizSessionId: string): Promise<RewardedIngredient[]> {
+  const { data, error } = await supabase.rpc("reward_random_ingredients", {
+    p_quiz_session_id: quizSessionId,
+  });
+  if (error) throw new Error(`rewardRandomIngredients: ${error.message}`);
+  return ((data ?? []) as SupabaseRewardedIngredientRow[]).map(toRewardedIngredient);
 }
 
 // ─── Coin Redemptions ────────────────────────────────────────────────────────
