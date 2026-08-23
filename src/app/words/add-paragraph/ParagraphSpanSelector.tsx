@@ -122,6 +122,20 @@ function isTokenWithinRange(token: SentenceRenderToken, range: ParagraphSpanRang
 }
 
 /**
+ * Hover tooltip text for one token, matching the same three-state legend
+ * (known/unknown/selected) that drives the token's border/background color.
+ * Selected takes priority over known/unknown, mirroring `colorClass` below.
+ */
+export function getTokenTooltip(
+  known: boolean,
+  isSelected: boolean,
+  str: Pick<AddParagraphStrings["selector"], "legendKnown" | "legendUnknown" | "legendSelected">
+): string {
+  if (isSelected) return str.legendSelected;
+  return known ? str.legendKnown : str.legendUnknown;
+}
+
+/**
  * Groups adjacent tokens that resolve to the SAME committed selectedRanges
  * entry into one render group, so a multi-character phrase selection can be
  * drawn as one continuous pill instead of N individually-bordered boxes
@@ -241,7 +255,7 @@ export default function ParagraphSpanSelector({
   }
 
   return (
-    <span className="inline-flex flex-wrap items-end gap-0.5 select-none" title={str.legendKnown}>
+    <span className="inline-flex flex-wrap items-end gap-0.5 select-none">
       {groupTokensForSelection(tokens, selectedRanges).map((group) => {
         if (group.tokens.length > 1) {
           const range: ParagraphSpanRange = {
@@ -261,6 +275,7 @@ export default function ParagraphSpanSelector({
               tabIndex={0}
               aria-pressed
               aria-label={`${text} (${str.legendSelected})`}
+              title={str.legendSelected}
               className="inline-flex cursor-pointer rounded px-1 py-0.5 border-2 border-[#3d6cff] bg-[#dbe6ff]"
               onClick={deselectGroup}
               onKeyDown={(event) => {
@@ -298,6 +313,7 @@ export default function ParagraphSpanSelector({
             : "border-transparent bg-[#fff1cd]";
 
         const ariaLabel = known ? `${token.text} (${str.legendKnown})` : `${token.text} (${str.legendUnknown})`;
+        const title = getTokenTooltip(known, isSelected, str);
         const pinyin = token.kind === "phrase" ? (vocabPhrasePinyinByPhrase.get(token.text) ?? "") : "";
 
         return (
@@ -308,6 +324,7 @@ export default function ParagraphSpanSelector({
             tabIndex={0}
             aria-pressed={isSelected}
             aria-label={ariaLabel}
+            title={title}
             className={`${baseClass} ${colorClass}`}
             onMouseDown={() => handleTokenDragStart(tokenIndex, token)}
             onMouseEnter={() => handleTokenMouseEnter(tokenIndex, token)}

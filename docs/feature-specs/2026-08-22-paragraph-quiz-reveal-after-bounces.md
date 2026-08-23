@@ -4,6 +4,8 @@
 
 Extends the already-shipped paragraph quiz runtime (`docs/feature-specs/2026-08-19-paragraph-quiz-runtime.md`, Item I Phase 3, shipped 2026-08-19). No Tier 2 gate re-check needed — that exception was already exercised and authorized for the paragraph quiz as a whole; this spec only adds a display feature on top of an already-runnable quiz mode. No `AI_CONTRACT.md §2` scope boundary is triggered (no schema/RLS/route/scheduler/AI change) — no "authorized" needed.
 
+**Fully shipped 2026-08-23** — manual UI QA against the actual app confirmed all acceptance criteria (see below).
+
 **Live QA correction, 2026-08-22 (fix 1):** the initial implementation placed the purple styling and Hint badge on the blank pill inside the paragraph text. Manual testing found this wrong — the affordance belongs on the corresponding **word-bank item** instead (the draggable word the child picks from), not the "?" placeholder in the reading text. This doc is updated throughout to reflect the corrected (bank-item) placement.
 
 **Live QA correction, 2026-08-22 (fix 2):** fix 1 still read eligibility from `blankState[spanId].retryCount` — which counts wrong attempts **at a target blank**, from whichever bank items were dropped there, not wrong attempts **by a specific bank item** across whichever blanks it was tried on. Manual testing found this wrong too: if a child drags word B onto the wrong blank three times (across one or several different blanks), B itself should light up — not whatever word happens to be the *correct* answer for whichever blank absorbed those three wrong drops. These are genuinely different counters keyed by the same `spanId` space but counting different things. Fixed by adding a second, independent, persisted counter — `wrongDragCounts`, keyed by the DRAGGED (bank) item's own `spanId` — used for reveal eligibility instead of `retryCount`. `retryCount` is untouched and still exclusively drives `deriveParagraphBlankTier` grading. This doc is updated throughout to reflect the corrected (per-dragged-item) counter.
@@ -116,13 +118,13 @@ UI layer only. No Domain (`src/lib/`) change beyond the new pure helpers, which 
 
 - [x] A word-bank item's button turns purple once IT (not its target blank) has been dragged wrong 3 times cumulative across every blank it was tried on, and stays purple thereafter while it remains in the bank (corrected 2026-08-22, fix 1 — bank item not blank pill; fix 2 — counts wrong drags of this item, not wrong attempts at its blank).
 - [x] A "Hint"/提示 badge appears next to a reveal-eligible bank item, in both EN and ZH.
-- [ ] Clicking the Hint badge opens a popup with flashcard-style content (all matching pronunciation entries) for a character-backed item, or phrase/pinyin/meaning/first-example content for a phrase-backed item.
-- [ ] Clicking the Hint badge never calls any grading/coin/scheduler function, never selects the bank item for placement, and never changes `blankState`/`retryCount`.
-- [ ] Only one reveal popup is open at a time; opening a second bank item's Hint badge replaces the first popup's content.
-- [ ] The blank still requires a correct drag/drop placement to be filled — reveal does not auto-fill or skip it.
-- [ ] Reveal eligibility (purple state) survives a pause/resume of the session, via the new `wrongDragCounts` progress-data field.
-- [ ] A resumed session started before fix 2 shipped (no `wrongDragCounts` in its saved JSON) loads without error, with every item's wrong-drag count defaulting to 0.
-- [ ] No new route, table, column, RPC, or RLS policy is introduced (jsonb `progress_data` field addition only).
+- [x] Clicking the Hint badge opens a popup with flashcard-style content (all matching pronunciation entries) for a character-backed item, or phrase/pinyin/meaning/first-example content for a phrase-backed item. Confirmed via manual UI QA, 2026-08-23.
+- [x] Clicking the Hint badge never calls any grading/coin/scheduler function, never selects the bank item for placement, and never changes `blankState`/`retryCount`. Confirmed via manual UI QA, 2026-08-23.
+- [x] Only one reveal popup is open at a time; opening a second bank item's Hint badge replaces the first popup's content. Confirmed via manual UI QA, 2026-08-23.
+- [x] The blank still requires a correct drag/drop placement to be filled — reveal does not auto-fill or skip it. Confirmed via manual UI QA, 2026-08-23.
+- [x] Reveal eligibility (purple state) survives a pause/resume of the session, via the new `wrongDragCounts` progress-data field. Confirmed via manual UI QA, 2026-08-23.
+- [x] A resumed session started before fix 2 shipped (no `wrongDragCounts` in its saved JSON) loads without error, with every item's wrong-drag count defaulting to 0. Confirmed via manual UI QA, 2026-08-23.
+- [x] No new route, table, column, RPC, or RLS policy is introduced (jsonb `progress_data` field addition only).
 
 ## Open questions
 

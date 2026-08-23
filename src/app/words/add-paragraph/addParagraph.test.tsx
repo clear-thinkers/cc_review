@@ -12,9 +12,12 @@ import type { ParagraphSpanRange } from "./addParagraph.types";
 import {
   buildSentenceRenderTokens,
   computeDragSelectionRange,
+  getTokenTooltip,
   groupTokensForSelection,
   type SentenceRenderToken,
 } from "./ParagraphSpanSelector";
+
+const legendStr = { legendKnown: "已认识", legendUnknown: "未认识", legendSelected: "已选择" };
 
 describe("buildSentenceRenderTokens", () => {
   it("emits one character token per unmatched Hanzi, flagging known vs unknown", () => {
@@ -135,5 +138,23 @@ describe("groupTokensForSelection", () => {
     const selectedRanges: ParagraphSpanRange[] = [{ startOffset: 0, endOffset: 1 }];
     const groups = groupTokensForSelection(tokens, selectedRanges);
     expect(groups.map((g) => g.tokens.length)).toEqual([1, 1, 1, 1]);
+  });
+});
+
+describe("getTokenTooltip", () => {
+  it("returns the unknown legend for an unselected, unknown token", () => {
+    expect(getTokenTooltip(false, false, legendStr)).toBe("未认识");
+  });
+
+  it("returns the known legend for an unselected, known token", () => {
+    expect(getTokenTooltip(true, false, legendStr)).toBe("已认识");
+  });
+
+  it("returns the selected legend for a selected unknown token, taking priority over known state", () => {
+    expect(getTokenTooltip(false, true, legendStr)).toBe("已选择");
+  });
+
+  it("returns the selected legend for a selected known token", () => {
+    expect(getTokenTooltip(true, true, legendStr)).toBe("已选择");
   });
 });
