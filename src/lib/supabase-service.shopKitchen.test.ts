@@ -20,7 +20,7 @@ import {
   listShopCookedDishes,
   listShopIngredientConsumptions,
   listShopIngredientRewards,
-  moveShopCookedDish,
+  organizeShopKitchenCountertop,
 } from "./supabase-service";
 
 function mockSession(userId = "user-1", familyId = "family-1") {
@@ -122,7 +122,8 @@ describe("listShopCookedDishes", () => {
           id: "dish-1",
           user_id: "user-1",
           recipe_id: "recipe-1",
-          shelf_category: "drinks",
+          location: "shelf",
+          special_ingredient_keys: ["strawberry"],
           cooked_at: "2026-08-23T00:00:00.000Z",
         },
       ],
@@ -139,13 +140,14 @@ describe("listShopCookedDishes", () => {
         id: "dish-1",
         userId: "user-1",
         recipeId: "recipe-1",
-        shelfCategory: "drinks",
+        location: "shelf",
+        specialIngredientKeys: ["strawberry"],
         cookedAt: new Date("2026-08-23T00:00:00.000Z").getTime(),
       },
     ]);
   });
 
-  it("falls back to 'default' for an unrecognized shelf_category value", async () => {
+  it("falls back to 'countertop' for an unrecognized location value", async () => {
     const builder = { select: vi.fn(), eq: vi.fn(), order: vi.fn() };
     builder.select.mockReturnValue(builder);
     builder.eq.mockReturnValue(builder);
@@ -155,7 +157,7 @@ describe("listShopCookedDishes", () => {
           id: "dish-1",
           user_id: "user-1",
           recipe_id: "recipe-1",
-          shelf_category: "garbage",
+          location: "garbage",
           cooked_at: "2026-08-23T00:00:00.000Z",
         },
       ],
@@ -164,7 +166,7 @@ describe("listShopCookedDishes", () => {
     fromMock.mockReturnValue(builder);
 
     const result = await listShopCookedDishes();
-    expect(result[0].shelfCategory).toBe("default");
+    expect(result[0].location).toBe("countertop");
   });
 });
 
@@ -174,27 +176,61 @@ describe("cookShopRecipe", () => {
     mockSession();
   });
 
-  it("calls cook_shop_recipe with the given recipe id and maps a success result", async () => {
+  it("calls cook_shop_recipe with the given recipe id and no special ingredient keys by default", async () => {
     rpcMock.mockResolvedValue({
       data: {
         success: true,
         code: "cooked",
         dishId: "dish-1",
         recipeId: "recipe-1",
-        shelfCategory: "default",
+        location: "countertop",
+        specialIngredientKeys: [],
       },
       error: null,
     });
 
     const result = await cookShopRecipe("recipe-1");
 
-    expect(rpcMock).toHaveBeenCalledWith("cook_shop_recipe", { p_recipe_id: "recipe-1" });
+    expect(rpcMock).toHaveBeenCalledWith("cook_shop_recipe", {
+      p_recipe_id: "recipe-1",
+      p_special_ingredient_keys: [],
+    });
     expect(result).toEqual({
       success: true,
       code: "cooked",
       dishId: "dish-1",
       recipeId: "recipe-1",
-      shelfCategory: "default",
+      location: "countertop",
+      specialIngredientKeys: [],
+    });
+  });
+
+  it("passes selected special ingredient keys through to the RPC and the mapped result", async () => {
+    rpcMock.mockResolvedValue({
+      data: {
+        success: true,
+        code: "cooked",
+        dishId: "dish-1",
+        recipeId: "recipe-1",
+        location: "countertop",
+        specialIngredientKeys: ["strawberry"],
+      },
+      error: null,
+    });
+
+    const result = await cookShopRecipe("recipe-1", ["strawberry"]);
+
+    expect(rpcMock).toHaveBeenCalledWith("cook_shop_recipe", {
+      p_recipe_id: "recipe-1",
+      p_special_ingredient_keys: ["strawberry"],
+    });
+    expect(result).toEqual({
+      success: true,
+      code: "cooked",
+      dishId: "dish-1",
+      recipeId: "recipe-1",
+      location: "countertop",
+      specialIngredientKeys: ["strawberry"],
     });
   });
 
@@ -224,32 +260,29 @@ describe("cookShopRecipe", () => {
   });
 });
 
-describe("moveShopCookedDish", () => {
+describe("organizeShopKitchenCountertop", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSession();
   });
 
-  it("calls move_shop_cooked_dish with the dish id and target shelf category", async () => {
+  it("calls organize_shop_kitchen_countertop with no arguments and maps a success result", async () => {
     rpcMock.mockResolvedValue({
-      data: { success: true, code: "moved", dishId: "dish-1", shelfCategory: "drinks" },
+      data: { success: true, code: "organized", movedCount: 3 },
       error: null,
     });
 
-    const result = await moveShopCookedDish("dish-1", "drinks");
+    const result = await organizeShopKitchenCountertop();
 
-    expect(rpcMock).toHaveBeenCalledWith("move_shop_cooked_dish", {
-      p_dish_id: "dish-1",
-      p_shelf_category: "drinks",
-    });
-    expect(result).toEqual({ success: true, code: "moved", dishId: "dish-1", shelfCategory: "drinks" });
+    expect(rpcMock).toHaveBeenCalledWith("organize_shop_kitchen_countertop", {});
+    expect(result).toEqual({ success: true, code: "organized", movedCount: 3 });
   });
 
   it("throws when the RPC errors", async () => {
     rpcMock.mockResolvedValue({ data: null, error: { message: "boom" } });
 
-    await expect(moveShopCookedDish("dish-1", "drinks")).rejects.toThrow(
-      "moveShopCookedDish: boom"
+    await expect(organizeShopKitchenCountertop()).rejects.toThrow(
+      "organizeShopKitchenCountertop: boom"
     );
   });
 });

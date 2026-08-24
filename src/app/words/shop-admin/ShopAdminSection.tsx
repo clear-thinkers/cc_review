@@ -10,7 +10,7 @@ import {
   parseShopIngredientQuantity,
   resolvePlainShopRecipeIconPath,
 } from "@/lib/shop";
-import type { ShopCookMethod, ShopIngredient, ShopLocale, ShopRecipe } from "../shop/shop.types";
+import type { ShopCookMethod, ShopFoodType, ShopIngredient, ShopLocale, ShopRecipe } from "../shop/shop.types";
 import {
   canonicalizeShopIngredientKey,
   type ShopAdminIngredientCatalogItem,
@@ -19,6 +19,7 @@ import {
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
   SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES,
+  SHOP_RECIPE_TITLE_MAX,
   areShopAdminIngredientDraftsEqual,
   areShopRecipeAdminDraftsEqual,
   buildShopAdminIngredientDrafts,
@@ -331,6 +332,10 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     updateDraft((current) => ({ ...current, cookMethod: value }));
   }
 
+  function updateFoodType(value: ShopFoodType | null): void {
+    updateDraft((current) => ({ ...current, foodType: value }));
+  }
+
   function updateIngredientName(
     type: "baseIngredients" | "specialIngredients",
     targetLocale: ShopLocale,
@@ -478,6 +483,22 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         return {
           ...rule,
           match: Array.from(new Set(nextMatch)).sort((left, right) => left.localeCompare(right)),
+        };
+      }),
+    }));
+  }
+
+  function updateVariantRuleTitle(ruleIndex: number, ruleLocale: "en" | "zh", value: string): void {
+    updateDraft((current) => ({
+      ...current,
+      variantIconRules: current.variantIconRules.map((rule, currentIndex) => {
+        if (currentIndex !== ruleIndex) {
+          return rule;
+        }
+
+        return {
+          ...rule,
+          titleI18n: { ...(rule.titleI18n ?? { en: "", zh: "" }), [ruleLocale]: value },
         };
       }),
     }));
@@ -885,24 +906,17 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                   />
                 </label>
 
-                <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                <div className="mt-4">
                   <label className="block">
-                    <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
+                    <span className={LABEL}>
+                      {locale === "en"
+                        ? strings.ingredients.nameEnglish
+                        : strings.ingredients.nameChinese}
+                    </span>
                     <input
-                      value={ingredient.label.en}
+                      value={ingredient.label[locale]}
                       onChange={(event) =>
-                        updateManagedIngredientLabel(ingredient.draftId, "en", event.target.value)
-                      }
-                      className={INPUT}
-                      maxLength={60}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className={LABEL}>{strings.ingredients.nameChinese}</span>
-                    <input
-                      value={ingredient.label.zh}
-                      onChange={(event) =>
-                        updateManagedIngredientLabel(ingredient.draftId, "zh", event.target.value)
+                        updateManagedIngredientLabel(ingredient.draftId, locale, event.target.value)
                       }
                       className={INPUT}
                       maxLength={60}
@@ -1104,39 +1118,24 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               <div>
                 <p className={LABEL}>{strings.form.basicInfo}</p>
                 <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                  <label className="block">
-                    <span className={LABEL}>{strings.fields.titleEnglish}</span>
+                  <label className="block xl:col-span-2">
+                    <span className={LABEL}>
+                      {locale === "en" ? strings.fields.titleEnglish : strings.fields.titleChinese}
+                    </span>
                     <input
-                      value={draft.title.en}
-                      onChange={(event) => updateText("title", "en", event.target.value)}
-                      className={INPUT}
-                      maxLength={80}
-                    />
-                  </label>
-                  <label className="block">
-                    <span className={LABEL}>{strings.fields.titleChinese}</span>
-                    <input
-                      value={draft.title.zh}
-                      onChange={(event) => updateText("title", "zh", event.target.value)}
+                      value={draft.title[locale]}
+                      onChange={(event) => updateText("title", locale, event.target.value)}
                       className={INPUT}
                       maxLength={80}
                     />
                   </label>
                   <label className="block xl:col-span-2">
-                    <span className={LABEL}>{strings.fields.introEnglish}</span>
+                    <span className={LABEL}>
+                      {locale === "en" ? strings.fields.introEnglish : strings.fields.introChinese}
+                    </span>
                     <textarea
-                      value={draft.intro.en}
-                      onChange={(event) => updateText("intro", "en", event.target.value)}
-                      className={INPUT}
-                      rows={3}
-                      maxLength={240}
-                    />
-                  </label>
-                  <label className="block xl:col-span-2">
-                    <span className={LABEL}>{strings.fields.introChinese}</span>
-                    <textarea
-                      value={draft.intro.zh}
-                      onChange={(event) => updateText("intro", "zh", event.target.value)}
+                      value={draft.intro[locale]}
+                      onChange={(event) => updateText("intro", locale, event.target.value)}
                       className={INPUT}
                       rows={3}
                       maxLength={240}
@@ -1161,6 +1160,30 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     </select>
                     <p className="mt-1 text-xs leading-5 text-[var(--shop-admin-support-text)]">
                       {strings.fields.cookMethodHelper}
+                    </p>
+                  </label>
+                  <label className="block xl:col-span-2">
+                    <span className={LABEL}>{strings.fields.foodType}</span>
+                    <select
+                      value={draft.foodType ?? ""}
+                      onChange={(event) =>
+                        updateFoodType(
+                          event.target.value === "drinks" ||
+                            event.target.value === "hotmeal" ||
+                            event.target.value === "desserts"
+                            ? event.target.value
+                            : null
+                        )
+                      }
+                      className={INPUT}
+                    >
+                      <option value="">{strings.fields.foodTypeNone}</option>
+                      <option value="drinks">{strings.fields.foodTypeDrinks}</option>
+                      <option value="hotmeal">{strings.fields.foodTypeHotMeal}</option>
+                      <option value="desserts">{strings.fields.foodTypeDesserts}</option>
+                    </select>
+                    <p className="mt-1 text-xs leading-5 text-[var(--shop-admin-support-text)]">
+                      {strings.fields.foodTypeHelper}
                     </p>
                   </label>
                 </div>
@@ -1254,31 +1277,22 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                         </div>
 
                         {selectedIngredientCatalogEntry ? null : (
-                          <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                          <div className="mt-4">
                             <label className="block">
-                              <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
+                              <span className={LABEL}>
+                                {locale === "en"
+                                  ? strings.ingredients.nameEnglish
+                                  : strings.ingredients.nameChinese}
+                              </span>
                               <input
-                                value={englishIngredient.name}
-                                onChange={(event) =>
-                                  updateIngredientName(
-                                    "baseIngredients",
-                                    "en",
-                                    ingredientIndex,
-                                    event.target.value
-                                  )
+                                value={
+                                  (locale === "en" ? englishIngredient : chineseIngredient)?.name ??
+                                  ""
                                 }
-                                className={INPUT}
-                                maxLength={60}
-                              />
-                            </label>
-                            <label className="block">
-                              <span className={LABEL}>{strings.ingredients.nameChinese}</span>
-                              <input
-                                value={chineseIngredient?.name ?? ""}
                                 onChange={(event) =>
                                   updateIngredientName(
                                     "baseIngredients",
-                                    "zh",
+                                    locale,
                                     ingredientIndex,
                                     event.target.value
                                   )
@@ -1414,31 +1428,22 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                           </div>
 
                           {selectedIngredientCatalogEntry ? null : (
-                            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                            <div className="mt-4">
                               <label className="block">
-                                <span className={LABEL}>{strings.ingredients.nameEnglish}</span>
+                                <span className={LABEL}>
+                                  {locale === "en"
+                                    ? strings.ingredients.nameEnglish
+                                    : strings.ingredients.nameChinese}
+                                </span>
                                 <input
-                                  value={englishIngredient.name}
-                                  onChange={(event) =>
-                                    updateIngredientName(
-                                      "specialIngredients",
-                                      "en",
-                                      ingredientIndex,
-                                      event.target.value
-                                    )
+                                  value={
+                                    (locale === "en" ? englishIngredient : chineseIngredient)
+                                      ?.name ?? ""
                                   }
-                                  className={INPUT}
-                                  maxLength={60}
-                                />
-                              </label>
-                              <label className="block">
-                                <span className={LABEL}>{strings.ingredients.nameChinese}</span>
-                                <input
-                                  value={chineseIngredient?.name ?? ""}
                                   onChange={(event) =>
                                     updateIngredientName(
                                       "specialIngredients",
-                                      "zh",
+                                      locale,
                                       ingredientIndex,
                                       event.target.value
                                     )
@@ -1547,6 +1552,33 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                               {strings.specialty.variantPath}
                             </p>
                             <p className="mt-2 break-all text-xs text-[var(--shop-admin-badge-soft-text)]">{rule.iconPath}</p>
+
+                            {!isPlainRule ? (
+                              <div className="mt-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--shop-admin-label-text)]">
+                                  {strings.specialty.variantTitleLabel}
+                                </p>
+                                <p className="mt-1 text-xs text-[var(--shop-admin-support-text)]">
+                                  {strings.specialty.variantTitleHelper}
+                                </p>
+                                <div className="mt-2">
+                                  <input
+                                    type="text"
+                                    value={rule.titleI18n?.[locale] ?? ""}
+                                    onChange={(event) =>
+                                      updateVariantRuleTitle(ruleIndex, locale, event.target.value)
+                                    }
+                                    placeholder={
+                                      locale === "en"
+                                        ? strings.specialty.variantTitleEnPlaceholder
+                                        : strings.specialty.variantTitleZhPlaceholder
+                                    }
+                                    maxLength={SHOP_RECIPE_TITLE_MAX}
+                                    className="w-full rounded-lg border bg-[var(--shop-admin-panel-bg)] px-3 py-2 text-sm text-[var(--shop-admin-text-dark)] [border-color:var(--shop-admin-option-border)]"
+                                  />
+                                </div>
+                              </div>
+                            ) : null}
 
                             {variantIngredientOptions.length === 0 ? (
                               <p className="mt-4 rounded-xl border bg-[var(--shop-admin-icon-bg)] px-3 py-2 text-sm text-[var(--shop-admin-support-text)] [border-color:var(--shop-admin-card-border)]">

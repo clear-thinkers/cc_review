@@ -609,6 +609,12 @@ export const wordsStrings = {
         cookMethodNone: "None (not cookable)",
         cookMethodStove: "Stove",
         cookMethodOven: "Oven",
+        foodType: "Food Type (Shop Kitchen)",
+        foodTypeHelper: "Which shelf tab a cooked dish is organized under. Required once a Cook Method is set.",
+        foodTypeNone: "None",
+        foodTypeDrinks: "Drinks",
+        foodTypeHotMeal: "Hot Meal",
+        foodTypeDesserts: "Desserts",
       },
       ingredients: {
         iconIngredient: "Icon Ingredient",
@@ -675,6 +681,11 @@ export const wordsStrings = {
         variantPath: "Variant Image Path",
         variantNoMapped: "No mapped ingredients yet.",
         variantNoOptions: "Add special ingredient options above before configuring variant mappings.",
+        variantTitleLabel: "Variant Name (optional)",
+        variantTitleHelper:
+          "Shown to the child instead of the recipe's regular name when this exact combination is cooked. Leave blank to keep using the recipe's name.",
+        variantTitleEnPlaceholder: "e.g. Brown Sugar Milk Tea",
+        variantTitleZhPlaceholder: "例如：黑糖奶茶",
       },
       saveBar: {
         clean: "No unsaved changes.",
@@ -1923,6 +1934,12 @@ export const wordsStrings = {
         cookMethodNone: "无(不可烹饪)",
         cookMethodStove: "炉灶",
         cookMethodOven: "烤箱",
+        foodType: "食物分类(食谱厨房)",
+        foodTypeHelper: "做好的菜会归到架子的哪个分类下。设置了烹饪方式后必须选择分类。",
+        foodTypeNone: "无",
+        foodTypeDrinks: "饮品",
+        foodTypeHotMeal: "热菜",
+        foodTypeDesserts: "甜点",
       },
       ingredients: {
         iconIngredient: "图标材料",
@@ -1985,6 +2002,10 @@ export const wordsStrings = {
         variantPath: "变体图片路径",
         variantNoMapped: "还没有映射材料。",
         variantNoOptions: "请先在上方添加特殊材料选项，再配置变体映射。",
+        variantTitleLabel: "变体名称（可选）",
+        variantTitleHelper: "孩子做出这个组合时会显示这个名字，而不是食谱的原名。留空则继续使用食谱原名。",
+        variantTitleEnPlaceholder: "例如：Brown Sugar Milk Tea",
+        variantTitleZhPlaceholder: "例如：黑糖奶茶",
       },
       saveBar: {
         clean: "没有未保存的更改。",

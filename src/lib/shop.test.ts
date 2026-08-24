@@ -7,9 +7,10 @@ import {
   computeShopCookReadiness,
   getShopRecipeContentForLocale,
   normalizeCookShopRecipeResult,
-  normalizeMoveShopCookedDishResult,
+  normalizeOrganizeKitchenCountertopResult,
   normalizePurchaseShopIngredientResult,
   normalizeShopCookMethod,
+  normalizeShopFoodType,
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedSpecialIngredients,
@@ -22,6 +23,7 @@ import {
   resolveShopIngredientIconPath,
   resolveShopIngredientLabel,
   resolveShopRecipeIconPath,
+  resolveShopRecipeVariantTitle,
 } from "./shop";
 
 describe("canAffordRecipeUnlock", () => {
@@ -100,6 +102,39 @@ describe("resolveShopRecipeIconPath", () => {
   });
 });
 
+describe("resolveShopRecipeVariantTitle", () => {
+  const rules = [
+    { match: [], iconPath: "/rewards/tea_plain.png" },
+    {
+      match: ["brown-sugar"],
+      iconPath: "/rewards/tea_brown-sugar.png",
+      titleI18n: { en: "Brown Sugar Milk Tea", zh: "黑糖奶茶" },
+    },
+    { match: ["jasmine"], iconPath: "/rewards/tea_jasmine.png" },
+  ];
+
+  it("uses the matched rule's own title for the requested locale", () => {
+    expect(resolveShopRecipeVariantTitle(rules, ["brown-sugar"], "zh", "Bubble Tea")).toBe(
+      "黑糖奶茶"
+    );
+    expect(resolveShopRecipeVariantTitle(rules, ["brown-sugar"], "en", "Bubble Tea")).toBe(
+      "Brown Sugar Milk Tea"
+    );
+  });
+
+  it("falls back to the given title when the matched rule has no title override", () => {
+    expect(resolveShopRecipeVariantTitle(rules, ["jasmine"], "en", "Bubble Tea")).toBe("Bubble Tea");
+  });
+
+  it("falls back to the given title when no rule matches at all", () => {
+    expect(resolveShopRecipeVariantTitle([], ["brown-sugar"], "en", "Bubble Tea")).toBe("Bubble Tea");
+  });
+
+  it("falls back to the given title for the plain (no special ingredients) case", () => {
+    expect(resolveShopRecipeVariantTitle(rules, [], "en", "Bubble Tea")).toBe("Bubble Tea");
+  });
+});
+
 describe("normalizeShopVariantIconRules", () => {
   it("trims icon paths and canonicalizes combo match keys", () => {
     expect(
@@ -117,8 +152,18 @@ describe("normalizeShopVariantIconRules", () => {
       {
         match: ["sprinkles", "strawberry"],
         iconPath: "/rewards/donut_combo.png",
+        titleI18n: { en: "", zh: "" },
       },
     ]);
+  });
+
+  it("carries a rule's titleI18n through, defaulting to empty strings when absent", () => {
+    const [withTitle, withoutTitle] = normalizeShopVariantIconRules([
+      { match: [], iconPath: "/rewards/donut_plain.png", titleI18n: { en: " Plain Donut ", zh: "原味甜甜圈" } },
+      { match: ["strawberry"], iconPath: "/rewards/donut_strawberry.png" },
+    ]);
+    expect(withTitle.titleI18n).toEqual({ en: " Plain Donut ", zh: "原味甜甜圈" });
+    expect(withoutTitle.titleI18n).toEqual({ en: "", zh: "" });
   });
 });
 
@@ -453,6 +498,7 @@ describe("getShopRecipeContentForLocale", () => {
           },
           variantIconRules: [{ match: [], iconPath: "/rewards/bubble-tea_plain.png" }],
           cookMethod: null,
+          foodType: null,
         },
         "zh"
       )
@@ -486,6 +532,7 @@ describe("getShopRecipeContentForLocale", () => {
           specialIngredientsI18n: { en: [], zh: [] },
           variantIconRules: [{ match: [], iconPath: "/rewards/cake_plain.png" }],
           cookMethod: null,
+          foodType: null,
         },
         "zh"
       )
@@ -600,6 +647,21 @@ describe("normalizeShopCookMethod", () => {
   });
 });
 
+describe("normalizeShopFoodType", () => {
+  it("accepts drinks, hotmeal, and desserts", () => {
+    expect(normalizeShopFoodType("drinks")).toBe("drinks");
+    expect(normalizeShopFoodType("hotmeal")).toBe("hotmeal");
+    expect(normalizeShopFoodType("desserts")).toBe("desserts");
+  });
+
+  it("returns null for anything else, including not-yet-configured recipes", () => {
+    expect(normalizeShopFoodType(null)).toBeNull();
+    expect(normalizeShopFoodType(undefined)).toBeNull();
+    expect(normalizeShopFoodType("snacks")).toBeNull();
+    expect(normalizeShopFoodType(123)).toBeNull();
+  });
+});
+
 describe("resolveShopIngredientLabel", () => {
   const record = {
     ingredientKey: "milk",
@@ -710,14 +772,35 @@ describe("normalizeCookShopRecipeResult", () => {
         code: "cooked",
         dishId: "dish-1",
         recipeId: "recipe-1",
-        shelfCategory: "default",
+        location: "countertop",
+        specialIngredientKeys: ["strawberry"],
       })
     ).toEqual({
       success: true,
       code: "cooked",
       dishId: "dish-1",
       recipeId: "recipe-1",
-      shelfCategory: "default",
+      location: "countertop",
+      specialIngredientKeys: ["strawberry"],
+    });
+  });
+
+  it("defaults specialIngredientKeys to an empty array when absent from the result", () => {
+    expect(
+      normalizeCookShopRecipeResult({
+        success: true,
+        code: "cooked",
+        dishId: "dish-1",
+        recipeId: "recipe-1",
+        location: "countertop",
+      })
+    ).toEqual({
+      success: true,
+      code: "cooked",
+      dishId: "dish-1",
+      recipeId: "recipe-1",
+      location: "countertop",
+      specialIngredientKeys: [],
     });
   });
 
@@ -735,8 +818,8 @@ describe("normalizeCookShopRecipeResult", () => {
     });
   });
 
-  it("maps recipe_not_cookable, recipe_not_unlocked, and forbidden", () => {
-    for (const code of ["recipe_not_cookable", "recipe_not_unlocked", "forbidden"]) {
+  it("maps recipe_not_cookable, recipe_not_unlocked, countertop_full, and forbidden", () => {
+    for (const code of ["recipe_not_cookable", "recipe_not_unlocked", "countertop_full", "forbidden"]) {
       expect(normalizeCookShopRecipeResult({ success: false, code })).toEqual({
         success: false,
         code,
@@ -759,33 +842,38 @@ describe("normalizeCookShopRecipeResult", () => {
   });
 });
 
-describe("normalizeMoveShopCookedDishResult", () => {
-  it("maps a successful move", () => {
+describe("normalizeOrganizeKitchenCountertopResult", () => {
+  it("maps a successful organize with the moved count", () => {
     expect(
-      normalizeMoveShopCookedDishResult({
+      normalizeOrganizeKitchenCountertopResult({
         success: true,
-        code: "moved",
-        dishId: "dish-1",
-        shelfCategory: "drinks",
+        code: "organized",
+        movedCount: 4,
       })
-    ).toEqual({ success: true, code: "moved", dishId: "dish-1", shelfCategory: "drinks" });
+    ).toEqual({ success: true, code: "organized", movedCount: 4 });
   });
 
-  it("maps forbidden, invalid_shelf_category, and dish_not_found", () => {
-    for (const code of ["forbidden", "invalid_shelf_category", "dish_not_found"]) {
-      expect(normalizeMoveShopCookedDishResult({ success: false, code })).toEqual({
-        success: false,
-        code,
-      });
-    }
+  it("defaults movedCount to 0 when missing", () => {
+    expect(normalizeOrganizeKitchenCountertopResult({ success: true, code: "organized" })).toEqual({
+      success: true,
+      code: "organized",
+      movedCount: 0,
+    });
+  });
+
+  it("maps forbidden", () => {
+    expect(normalizeOrganizeKitchenCountertopResult({ success: false, code: "forbidden" })).toEqual({
+      success: false,
+      code: "forbidden",
+    });
   });
 
   it("falls back to unknown for unrecognised codes or non-object input", () => {
-    expect(normalizeMoveShopCookedDishResult({ success: false, code: "nope" })).toEqual({
+    expect(normalizeOrganizeKitchenCountertopResult({ success: false, code: "nope" })).toEqual({
       success: false,
       code: "unknown",
     });
-    expect(normalizeMoveShopCookedDishResult(undefined)).toEqual({
+    expect(normalizeOrganizeKitchenCountertopResult(undefined)).toEqual({
       success: false,
       code: "unknown",
     });

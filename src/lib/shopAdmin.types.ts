@@ -1,5 +1,6 @@
 import type {
   ShopCookMethod,
+  ShopFoodType,
   ShopIngredient,
   ShopLocalizedValue,
   ShopRecipe,
@@ -15,6 +16,7 @@ import {
   SHOP_INGREDIENT_QUANTITY_MAX,
   SHOP_INGREDIENT_QUANTITY_MIN,
   normalizeShopCookMethod,
+  normalizeShopFoodType,
   normalizeShopVariantMatchKeys,
   parseShopIngredientQuantity,
 } from "./shop";
@@ -44,6 +46,8 @@ export type ShopRecipeAdminDraft = {
   variantIconRules: ShopVariantIconRule[];
   /** null = not cookable in Shop Kitchen (feature spec 2026-08-23-kitchen-page.md). */
   cookMethod: ShopCookMethod | null;
+  /** Which shelf tab a cooked dish is organized under. Required whenever cookMethod is set -- see validateShopRecipeAdminDraft. */
+  foodType: ShopFoodType | null;
 };
 
 export type ShopAdminVariantIngredientOption = {
@@ -238,8 +242,10 @@ export function buildShopRecipeAdminDraft(recipe: ShopRecipe): ShopRecipeAdminDr
     variantIconRules: recipe.variantIconRules.map((rule) => ({
       iconPath: rule.iconPath,
       match: normalizeVariantMatchKeys(rule.match),
+      titleI18n: normalizeLocalizedStringValue(rule.titleI18n),
     })),
     cookMethod: recipe.cookMethod,
+    foodType: recipe.foodType,
   };
 }
 
@@ -292,6 +298,7 @@ function normalizeVariantIconRules(raw: unknown): ShopVariantIconRule[] {
     return {
       iconPath: typeof source.iconPath === "string" ? source.iconPath.trim() : "",
       match: normalizeVariantMatchKeys(source.match),
+      titleI18n: normalizeLocalizedStringValue(source.titleI18n),
     };
   });
 }
@@ -372,6 +379,7 @@ export function removeDeletedIngredientKeysFromVariantIconRules(
     result.push({
       iconPath: rule.iconPath,
       match: nextMatch,
+      titleI18n: normalizeLocalizedStringValue(rule.titleI18n),
     });
     return result;
   }, []);
@@ -458,6 +466,7 @@ export function normalizeShopRecipeAdminDraft(draft: {
   specialIngredients?: unknown;
   variantIconRules?: unknown;
   cookMethod?: unknown;
+  foodType?: unknown;
 }): ShopRecipeAdminDraft {
   return {
     recipeId: typeof draft.recipeId === "string" ? draft.recipeId.trim() : "",
@@ -467,6 +476,7 @@ export function normalizeShopRecipeAdminDraft(draft: {
     specialIngredients: normalizeLocalizedIngredientList(draft.specialIngredients),
     variantIconRules: normalizeVariantIconRules(draft.variantIconRules),
     cookMethod: normalizeShopCookMethod(draft.cookMethod),
+    foodType: normalizeShopFoodType(draft.foodType),
   };
 }
 
@@ -562,6 +572,14 @@ export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): strin
 
   if (normalized.baseIngredients.en.length === 0) {
     errors.push("Add at least one base ingredient.");
+  }
+
+  // A cookable recipe (cookMethod set) must also be sortable once organized
+  // to the shelf -- Shop Kitchen's shelf popup only has three tabs
+  // (Drinks/Hot Meal/Desserts) and no "unsorted" fallback, so a recipe
+  // can't be cookable without also knowing where it belongs.
+  if (normalized.cookMethod !== null && normalized.foodType === null) {
+    errors.push("Food Type is required for a cookable recipe (Shop Kitchen).");
   }
 
   errors.push(
@@ -706,6 +724,7 @@ export function mergeReadonlyVariantIconRules(params: {
     return {
       iconPath: persistedRule.iconPath,
       match: normalizeVariantMatchKeys(draftRule.match),
+      titleI18n: normalizeLocalizedStringValue(draftRule.titleI18n),
     };
   });
 }

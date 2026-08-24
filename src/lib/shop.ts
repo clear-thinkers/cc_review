@@ -9,13 +9,14 @@ import type {
   RedeemCoinsResult,
   RedeemCoinsErrorCode,
   ShopCookMethod,
+  ShopFoodType,
   ShopIngredientLedgerEntry,
   ShopCookReadiness,
-  ShopShelfCategory,
+  ShopDishLocation,
   CookShopRecipeResult,
   CookShopRecipeErrorCode,
-  MoveShopCookedDishResult,
-  MoveShopCookedDishErrorCode,
+  OrganizeKitchenCountertopResult,
+  OrganizeKitchenCountertopErrorCode,
   PurchaseShopIngredientResult,
   PurchaseShopIngredientErrorCode,
 } from "./shop.types";
@@ -66,6 +67,7 @@ export function normalizeShopVariantIconRules(raw: unknown): ShopVariantIconRule
     result.push({
       iconPath,
       match: normalizeShopVariantMatchKeys(source?.match),
+      titleI18n: normalizeShopLocalizedStringValue(source?.titleI18n, ""),
     });
     return result;
   }, []);
@@ -86,10 +88,20 @@ export function canAffordIngredientPurchase(
   return totalCoins >= costCoinsPerUnit * quantity;
 }
 
-export function resolveShopRecipeIconPath(
+/**
+ * Finds the variant rule that best matches a set of active special
+ * ingredient keys -- subset-match, preferring the most specific (longest
+ * `match`) rule; a rule with `match: []` always matches (vacuously, as a
+ * subset of anything), so it naturally serves as the "nothing more specific
+ * matched" fallback with no separate branch needed. Both the resolved icon
+ * and the resolved display name (resolveShopRecipeIconPath /
+ * resolveShopRecipeVariantTitle) are read off the SAME matched rule via this
+ * one function, so they can never disagree about which variant was picked.
+ */
+export function resolveShopRecipeVariant(
   variantIconRules: ShopVariantIconRule[],
   activeSpecialIngredientKeys: string[]
-): string | null {
+): ShopVariantIconRule | null {
   const activeKeys = normalizeShopVariantMatchKeys(activeSpecialIngredientKeys);
   let bestRule: ShopVariantIconRule | null = null;
 
@@ -105,7 +117,35 @@ export function resolveShopRecipeIconPath(
     }
   }
 
-  return bestRule?.iconPath ?? null;
+  return bestRule;
+}
+
+export function resolveShopRecipeIconPath(
+  variantIconRules: ShopVariantIconRule[],
+  activeSpecialIngredientKeys: string[]
+): string | null {
+  return resolveShopRecipeVariant(variantIconRules, activeSpecialIngredientKeys)?.iconPath ?? null;
+}
+
+/**
+ * The display name for a specific special-ingredient combination, e.g.
+ * "黑糖奶茶" for a milk tea recipe cooked with brown sugar -- read from the
+ * SAME matched rule resolveShopRecipeIconPath would use (see
+ * resolveShopRecipeVariant). Falls back to `fallbackTitle` (typically the
+ * recipe's own localized title) when no rule matches, or the matched rule
+ * has no title override for either locale.
+ */
+export function resolveShopRecipeVariantTitle(
+  variantIconRules: ShopVariantIconRule[],
+  activeSpecialIngredientKeys: string[],
+  locale: ShopLocale,
+  fallbackTitle: string
+): string {
+  const matchedRule = resolveShopRecipeVariant(variantIconRules, activeSpecialIngredientKeys);
+  if (!matchedRule?.titleI18n) {
+    return fallbackTitle;
+  }
+  return resolveShopLocalizedString(matchedRule.titleI18n, locale, fallbackTitle);
 }
 
 function isPlainShopIconPath(iconPath: string): boolean {
@@ -609,6 +649,10 @@ export function normalizeShopCookMethod(raw: unknown): ShopCookMethod | null {
     : null;
 }
 
+export function normalizeShopFoodType(raw: unknown): ShopFoodType | null {
+  return raw === "drinks" || raw === "hotmeal" || raw === "desserts" ? raw : null;
+}
+
 /**
  * A child's available count of ingredient X is
  * count(shop_ingredient_rewards where key = X) - count(shop_ingredient_consumptions
@@ -674,12 +718,22 @@ type CookShopRecipeRpcResult = {
   code?: string;
   dishId?: string;
   recipeId?: string;
-  shelfCategory?: string;
+  location?: string;
   missingIngredientKeys?: unknown;
+  specialIngredientKeys?: unknown;
 };
 
-function normalizeShopShelfCategory(raw: unknown): ShopShelfCategory {
-  return raw === "drinks" || raw === "desserts" || raw === "hotmeal" ? raw : "default";
+function normalizeShopDishLocation(raw: unknown): ShopDishLocation {
+  return raw === "shelf" ? "shelf" : "countertop";
+}
+
+/** A dish's recorded special_ingredient_keys (jsonb array of ingredient keys) -- from either a cook_shop_recipe RPC response or a shop_cooked_dishes row. Non-string entries are dropped rather than erroring. */
+export function normalizeShopSpecialIngredientKeys(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((key): key is string => typeof key === "string")
+    .map((key) => canonicalizeShopIngredientKey(key))
+    .filter(Boolean);
 }
 
 export function normalizeCookShopRecipeResult(raw: unknown): CookShopRecipeResult {
@@ -691,7 +745,8 @@ export function normalizeCookShopRecipeResult(raw: unknown): CookShopRecipeResul
       code: "cooked",
       dishId: source.dishId,
       recipeId: source.recipeId,
-      shelfCategory: normalizeShopShelfCategory(source.shelfCategory),
+      location: normalizeShopDishLocation(source.location),
+      specialIngredientKeys: normalizeShopSpecialIngredientKeys(source.specialIngredientKeys),
     };
   }
 
@@ -699,6 +754,7 @@ export function normalizeCookShopRecipeResult(raw: unknown): CookShopRecipeResul
     "forbidden",
     "recipe_not_cookable",
     "recipe_not_unlocked",
+    "countertop_full",
     "insufficient_ingredients",
   ];
   const code = source.code;
@@ -771,35 +827,31 @@ export function normalizePurchaseShopIngredientResult(raw: unknown): PurchaseSho
   };
 }
 
-type MoveShopCookedDishRpcResult = {
+type OrganizeKitchenCountertopRpcResult = {
   success?: boolean;
   code?: string;
-  dishId?: string;
-  shelfCategory?: string;
+  movedCount?: number;
 };
 
-export function normalizeMoveShopCookedDishResult(raw: unknown): MoveShopCookedDishResult {
-  const source = raw && typeof raw === "object" ? (raw as MoveShopCookedDishRpcResult) : {};
+export function normalizeOrganizeKitchenCountertopResult(
+  raw: unknown
+): OrganizeKitchenCountertopResult {
+  const source = raw && typeof raw === "object" ? (raw as OrganizeKitchenCountertopRpcResult) : {};
 
-  if (source.success === true && typeof source.dishId === "string") {
+  if (source.success === true) {
     return {
       success: true,
-      code: "moved",
-      dishId: source.dishId,
-      shelfCategory: normalizeShopShelfCategory(source.shelfCategory),
+      code: "organized",
+      movedCount: typeof source.movedCount === "number" ? source.movedCount : 0,
     };
   }
 
-  const validCodes: MoveShopCookedDishErrorCode[] = [
-    "forbidden",
-    "invalid_shelf_category",
-    "dish_not_found",
-  ];
+  const validCodes: OrganizeKitchenCountertopErrorCode[] = ["forbidden"];
   const code = source.code;
-  const normalizedCode: MoveShopCookedDishErrorCode = validCodes.includes(
-    code as MoveShopCookedDishErrorCode
+  const normalizedCode: OrganizeKitchenCountertopErrorCode = validCodes.includes(
+    code as OrganizeKitchenCountertopErrorCode
   )
-    ? (code as MoveShopCookedDishErrorCode)
+    ? (code as OrganizeKitchenCountertopErrorCode)
     : "unknown";
 
   return { success: false, code: normalizedCode };

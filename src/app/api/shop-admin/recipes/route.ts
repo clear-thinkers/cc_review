@@ -19,6 +19,7 @@ import {
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedTitle,
   normalizeShopCookMethod,
+  normalizeShopFoodType,
 } from "@/lib/shop";
 import { getServerSupabaseClient, supabase } from "@/lib/supabaseClient";
 
@@ -38,6 +39,7 @@ interface SupabaseShopRecipeRow {
   special_ingredient_slots: unknown;
   special_ingredient_slots_i18n?: unknown;
   cook_method?: string | null;
+  food_type?: string | null;
 }
 
 interface SupabaseShopIngredientLabelRow {
@@ -74,6 +76,7 @@ function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
     ),
     variantIconRules: normalizeShopVariantIconRules(row.variant_icon_rules),
     cookMethod: normalizeShopCookMethod(row.cook_method),
+    foodType: normalizeShopFoodType(row.food_type),
   };
 }
 
@@ -205,6 +208,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     specialIngredients: body.specialIngredients,
     variantIconRules: body.variantIconRules,
     cookMethod: body.cookMethod,
+    foodType: body.foodType,
   });
 
   const validationErrors = validateShopRecipeAdminDraft(normalizedDraft);
@@ -298,6 +302,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       special_ingredient_slots_i18n: mergedSpecialIngredients,
       variant_icon_rules: mergedVariantIconRules,
       cook_method: normalizedDraft.cookMethod,
+      food_type: normalizedDraft.foodType,
       updated_at: new Date().toISOString(),
     })
     .eq("id", normalizedDraft.recipeId)

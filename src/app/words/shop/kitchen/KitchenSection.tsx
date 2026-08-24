@@ -1,23 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useLocale } from "@/app/shared/locale";
 import type {
   ShopCookedDish,
+  ShopFoodType,
   ShopIngredientLedgerEntry,
   ShopIngredientPrice,
   ShopRecipe,
   ShopRecipeUnlock,
-  ShopShelfCategory,
 } from "@/lib/shop.types";
 import {
   buildShopIngredientAvailabilityMap,
   buildShopIngredientRecordMap,
   computeShopCookReadiness,
   getShopRecipeContentForLocale,
-  resolvePlainShopRecipeIconPath,
   resolveShopIngredientLabel,
 } from "@/lib/shop";
 import {
@@ -29,27 +28,79 @@ import {
   listShopIngredientRewards,
   listShopRecipeUnlocks,
   listShopRecipes,
-  moveShopCookedDish,
+  organizeShopKitchenCountertop,
 } from "@/lib/supabase-service";
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 import { kitchenStrings } from "./kitchen.strings";
-import { buildKitchenShelvesByCategory, countTotalCookedDishes } from "./kitchen.types";
+import {
+  buildCountertopTiles,
+  buildShelfTilesByFoodType,
+  countCountertopDishes,
+  countTotalCookedDishes,
+  resolveAvailableSpecialIngredients,
+  SHOP_FOOD_TYPES,
+  SHOP_KITCHEN_COUNTERTOP_CAPACITY,
+  type KitchenSpecialIngredientOption,
+} from "./kitchen.types";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
+type KitchenStrings = (typeof kitchenStrings)["en"];
 
-type DragState = {
-  dishId: string;
-  recipeId: string;
-  pointerId: number;
-  x: number;
-  y: number;
-};
+// The btn-nav/btn-secondary/etc. semantic classes (globals.css) are scoped
+// under .kids-page, but modal content here is rendered via createPortal
+// straight onto document.body -- outside that ancestor -- so those classes
+// silently apply no color at all. Portaled buttons use the same gold/cream
+// palette as literal classes instead, matching ShopSection.tsx's existing
+// modal-button precedent (its own portaled modals never use btn-nav either).
+const NAV_BUTTON =
+  "rounded-md border-2 border-[#dcc38a] bg-[#fcf8ef] px-4 py-2 text-sm font-semibold text-[#6a5530] transition hover:bg-[#fff1cd]";
 
 function replaceToken(template: string, token: string, value: string): string {
   return template.replace(token, value);
 }
 
-function CupboardModal({
+/**
+ * One clickable region over the full-kitchen.png illustration. Position is
+ * expressed as percentages of the image's own box, tied to this specific
+ * artwork's fixed layout -- there's no static Tailwind class for "the top
+ * half of the appliance in this particular picture," so inline style is the
+ * documented exception here (BUILD_CONVENTIONS.md §7).
+ */
+function SceneHotspot({
+  left,
+  top,
+  width,
+  height,
+  label,
+  ariaLabel,
+  onClick,
+}: {
+  left: string;
+  top: string;
+  width: string;
+  height: string;
+  label: string;
+  ariaLabel: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      aria-haspopup="dialog"
+      className="group absolute rounded-xl outline-offset-2 transition hover:bg-white/25 focus-visible:bg-white/25"
+      style={{ left, top, width, height }}
+    >
+      <span className="pointer-events-none absolute left-1/2 top-1 -translate-x-1/2 rounded-full border border-[#dcc38a] bg-[#fffaf0]/95 px-2 py-0.5 text-[11px] font-bold text-[#6a5530] opacity-90 shadow-sm transition group-hover:opacity-100">
+        {label}
+      </span>
+      <span className="absolute inset-0 rounded-xl ring-0 ring-[#d2b15b] transition group-hover:ring-2 group-focus-visible:ring-2" />
+    </button>
+  );
+}
+
+function FridgeModal({
   ingredients,
   ingredientRecordsByKey,
   availabilityByKey,
@@ -61,7 +112,7 @@ function CupboardModal({
   ingredientRecordsByKey: ReadonlyMap<string, ShopIngredientPrice>;
   availabilityByKey: ReadonlyMap<string, number>;
   locale: "en" | "zh";
-  strings: (typeof kitchenStrings)["en"];
+  strings: KitchenStrings;
   onClose: () => void;
 }) {
   if (typeof document === "undefined") return null;
@@ -77,27 +128,27 @@ function CupboardModal({
           className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[1.5rem] border-2 border-[#dcc38a] bg-[#fffaf0] p-5 shadow-[0_24px_60px_rgba(85,122,84,0.18)]"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="kitchen-cupboard-title"
+          aria-labelledby="kitchen-fridge-title"
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 id="kitchen-cupboard-title" className="text-xl font-semibold text-gray-900">
-                {strings.cupboardModalTitle}
+              <h2 id="kitchen-fridge-title" className="text-xl font-semibold text-gray-900">
+                {strings.fridgeModalTitle}
               </h2>
-              <p className="mt-1 text-sm text-gray-600">{strings.cupboardModalDescription}</p>
+              <p className="mt-1 text-sm text-gray-600">{strings.fridgeModalDescription}</p>
             </div>
             <button
               type="button"
-              className="btn-nav rounded-md px-4 py-2 text-sm font-medium"
+              className={NAV_BUTTON}
               onClick={onClose}
             >
-              {strings.cupboardCloseButton}
+              {strings.fridgeCloseButton}
             </button>
           </div>
 
           {availableIngredients.length === 0 ? (
-            <p className="mt-4 text-sm italic text-gray-500">{strings.cupboardEmpty}</p>
+            <p className="mt-4 text-sm italic text-gray-500">{strings.fridgeEmpty}</p>
           ) : (
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
               {availableIngredients.map((ingredient) => {
@@ -149,7 +200,7 @@ function RecipeBookModal({
   selectedRecipeId: string | null;
   onSelectRecipe: (recipeId: string) => void;
   locale: "en" | "zh";
-  strings: (typeof kitchenStrings)["en"];
+  strings: KitchenStrings;
   onClose: () => void;
 }) {
   if (typeof document === "undefined") return null;
@@ -173,7 +224,7 @@ function RecipeBookModal({
             </div>
             <button
               type="button"
-              className="btn-nav rounded-md px-4 py-2 text-sm font-medium"
+              className={NAV_BUTTON}
               onClick={onClose}
             >
               {strings.bookCloseButton}
@@ -199,7 +250,10 @@ function RecipeBookModal({
                     >
                       <div className="text-base font-semibold">{localized.title}</div>
                       <div className="text-xs uppercase tracking-wide">{strings.recipeLocked}</div>
-                      <Link href="/words/shop" className="btn-nav inline-block w-fit rounded-md px-3 py-1.5 text-xs font-medium">
+                      <Link
+                        href="/words/shop"
+                        className="inline-block w-fit rounded-md border-2 border-[#dcc38a] bg-[#fcf8ef] px-3 py-1.5 text-xs font-semibold text-[#6a5530] transition hover:bg-[#fff1cd]"
+                      >
                         {strings.recipeLockedLinkText}
                       </Link>
                     </div>
@@ -254,6 +308,229 @@ function RecipeBookModal({
   );
 }
 
+function SpecialIngredientsModal({
+  recipeTitle,
+  options,
+  selectedKeys,
+  onToggle,
+  ingredientRecordsByKey,
+  locale,
+  strings,
+  onClose,
+}: {
+  recipeTitle: string;
+  options: KitchenSpecialIngredientOption[];
+  selectedKeys: string[];
+  onToggle: (ingredientKey: string) => void;
+  ingredientRecordsByKey: ReadonlyMap<string, ShopIngredientPrice>;
+  locale: "en" | "zh";
+  strings: KitchenStrings;
+  onClose: () => void;
+}) {
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/35 p-4" onClick={onClose}>
+      <div className="flex min-h-full items-center justify-center">
+        <div
+          className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-[1.5rem] border-2 border-[#dcc38a] bg-[#fffaf0] p-5 shadow-[0_24px_60px_rgba(85,122,84,0.18)]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="kitchen-special-title"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <h2 id="kitchen-special-title" className="text-xl font-semibold text-gray-900">
+            {replaceToken(strings.specialModalTitleTemplate, "{title}", recipeTitle)}
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">{strings.specialModalDescription}</p>
+
+          {options.length === 0 ? (
+            <p className="mt-4 text-sm italic text-gray-500">{strings.specialModalEmpty}</p>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {options.map((option) => {
+                const record = ingredientRecordsByKey.get(option.ingredientKey);
+                const label = resolveShopIngredientLabel(record, locale, option.ingredientKey);
+                const iconPath = record?.iconPath ?? null;
+                const isSelected = selectedKeys.includes(option.ingredientKey);
+                return (
+                  <button
+                    key={option.ingredientKey}
+                    type="button"
+                    onClick={() => onToggle(option.ingredientKey)}
+                    aria-pressed={isSelected}
+                    className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-2 py-2.5 text-center transition ${
+                      isSelected
+                        ? "border-[#8b6f2f] bg-[#f7ead0] shadow-[0_3px_8px_rgba(139,111,47,0.25)]"
+                        : "border-[#eadfbe] bg-white hover:border-[#d2b15b]"
+                    }`}
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-[#eadfbe] bg-[#fff8ea] p-1">
+                      {iconPath ? (
+                        <img src={iconPath} alt="" className="h-full w-full object-contain" />
+                      ) : (
+                        <span className="text-xs font-semibold text-[#9a8f79]">{label}</span>
+                      )}
+                    </div>
+                    <span className="text-xs font-bold text-gray-800">{label}</span>
+                    {isSelected ? (
+                      <span className="text-[11px] font-semibold text-[#8b6f2f]">{strings.specialSelectedBadge}</span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <button type="button" className={`${NAV_BUTTON} mt-5 w-full`} onClick={onClose}>
+            {strings.specialDoneButton}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function DishTileGrid({
+  tiles,
+  emptyText,
+  size = "sm",
+}: {
+  tiles: { recipeId: string; iconPath: string | null; title: string; count: number }[];
+  emptyText: string;
+  size?: "sm" | "lg";
+}) {
+  if (tiles.length === 0) {
+    return <p className="text-sm italic text-gray-500">{emptyText}</p>;
+  }
+
+  const iconBoxClass = size === "lg" ? "h-16 w-16" : "h-9 w-9";
+  const fallbackEmojiClass = size === "lg" ? "text-5xl" : "text-2xl";
+  const badgeClass =
+    size === "lg"
+      ? "absolute -right-2.5 -top-2.5 flex h-7 min-w-[1.75rem] items-center justify-center rounded-full bg-[#d2b15b] px-1.5 text-sm font-bold text-white shadow-sm"
+      : "absolute -right-2 -top-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#d2b15b] px-1 text-[11px] font-bold text-white";
+  const nameClass =
+    size === "lg"
+      ? "max-w-[6.5rem] truncate text-center text-sm font-semibold text-gray-800"
+      : "max-w-[4rem] truncate text-center text-[11px] font-medium text-gray-700";
+  const tileGapClass = size === "lg" ? "gap-4" : "gap-3";
+  const itemGapClass = size === "lg" ? "gap-2" : "gap-1";
+  const itemPaddingClass = size === "lg" ? "px-3 py-2" : "px-2 py-1";
+
+  return (
+    <div className={`flex flex-wrap ${tileGapClass}`}>
+      {tiles.map((tile) => (
+        <div
+          key={`${tile.recipeId}::${tile.iconPath ?? ""}`}
+          title={`${tile.title} (x${tile.count})`}
+          className={`flex flex-col items-center ${itemGapClass} rounded-xl border border-[#eadfbe] bg-white ${itemPaddingClass} shadow-sm`}
+        >
+          <span className="relative" aria-hidden="true">
+            {tile.iconPath ? (
+              <img src={tile.iconPath} alt="" className={`${iconBoxClass} object-contain`} />
+            ) : (
+              <span className={fallbackEmojiClass}>🍽️</span>
+            )}
+            {tile.count > 1 ? <span className={badgeClass}>{tile.count}</span> : null}
+          </span>
+          <span className={nameClass}>{tile.title}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ShelfModal({
+  tilesByFoodType,
+  strings,
+  onClose,
+}: {
+  tilesByFoodType: Record<
+    ShopFoodType,
+    { recipeId: string; iconPath: string | null; title: string; count: number }[]
+  >;
+  strings: KitchenStrings;
+  onClose: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<ShopFoodType>("drinks");
+  if (typeof document === "undefined") return null;
+
+  const tabLabel: Record<ShopFoodType, string> = {
+    drinks: strings.tabDrinksLabel,
+    hotmeal: strings.tabHotMealLabel,
+    desserts: strings.tabDessertsLabel,
+  };
+  const tabEmoji: Record<ShopFoodType, string> = {
+    drinks: "🥤",
+    hotmeal: "🍲",
+    desserts: "🍰",
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/35 p-4" onClick={onClose}>
+      <div className="flex min-h-full items-center justify-center">
+        <div
+          className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[1.5rem] border-2 border-[#dcc38a] bg-[#fffaf0] p-5 shadow-[0_24px_60px_rgba(85,122,84,0.18)]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="kitchen-shelf-title"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 id="kitchen-shelf-title" className="text-xl font-semibold text-gray-900">
+                {strings.shelfModalTitle}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">{strings.shelfModalDescription}</p>
+            </div>
+            <button
+              type="button"
+              className={NAV_BUTTON}
+              onClick={onClose}
+            >
+              {strings.shelfCloseButton}
+            </button>
+          </div>
+
+          <div className="mt-5 flex gap-3" role="tablist" aria-label={strings.shelfModalTitle}>
+            {SHOP_FOOD_TYPES.map((foodType) => {
+              const isActive = activeTab === foodType;
+              return (
+                <button
+                  key={foodType}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveTab(foodType)}
+                  className={
+                    isActive
+                      ? "flex items-center gap-1.5 rounded-full border-2 border-[#8b6f2f] bg-[#f7ead0] px-5 py-2.5 text-base font-bold text-[#5c4720] shadow-[0_3px_8px_rgba(139,111,47,0.3)] transition"
+                      : "flex items-center gap-1.5 rounded-full border-2 border-[#dcc38a] bg-[#fcf8ef] px-5 py-2.5 text-base font-bold text-[#6a5530] transition hover:bg-[#fff1cd]"
+                  }
+                >
+                  <span aria-hidden="true">{tabEmoji[foodType]}</span>
+                  {tabLabel[foodType]}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5">
+            <DishTileGrid
+              size="lg"
+              tiles={tilesByFoodType[activeTab]}
+              emptyText={replaceToken(strings.shelfTabEmptyTemplate, "{tab}", tabLabel[activeTab])}
+            />
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   const locale = useLocale();
   const str = kitchenStrings[locale];
@@ -267,19 +544,15 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [consumptions, setConsumptions] = useState<ShopIngredientLedgerEntry[]>([]);
   const [dishes, setDishes] = useState<ShopCookedDish[]>([]);
 
-  const [isCupboardOpen, setIsCupboardOpen] = useState(false);
+  const [isFridgeOpen, setIsFridgeOpen] = useState(false);
   const [isBookOpen, setIsBookOpen] = useState(false);
+  const [isShelfOpen, setIsShelfOpen] = useState(false);
+  const [isSpecialIngredientsOpen, setIsSpecialIngredientsOpen] = useState(false);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
+  const [selectedSpecialIngredientKeys, setSelectedSpecialIngredientKeys] = useState<string[]>([]);
   const [cookingRecipeId, setCookingRecipeId] = useState<string | null>(null);
+  const [isOrganizing, setIsOrganizing] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const [dragState, setDragState] = useState<DragState | null>(null);
-  const [dragOverShelf, setDragOverShelf] = useState<ShopShelfCategory | null>(null);
-  const shelfRowRefs = useRef<Record<ShopShelfCategory, HTMLDivElement | null>>({
-    default: null,
-    drinks: null,
-    desserts: null,
-    hotmeal: null,
-  });
 
   useEffect(() => {
     if (vm.page !== "shopKitchen") return;
@@ -337,13 +610,32 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   );
   const recipesById = useMemo(() => new Map(recipes.map((recipe) => [recipe.id, recipe])), [recipes]);
   const cookableRecipes = useMemo(() => recipes.filter((recipe) => recipe.cookMethod !== null), [recipes]);
-  const shelvesByCategory = useMemo(() => buildKitchenShelvesByCategory(dishes), [dishes]);
+  const countertopTiles = useMemo(
+    () => buildCountertopTiles(dishes, recipesById, locale),
+    [dishes, recipesById, locale]
+  );
+  const countertopCount = useMemo(() => countCountertopDishes(dishes), [dishes]);
+  const shelfTilesByFoodType = useMemo(
+    () => buildShelfTilesByFoodType(dishes, recipesById, locale),
+    [dishes, recipesById, locale]
+  );
   const totalDishesMade = useMemo(() => countTotalCookedDishes(dishes), [dishes]);
   const selectedRecipe = selectedRecipeId ? recipesById.get(selectedRecipeId) ?? null : null;
+  const isCountertopFull = countertopCount >= SHOP_KITCHEN_COUNTERTOP_CAPACITY;
+  const availableSpecialIngredientOptions = useMemo(
+    () =>
+      selectedRecipe
+        ? resolveAvailableSpecialIngredients(
+            getShopRecipeContentForLocale(selectedRecipe, locale).specialIngredients,
+            availabilityByKey
+          )
+        : [],
+    [selectedRecipe, locale, availabilityByKey]
+  );
 
   if (vm.page !== "shopKitchen") return null;
 
-  async function refreshConsumptionsAndDishes(): Promise<void> {
+  async function refreshAfterCook(): Promise<void> {
     try {
       const [consumptionRows, dishRows] = await Promise.all([
         listShopIngredientConsumptions(),
@@ -356,11 +648,43 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
   }
 
-  function tileTitleAndIcon(recipeId: string): { title: string; iconPath: string | null } {
+  async function refreshAfterOrganize(): Promise<void> {
+    try {
+      setDishes(await listShopCookedDishes());
+    } catch (error) {
+      console.error("Failed to refresh dishes after organizing:", error);
+    }
+  }
+
+  function handleSelectRecipeFromBook(recipeId: string): void {
+    if (selectedRecipeId === recipeId) {
+      setSelectedRecipeId(null);
+      setSelectedSpecialIngredientKeys([]);
+      return;
+    }
+
+    setSelectedRecipeId(recipeId);
+    setSelectedSpecialIngredientKeys([]);
+
+    // Ask about special ingredients right away, per the recipe -- but only
+    // if the child actually has at least one of this recipe's special
+    // ingredients to offer; otherwise there's nothing to ask about.
     const recipe = recipesById.get(recipeId);
-    if (!recipe) return { title: recipeId, iconPath: null };
-    const localized = getShopRecipeContentForLocale(recipe, locale);
-    return { title: localized.title, iconPath: resolvePlainShopRecipeIconPath(recipe.variantIconRules) };
+    const localizedSpecialIngredients = recipe
+      ? getShopRecipeContentForLocale(recipe, locale).specialIngredients
+      : [];
+    if (resolveAvailableSpecialIngredients(localizedSpecialIngredients, availabilityByKey).length > 0) {
+      setIsBookOpen(false);
+      setIsSpecialIngredientsOpen(true);
+    }
+  }
+
+  function handleToggleSpecialIngredient(ingredientKey: string): void {
+    setSelectedSpecialIngredientKeys((current) =>
+      current.includes(ingredientKey)
+        ? current.filter((key) => key !== ingredientKey)
+        : [...current, ingredientKey]
+    );
   }
 
   async function handleCook(method: "stove" | "oven"): Promise<void> {
@@ -383,6 +707,11 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       return;
     }
 
+    if (isCountertopFull) {
+      setNotice({ tone: "error", text: str.countertopFullMessage });
+      return;
+    }
+
     const readiness = computeShopCookReadiness(selectedRecipe, availabilityByKey);
     if (!readiness.isReady) {
       const names = readiness.missingIngredientKeys
@@ -395,14 +724,17 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     setCookingRecipeId(selectedRecipe.id);
     setNotice(null);
     try {
-      const result = await cookShopRecipe(selectedRecipe.id);
+      const result = await cookShopRecipe(selectedRecipe.id, selectedSpecialIngredientKeys);
       if (!result.success) {
         if (result.code === "insufficient_ingredients") {
-          await refreshConsumptionsAndDishes();
+          await refreshAfterCook();
           const names = result.missingIngredientKeys
             .map((key) => resolveShopIngredientLabel(ingredientRecordsByKey.get(key), locale, key))
             .join(", ");
           setNotice({ tone: "error", text: replaceToken(str.missingIngredientsTemplate, "{ingredients}", names) });
+        } else if (result.code === "countertop_full") {
+          await refreshAfterCook();
+          setNotice({ tone: "error", text: str.countertopFullMessage });
         } else {
           setNotice({ tone: "error", text: str.cookFailedGeneric });
         }
@@ -410,8 +742,9 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       }
 
       const localized = getShopRecipeContentForLocale(selectedRecipe, locale);
-      await refreshConsumptionsAndDishes();
+      await refreshAfterCook();
       setSelectedRecipeId(null);
+      setSelectedSpecialIngredientKeys([]);
       setNotice({ tone: "success", text: replaceToken(str.cookSuccessTemplate, "{title}", localized.title) });
     } catch (error) {
       console.error("Failed to cook recipe:", error);
@@ -421,74 +754,28 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
   }
 
-  async function handleMoveDish(dishId: string, targetShelf: ShopShelfCategory): Promise<void> {
-    const dish = dishes.find((d) => d.id === dishId);
-    if (!dish || dish.shelfCategory === targetShelf) return;
+  async function handleOrganize(): Promise<void> {
+    if (countertopCount === 0 || isOrganizing) return;
 
-    const previousShelf = dish.shelfCategory;
-    // Optimistic update -- the drag gesture itself is the feedback the child is
-    // waiting on; reverting on failure keeps this safe if the RPC rejects it.
-    setDishes((prev) => prev.map((d) => (d.id === dishId ? { ...d, shelfCategory: targetShelf } : d)));
-
+    setIsOrganizing(true);
+    setNotice(null);
     try {
-      const result = await moveShopCookedDish(dishId, targetShelf);
+      const result = await organizeShopKitchenCountertop();
       if (!result.success) {
-        setDishes((prev) => prev.map((d) => (d.id === dishId ? { ...d, shelfCategory: previousShelf } : d)));
-        setNotice({ tone: "error", text: str.moveFailedGeneric });
+        setNotice({ tone: "error", text: str.organizeFailedGeneric });
+        return;
       }
+      await refreshAfterOrganize();
+      setNotice({ tone: "success", text: replaceToken(str.organizeSuccessTemplate, "{count}", String(result.movedCount)) });
     } catch (error) {
-      console.error("Failed to move cooked dish:", error);
-      setDishes((prev) => prev.map((d) => (d.id === dishId ? { ...d, shelfCategory: previousShelf } : d)));
-      setNotice({ tone: "error", text: str.moveFailedGeneric });
+      console.error("Failed to organize the countertop:", error);
+      setNotice({ tone: "error", text: str.organizeFailedGeneric });
+    } finally {
+      setIsOrganizing(false);
     }
   }
 
-  function findDishIdForTile(shelf: ShopShelfCategory, recipeId: string): string | null {
-    // Any one instance of this recipe currently on this shelf is a valid drag
-    // source for the tile (the tile represents the whole stack; dragging it
-    // moves one underlying shop_cooked_dishes row).
-    const match = dishes.find((d) => d.shelfCategory === shelf && d.recipeId === recipeId);
-    return match ? match.id : null;
-  }
-
-  function handleTilePointerDown(
-    event: React.PointerEvent<HTMLDivElement>,
-    dishId: string,
-    recipeId: string
-  ): void {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDragState({ dishId, recipeId, pointerId: event.pointerId, x: event.clientX, y: event.clientY });
-  }
-
-  function handleTilePointerMove(event: React.PointerEvent<HTMLDivElement>): void {
-    if (!dragState || event.pointerId !== dragState.pointerId) return;
-    const { clientX, clientY } = event;
-    setDragState((prev) => (prev ? { ...prev, x: clientX, y: clientY } : prev));
-
-    const elementUnderPointer = document.elementFromPoint(clientX, clientY);
-    const hoveredShelf = (Object.entries(shelfRowRefs.current) as [ShopShelfCategory, HTMLDivElement | null][]).find(
-      ([, node]) => node && elementUnderPointer && (node === elementUnderPointer || node.contains(elementUnderPointer))
-    );
-    setDragOverShelf(hoveredShelf ? hoveredShelf[0] : null);
-  }
-
-  function handleTilePointerUp(event: React.PointerEvent<HTMLDivElement>): void {
-    if (!dragState || event.pointerId !== dragState.pointerId) return;
-    const targetShelf = dragOverShelf;
-    const { dishId } = dragState;
-    setDragState(null);
-    setDragOverShelf(null);
-    if (targetShelf) {
-      void handleMoveDish(dishId, targetShelf);
-    }
-  }
-
-  const shelfDefs: { id: ShopShelfCategory; label: string; empty: string; wash: string; plank: string }[] = [
-    { id: "default", label: str.shelfDefaultLabel, empty: str.shelfDefaultEmpty, wash: "bg-[#a5713f]/10", plank: "bg-[#a5713f]" },
-    { id: "drinks", label: str.shelfDrinksLabel, empty: str.shelfDrinksEmpty, wash: "bg-[#4f9db3]/10", plank: "bg-[#4f9db3]" },
-    { id: "desserts", label: str.shelfDessertsLabel, empty: str.shelfDessertsEmpty, wash: "bg-[#d1729a]/10", plank: "bg-[#d1729a]" },
-    { id: "hotmeal", label: str.shelfHotMealLabel, empty: str.shelfHotMealEmpty, wash: "bg-[#d9822f]/10", plank: "bg-[#d9822f]" },
-  ];
+  const availableIngredientKindCount = Array.from(availabilityByKey.values()).filter((count) => count > 0).length;
 
   return (
     <section className="space-y-4 rounded-lg border p-4">
@@ -514,171 +801,124 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       ) : loadState === "error" ? (
         <p className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{str.loadError}</p>
       ) : (
-        <div className="space-y-6">
-          {/* Shelves */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="font-medium">{str.pageTitle}</h3>
-              <span className="text-sm text-gray-600">
-                {totalDishesMade === 1
-                  ? str.shelfSummarySingular
-                  : replaceToken(str.shelfSummaryTemplate, "{count}", String(totalDishesMade))}
-              </span>
-            </div>
+        <div className="space-y-4">
+          {/* The kitchen scene: full-kitchen.png with clickable hotspots for the
+              fridge, recipe book, stovetop (top of the appliance), oven (bottom
+              of the appliance), and shelf -- positions are approximate percentage
+              boxes over the artwork and may need a small visual nudge once
+              checked in a real browser against the actual rendered image. */}
+          <div className="relative mx-auto w-full max-w-3xl" style={{ aspectRatio: "1337 / 1176" }}>
+            <img
+              src="/kitchen/full-kitchen.png"
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full rounded-2xl object-contain"
+            />
 
-            {shelfDefs.map((shelfDef) => {
-              const tiles = shelvesByCategory[shelfDef.id];
-              const itemCount = tiles.reduce((sum, tile) => sum + tile.count, 0);
-              return (
-                <div key={shelfDef.id} className="space-y-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                      <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full ${shelfDef.plank}`}
-                        aria-hidden="true"
-                      />
-                      {shelfDef.label}
-                    </h4>
-                    <span className="text-xs text-gray-500">
-                      {itemCount === 1
-                        ? str.shelfItemCountSingular
-                        : replaceToken(str.shelfItemCountTemplate, "{count}", String(itemCount))}
-                    </span>
-                  </div>
-                  <div
-                    ref={(node) => {
-                      shelfRowRefs.current[shelfDef.id] = node;
-                    }}
-                    className={`flex min-h-[4.5rem] flex-wrap items-end gap-3 rounded-xl border border-[#eadfbe] p-3 transition ${shelfDef.wash} ${
-                      dragOverShelf === shelfDef.id ? "ring-2 ring-[#d2b15b] ring-offset-1" : ""
-                    }`}
-                  >
-                    {tiles.length === 0 ? (
-                      <p className="text-xs italic text-gray-500">{shelfDef.empty}</p>
-                    ) : (
-                      tiles.map((tile) => {
-                        const { title, iconPath } = tileTitleAndIcon(tile.recipeId);
-                        const dishId = findDishIdForTile(shelfDef.id, tile.recipeId);
-                        const isBeingDragged = dragState?.dishId === dishId;
-                        return (
-                          <div
-                            key={tile.recipeId}
-                            role="button"
-                            tabIndex={0}
-                            aria-label={title}
-                            title={`${title} (x${tile.count})`}
-                            onPointerDown={(event) => dishId && handleTilePointerDown(event, dishId, tile.recipeId)}
-                            onPointerMove={handleTilePointerMove}
-                            onPointerUp={handleTilePointerUp}
-                            className={`relative flex touch-none flex-col items-center gap-1 rounded-lg px-2 py-1 ${
-                              isBeingDragged ? "opacity-30" : ""
-                            }`}
-                          >
-                            <span className="relative text-2xl" aria-hidden="true">
-                              {iconPath ? (
-                                <img src={iconPath} alt="" className="h-9 w-9 object-contain" />
-                              ) : (
-                                "🍽️"
-                              )}
-                              {tile.count > 1 ? (
-                                <span className="absolute -right-2 -top-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#d2b15b] px-1 text-[11px] font-bold text-white">
-                                  {tile.count}
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="max-w-[4rem] truncate text-center text-[11px] font-medium text-gray-700">
-                              {title}
-                            </span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Counter: cupboard, stove/oven, recipe book */}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <button
-              type="button"
-              onClick={() => setIsCupboardOpen(true)}
-              aria-haspopup="dialog"
-              aria-label={str.cupboardOpenAria}
-              className="flex flex-col items-center gap-2 self-start rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)]"
-            >
-              <span className="text-3xl" aria-hidden="true">🗄️</span>
-              <span className="text-sm font-semibold text-[#6a5530]">{str.cupboardLabel}</span>
-              <span className="rounded-full bg-[#fcf8ef] px-2 py-0.5 text-xs font-medium text-[#8b6f2f]">
-                {Array.from(availabilityByKey.values()).filter((count) => count > 0).length} {str.ingredientCountSuffix}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void handleCook("stove")}
-              disabled={cookingRecipeId !== null}
-              aria-label={str.stovetopAria}
-              className="relative flex aspect-square flex-col items-center justify-end overflow-hidden rounded-[1.25rem] border border-[#dcc38a] shadow-[0_16px_34px_rgba(115,92,40,0.08)] disabled:opacity-60"
-            >
-              <img
-                src="/kitchen/stovetop.png"
-                alt=""
-                aria-hidden="true"
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-              <span className="relative z-10 mb-2 rounded-full bg-[#fcf8ef]/90 px-2 py-0.5 text-sm font-semibold text-[#6a5530] shadow-sm">
-                {str.stovetopLabel}
-              </span>
-              {cookingRecipeId && selectedRecipe?.cookMethod === "stove" ? (
-                <span className="relative z-10 mb-2 rounded-full bg-white/85 px-2 py-0.5 text-xs text-gray-600">
-                  {str.cooking}
-                </span>
-              ) : null}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void handleCook("oven")}
-              disabled={cookingRecipeId !== null}
-              aria-label={str.ovenAria}
-              className="flex flex-col items-center gap-2 self-start rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)] disabled:opacity-60"
-            >
-              <span className="text-3xl" aria-hidden="true">♨️</span>
-              <span className="text-sm font-semibold text-[#6a5530]">{str.ovenLabel}</span>
-              {cookingRecipeId && selectedRecipe?.cookMethod === "oven" ? (
-                <span className="text-xs text-gray-500">{str.cooking}</span>
-              ) : null}
-            </button>
-
-            <button
-              type="button"
+            <SceneHotspot
+              left="4%" top="38%" width="21%" height="40%"
+              label={str.fridgeLabel}
+              ariaLabel={str.fridgeOpenAria}
+              onClick={() => setIsFridgeOpen(true)}
+            />
+            <SceneHotspot
+              left="46%" top="27%" width="14%" height="13%"
+              label={str.bookLabel}
+              ariaLabel={str.bookOpenAria}
               onClick={() => setIsBookOpen(true)}
-              aria-haspopup="dialog"
-              aria-label={str.bookOpenAria}
-              className="flex flex-col items-center gap-2 self-start rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)]"
-            >
-              <span className="text-3xl" aria-hidden="true">📖</span>
-              <span className="text-sm font-semibold text-[#6a5530]">{str.bookLabel}</span>
-              <span className="rounded-full bg-[#fcf8ef] px-2 py-0.5 text-xs font-medium text-[#8b6f2f]">
-                {selectedRecipe
-                  ? `${str.recipeSelectedPrefix} ${getShopRecipeContentForLocale(selectedRecipe, locale).title}`
-                  : `${cookableRecipes.filter((recipe) => unlockedRecipeIds.has(recipe.id) && computeShopCookReadiness(recipe, availabilityByKey).isReady).length} ${str.recipesReadySuffix}`}
-              </span>
-            </button>
+            />
+            <SceneHotspot
+              left="31%" top="39%" width="19%" height="11%"
+              label={str.stovetopLabel}
+              ariaLabel={str.stovetopAria}
+              onClick={() => void handleCook("stove")}
+            />
+            <SceneHotspot
+              left="31%" top="50%" width="19%" height="11%"
+              label={str.ovenLabel}
+              ariaLabel={str.ovenAria}
+              onClick={() => void handleCook("oven")}
+            />
+            <SceneHotspot
+              left="76%" top="20%" width="17%" height="48%"
+              label={str.shelfLabel}
+              ariaLabel={str.shelfOpenAria}
+              onClick={() => setIsShelfOpen(true)}
+            />
           </div>
+
+          {/* Fridge / recipe book status line */}
+          <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
+            <span className="rounded-full border border-[#dcc38a] bg-[#fcf8ef] px-3 py-1 font-medium text-[#8b6f2f]">
+              {str.fridgeLabel}: {availableIngredientKindCount} {str.ingredientCountSuffix}
+            </span>
+            <span className="rounded-full border border-[#dcc38a] bg-[#fcf8ef] px-3 py-1 font-medium text-[#8b6f2f]">
+              {selectedRecipe
+                ? `${str.recipeSelectedPrefix} ${getShopRecipeContentForLocale(selectedRecipe, locale).title}`
+                : `${cookableRecipes.filter((recipe) => unlockedRecipeIds.has(recipe.id) && computeShopCookReadiness(recipe, availabilityByKey).isReady).length} ${str.recipesReadySuffix}`}
+            </span>
+            {selectedRecipe && availableSpecialIngredientOptions.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setIsSpecialIngredientsOpen(true)}
+                className="rounded-full border border-[#8b6f2f] bg-[#f7ead0] px-3 py-1 font-semibold text-[#5c4720] transition hover:bg-[#f0dfb8]"
+              >
+                {selectedSpecialIngredientKeys.length > 0
+                  ? replaceToken(str.specialEditPillTemplate, "{count}", String(selectedSpecialIngredientKeys.length))
+                  : str.specialAddPillLabel}
+              </button>
+            ) : null}
+            {cookingRecipeId ? <span className="text-gray-500">{str.cooking}</span> : null}
+          </div>
+
+          {/* Countertop: what's fresh from the kitchen, capacity-limited */}
+          <div className="rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 shadow-[0_16px_34px_rgba(115,92,40,0.08)]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="font-semibold text-[#6a5530]">{str.countertopLabel}</h3>
+              <div className="flex items-center gap-3">
+                <span
+                  className={`rounded-full px-3 py-1 text-sm font-bold ${
+                    isCountertopFull ? "bg-red-100 text-red-700" : "bg-[#fcf8ef] text-[#8b6f2f]"
+                  }`}
+                >
+                  {replaceToken(
+                    replaceToken(str.countertopCountTemplate, "{count}", String(countertopCount)),
+                    "{capacity}",
+                    String(SHOP_KITCHEN_COUNTERTOP_CAPACITY)
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleOrganize()}
+                  disabled={countertopCount === 0 || isOrganizing}
+                  aria-label={str.organizeButtonAria}
+                  className="btn-caution rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                >
+                  {str.organizeButton}
+                </button>
+              </div>
+            </div>
+            <div className="mt-3">
+              <DishTileGrid tiles={countertopTiles} emptyText={str.countertopEmpty} />
+            </div>
+          </div>
+
+          <p className="text-center text-sm text-gray-600">
+            {totalDishesMade === 1
+              ? str.shelfSummarySingular
+              : replaceToken(str.shelfSummaryTemplate, "{count}", String(totalDishesMade))}
+          </p>
         </div>
       )}
 
-      {isCupboardOpen ? (
-        <CupboardModal
+      {isFridgeOpen ? (
+        <FridgeModal
           ingredients={ingredientPrices}
           ingredientRecordsByKey={ingredientRecordsByKey}
           availabilityByKey={availabilityByKey}
           locale={locale}
           strings={str}
-          onClose={() => setIsCupboardOpen(false)}
+          onClose={() => setIsFridgeOpen(false)}
         />
       ) : null}
 
@@ -689,39 +929,33 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
           availabilityByKey={availabilityByKey}
           ingredientRecordsByKey={ingredientRecordsByKey}
           selectedRecipeId={selectedRecipeId}
-          onSelectRecipe={(recipeId) =>
-            setSelectedRecipeId((current) => (current === recipeId ? null : recipeId))
-          }
+          onSelectRecipe={handleSelectRecipeFromBook}
           locale={locale}
           strings={str}
           onClose={() => setIsBookOpen(false)}
         />
       ) : null}
 
-      {dragState && typeof document !== "undefined"
-        ? createPortal(
-            // Position tracks the pointer every frame during a drag -- an
-            // unavoidable runtime value, not a static style, hence the one
-            // inline style in this file (see BUILD_CONVENTIONS.md §7).
-            <div
-              className="pointer-events-none fixed z-[150] flex flex-col items-center gap-1 opacity-90"
-              style={{ left: dragState.x - 24, top: dragState.y - 48 }}
-            >
-              <span className="text-3xl" aria-hidden="true">
-                {tileTitleAndIcon(dragState.recipeId).iconPath ? (
-                  <img
-                    src={tileTitleAndIcon(dragState.recipeId).iconPath ?? undefined}
-                    alt=""
-                    className="h-9 w-9 object-contain"
-                  />
-                ) : (
-                  "🍽️"
-                )}
-              </span>
-            </div>,
-            document.body
-          )
-        : null}
+      {isShelfOpen ? (
+        <ShelfModal
+          tilesByFoodType={shelfTilesByFoodType}
+          strings={str}
+          onClose={() => setIsShelfOpen(false)}
+        />
+      ) : null}
+
+      {isSpecialIngredientsOpen && selectedRecipe ? (
+        <SpecialIngredientsModal
+          recipeTitle={getShopRecipeContentForLocale(selectedRecipe, locale).title}
+          options={availableSpecialIngredientOptions}
+          selectedKeys={selectedSpecialIngredientKeys}
+          onToggle={handleToggleSpecialIngredient}
+          ingredientRecordsByKey={ingredientRecordsByKey}
+          locale={locale}
+          strings={str}
+          onClose={() => setIsSpecialIngredientsOpen(false)}
+        />
+      ) : null}
     </section>
   );
 }

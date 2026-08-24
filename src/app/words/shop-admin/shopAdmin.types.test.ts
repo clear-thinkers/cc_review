@@ -72,6 +72,7 @@ const recipeFixture: ShopRecipe = {
     { match: ["brown-sugar", "jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
   ],
   cookMethod: null,
+  foodType: null,
 };
 
 describe("shopAdmin.types", () => {
@@ -93,6 +94,7 @@ describe("shopAdmin.types", () => {
     expect(normalized.variantIconRules[1]).toEqual({
       match: ["brown-sugar", "jasmine"],
       iconPath: "/rewards/bubble-tea_combo.png",
+      titleI18n: { en: "", zh: "" },
     });
   });
 
@@ -107,6 +109,7 @@ describe("shopAdmin.types", () => {
     expect(normalized.variantIconRules[0]).toEqual({
       match: ["brown-sugar", "jasmine"],
       iconPath: "/rewards/bubble-tea_combo.png",
+      titleI18n: { en: "", zh: "" },
     });
   });
 
@@ -278,8 +281,39 @@ describe("shopAdmin.types", () => {
         ],
       })
     ).toEqual([
-      { match: ["brown-sugar"], iconPath: "/rewards/bubble-tea_plain.png" },
-      { match: ["brown-sugar", "jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
+      {
+        match: ["brown-sugar"],
+        iconPath: "/rewards/bubble-tea_plain.png",
+        titleI18n: { en: "", zh: "" },
+      },
+      {
+        match: ["brown-sugar", "jasmine"],
+        iconPath: "/rewards/bubble-tea_combo.png",
+        titleI18n: { en: "", zh: "" },
+      },
+    ]);
+  });
+
+  it("carries a draft's variant title edits through the merge, ignoring any persisted title", () => {
+    expect(
+      mergeReadonlyVariantIconRules({
+        persistedRules: [
+          { match: ["brown-sugar"], iconPath: "/rewards/bubble-tea_plain.png", titleI18n: { en: "stale", zh: "旧" } },
+        ],
+        draftRules: [
+          {
+            match: ["brown-sugar"],
+            iconPath: "/rewards/ignored.png",
+            titleI18n: { en: "Brown Sugar Milk Tea", zh: "黑糖奶茶" },
+          },
+        ],
+      })
+    ).toEqual([
+      {
+        match: ["brown-sugar"],
+        iconPath: "/rewards/bubble-tea_plain.png",
+        titleI18n: { en: "Brown Sugar Milk Tea", zh: "黑糖奶茶" },
+      },
     ]);
   });
 
@@ -322,7 +356,9 @@ describe("shopAdmin.types", () => {
         ],
         ["brown-sugar", "jasmine"]
       )
-    ).toEqual([{ match: [], iconPath: "/rewards/bubble-tea_plain.png" }]);
+    ).toEqual([
+      { match: [], iconPath: "/rewards/bubble-tea_plain.png", titleI18n: { en: "", zh: "" } },
+    ]);
   });
 
   it("removes deleted ingredient keys from recipes and admin drafts", () => {
@@ -338,15 +374,23 @@ describe("shopAdmin.types", () => {
       { ingredientKey: "jasmine", name: " Jasmine ", quantity: 1 },
     ]);
     expect(cleanedRecipe.variantIconRules).toEqual([
-      { match: [], iconPath: "/rewards/bubble-tea_plain.png" },
-      { match: ["jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
+      { match: [], iconPath: "/rewards/bubble-tea_plain.png", titleI18n: { en: "", zh: "" } },
+      {
+        match: ["jasmine"],
+        iconPath: "/rewards/bubble-tea_combo.png",
+        titleI18n: { en: "", zh: "" },
+      },
     ]);
     expect(cleanedDraft.specialIngredients.en).toEqual([
       { ingredientKey: "jasmine", name: " Jasmine ", quantity: 1 },
     ]);
     expect(cleanedDraft.variantIconRules).toEqual([
-      { match: [], iconPath: "/rewards/bubble-tea_plain.png" },
-      { match: ["jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
+      { match: [], iconPath: "/rewards/bubble-tea_plain.png", titleI18n: { en: "", zh: "" } },
+      {
+        match: ["jasmine"],
+        iconPath: "/rewards/bubble-tea_combo.png",
+        titleI18n: { en: "", zh: "" },
+      },
     ]);
   });
 

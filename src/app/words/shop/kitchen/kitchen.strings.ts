@@ -7,17 +7,17 @@ export const kitchenStrings = {
     // Section: Page Header
     pageTitle: "Shop Kitchen",
     pageDescription:
-      "Open the cupboard to see everything you've collected, open the recipe book to pick something to make, then cook it on the stovetop or in the oven.",
+      "Click the fridge to see what you've collected, open the recipe book to pick something to make, then click the stovetop or the oven to cook it.",
     loading: "Loading your kitchen…",
     loadError: "Could not load the kitchen. Please try again.",
 
-    // Section: Cupboard
-    cupboardLabel: "Cupboard",
-    cupboardOpenAria: "Open the cupboard to view your ingredients",
-    cupboardModalTitle: "Your ingredients",
-    cupboardModalDescription: "Everything you've collected so far from quiz rewards.",
-    cupboardCloseButton: "Close",
-    cupboardEmpty: "Nothing here yet — finish a paragraph quiz to earn ingredients!",
+    // Section: Fridge
+    fridgeLabel: "Fridge",
+    fridgeOpenAria: "Open the fridge to view your ingredients",
+    fridgeModalTitle: "Your ingredients",
+    fridgeModalDescription: "Everything you've collected so far from quiz rewards and purchases.",
+    fridgeCloseButton: "Close",
+    fridgeEmpty: "Nothing here yet — finish a paragraph quiz to earn ingredients!",
     ingredientCountSuffix: "kinds",
 
     // Section: Recipe Book
@@ -41,40 +41,58 @@ export const kitchenStrings = {
     ovenAria: "Bake the selected recipe in the oven",
     pickRecipeFirst: "Open the recipe book and pick a recipe first.",
     wrongApplianceTemplate: "{title} needs the {appliance}, not this one.",
-    missingIngredientsTemplate: "You need more {ingredients}. Check the cupboard!",
-    cookSuccessTemplate: "{title} is done! Look at your shelf.",
+    missingIngredientsTemplate: "You need more {ingredients}. Check the fridge!",
+    countertopFullMessage: "Your countertop is full! Click Organize to move everything to the shelf first.",
+    cookSuccessTemplate: "{title} is done! Look at the countertop.",
     cookFailedGeneric: "Could not cook that right now. Please try again.",
     cooking: "Cooking…",
 
-    // Section: Shelves
+    // Section: Countertop
+    countertopLabel: "Fresh from the Kitchen",
+    countertopCountTemplate: "{count}/{capacity}",
+    countertopEmpty: "No fresh dishes yet.",
+    organizeButton: "Organize",
+    organizeButtonAria: "Move everything on the countertop onto the shelf",
+    organizeSuccessTemplate: "Moved {count} dishes to the shelf!",
+    organizeNothingToMove: "Nothing to organize yet.",
+    organizeFailedGeneric: "Could not organize the countertop. Please try again.",
+
+    // Section: Shelf
+    shelfLabel: "Shelf",
+    shelfOpenAria: "Open the shelf to see your organized dishes",
+    shelfModalTitle: "Your shelf",
+    shelfModalDescription: "Every dish you've organized, sorted by type.",
+    shelfCloseButton: "Close",
     shelfSummaryTemplate: "{count} dishes made",
     shelfSummarySingular: "1 dish made",
-    shelfDefaultLabel: "Fresh from the Kitchen",
-    shelfDrinksLabel: "Drinks",
-    shelfDessertsLabel: "Desserts",
-    shelfHotMealLabel: "Hot Meals",
-    shelfItemCountTemplate: "{count} items",
-    shelfItemCountSingular: "1 item",
-    shelfDefaultEmpty: "No dishes yet — open the recipe book to cook something!",
-    shelfDrinksEmpty: "Drag a drink here to organize it.",
-    shelfDessertsEmpty: "Drag a dessert here to organize it.",
-    shelfHotMealEmpty: "Drag a hot meal here to organize it.",
-    moveFailedGeneric: "Could not move that dish. Please try again.",
+    tabDrinksLabel: "Drinks",
+    tabHotMealLabel: "Hot Meal",
+    tabDessertsLabel: "Desserts",
+    shelfTabEmptyTemplate: "No {tab} yet.",
+
+    // Section: Special Ingredients
+    specialModalTitleTemplate: "Add special ingredients to {title}?",
+    specialModalDescription: "Tap any you'd like to add. Matching the right combination makes a special version — but any you pick get used either way.",
+    specialModalEmpty: "You don't have enough of any special ingredient for this recipe yet.",
+    specialSelectedBadge: "Added",
+    specialDoneButton: "Done",
+    specialAddPillLabel: "+ Add special ingredients",
+    specialEditPillTemplate: "{count} special added — tap to edit",
   },
   zh: {
     // Section: Page Header
     pageTitle: "食谱厨房",
-    pageDescription: "打开橱柜查看你收集的一切,打开食谱书选一道菜,然后用炉灶或烤箱做出来。",
+    pageDescription: "点冰箱查看你收集的食材,打开食谱书选一道菜,然后点炉灶或烤箱做出来。",
     loading: "正在加载你的厨房…",
     loadError: "无法加载厨房,请重试。",
 
-    // Section: Cupboard
-    cupboardLabel: "橱柜",
-    cupboardOpenAria: "打开橱柜查看你的食材",
-    cupboardModalTitle: "你的食材",
-    cupboardModalDescription: "这是你从答题奖励中收集到的所有食材。",
-    cupboardCloseButton: "关闭",
-    cupboardEmpty: "这里还没有食材——完成一次段落测验来获得食材吧!",
+    // Section: Fridge
+    fridgeLabel: "冰箱",
+    fridgeOpenAria: "打开冰箱查看你的食材",
+    fridgeModalTitle: "你的食材",
+    fridgeModalDescription: "这是你从答题奖励和购买中收集到的所有食材。",
+    fridgeCloseButton: "关闭",
+    fridgeEmpty: "这里还没有食材——完成一次段落测验来获得食材吧!",
     ingredientCountSuffix: "种",
 
     // Section: Recipe Book
@@ -98,25 +116,43 @@ export const kitchenStrings = {
     ovenAria: "在烤箱里烘焙选中的食谱",
     pickRecipeFirst: "请先打开食谱书选一个食谱。",
     wrongApplianceTemplate: "{title}需要用{appliance},不是这个。",
-    missingIngredientsTemplate: "你还需要更多{ingredients}。去橱柜看看吧!",
-    cookSuccessTemplate: "{title}做好了!看看你的架子。",
+    missingIngredientsTemplate: "你还需要更多{ingredients}。去冰箱看看吧!",
+    countertopFullMessage: "台面满了!先点“整理”把菜都放到架子上吧。",
+    cookSuccessTemplate: "{title}做好了!看看台面上。",
     cookFailedGeneric: "现在无法烹饪,请重试。",
     cooking: "烹饪中…",
 
-    // Section: Shelves
+    // Section: Countertop
+    countertopLabel: "厨房新鲜出炉",
+    countertopCountTemplate: "{count}/{capacity}",
+    countertopEmpty: "还没有新鲜出炉的菜。",
+    organizeButton: "整理",
+    organizeButtonAria: "把台面上的菜都放到架子上",
+    organizeSuccessTemplate: "已经把{count}道菜放到架子上了!",
+    organizeNothingToMove: "还没有需要整理的菜。",
+    organizeFailedGeneric: "无法整理台面,请重试。",
+
+    // Section: Shelf
+    shelfLabel: "架子",
+    shelfOpenAria: "打开架子查看你整理好的菜",
+    shelfModalTitle: "你的架子",
+    shelfModalDescription: "你整理好的每一道菜,按类型分类。",
+    shelfCloseButton: "关闭",
     shelfSummaryTemplate: "已经做了{count}道菜",
     shelfSummarySingular: "已经做了1道菜",
-    shelfDefaultLabel: "厨房新鲜出炉",
-    shelfDrinksLabel: "饮品",
-    shelfDessertsLabel: "甜点",
-    shelfHotMealLabel: "热菜",
-    shelfItemCountTemplate: "{count}件",
-    shelfItemCountSingular: "1件",
-    shelfDefaultEmpty: "还没有菜——打开食谱书做点什么吧!",
-    shelfDrinksEmpty: "把饮品拖到这里整理。",
-    shelfDessertsEmpty: "把甜点拖到这里整理。",
-    shelfHotMealEmpty: "把热菜拖到这里整理。",
-    moveFailedGeneric: "无法移动这道菜,请重试。",
+    tabDrinksLabel: "饮品",
+    tabHotMealLabel: "热菜",
+    tabDessertsLabel: "甜点",
+    shelfTabEmptyTemplate: "还没有{tab}。",
+
+    // Section: Special Ingredients
+    specialModalTitleTemplate: "要给{title}加特殊食材吗?",
+    specialModalDescription: "点你想加的食材。凑对正确的组合会做出特别版本——但不管有没有凑对,选中的食材都会被用掉。",
+    specialModalEmpty: "这道菜需要的特殊食材你现在还不够多。",
+    specialSelectedBadge: "已添加",
+    specialDoneButton: "完成",
+    specialAddPillLabel: "+ 添加特殊食材",
+    specialEditPillTemplate: "已添加{count}种特殊食材——点击编辑",
   },
 };
 

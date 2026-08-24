@@ -29,7 +29,7 @@ import type {
   ShopIngredientLedgerEntry,
   ShopCookedDish,
   CookShopRecipeResult,
-  MoveShopCookedDishResult,
+  OrganizeKitchenCountertopResult,
   PurchaseShopIngredientResult,
 } from "./shop.types";
 import { calculateNextState, isDue } from "./scheduler";
@@ -45,8 +45,10 @@ import {
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedTitle,
   normalizeShopCookMethod,
+  normalizeShopFoodType,
+  normalizeShopSpecialIngredientKeys,
   normalizeCookShopRecipeResult,
-  normalizeMoveShopCookedDishResult,
+  normalizeOrganizeKitchenCountertopResult,
   normalizePurchaseShopIngredientResult,
 } from "./shop";
 import type {
@@ -337,6 +339,7 @@ interface SupabaseShopRecipeRow {
   special_ingredient_slots: unknown;
   special_ingredient_slots_i18n?: unknown;
   cook_method?: string | null;
+  food_type?: string | null;
 }
 
 interface SupabaseShopRecipeUnlockRow {
@@ -395,6 +398,7 @@ function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
     ),
     variantIconRules: normalizeShopVariantIconRules(row.variant_icon_rules),
     cookMethod: normalizeShopCookMethod(row.cook_method),
+    foodType: normalizeShopFoodType(row.food_type),
   };
 }
 
@@ -1553,27 +1557,23 @@ interface SupabaseShopCookedDishRow {
   id: string;
   user_id: string;
   recipe_id: string;
-  shelf_category: string;
+  location: string;
+  special_ingredient_keys?: unknown;
   cooked_at: string;
 }
 
 function toShopCookedDish(row: SupabaseShopCookedDishRow): ShopCookedDish {
-  const shelfCategory =
-    row.shelf_category === "drinks" ||
-    row.shelf_category === "desserts" ||
-    row.shelf_category === "hotmeal"
-      ? row.shelf_category
-      : "default";
   return {
     id: row.id,
     userId: row.user_id,
     recipeId: row.recipe_id,
-    shelfCategory,
+    location: row.location === "shelf" ? "shelf" : "countertop",
+    specialIngredientKeys: normalizeShopSpecialIngredientKeys(row.special_ingredient_keys),
     cookedAt: new Date(row.cooked_at).getTime(),
   };
 }
 
-/** Every dish the child has ever cooked -- one row per cook, not aggregated. The UI aggregates by recipeId for the shelf-count badge. */
+/** Every dish the child has ever cooked -- one row per cook, not aggregated. The UI aggregates by recipeId (for the countertop/shelf tile count badge) and by the dish's recipe's foodType (for the shelf's three tabs). */
 export async function listShopCookedDishes(targetUserId?: string): Promise<ShopCookedDish[]> {
   const { familyId, userId } = await getSessionMetadata();
   const dishUserId = targetUserId ?? userId;
@@ -1587,26 +1587,24 @@ export async function listShopCookedDishes(targetUserId?: string): Promise<ShopC
   return ((data ?? []) as SupabaseShopCookedDishRow[]).map(toShopCookedDish);
 }
 
-/** Spends a recipe's required ingredients and inserts one shop_cooked_dishes row (lands on the "default" shelf). All validation (unlock, cook_method, availability) happens server-side in cook_shop_recipe. */
-export async function cookShopRecipe(recipeId: string): Promise<CookShopRecipeResult> {
+/** Spends a recipe's required ingredients (base, plus any selected special ingredients) and inserts one shop_cooked_dishes row (lands on the countertop). All validation (unlock, cook_method, countertop capacity, ingredient availability) happens server-side in cook_shop_recipe. Selected special ingredients not among this recipe's own special_ingredient_slots are silently ignored server-side, not rejected. */
+export async function cookShopRecipe(
+  recipeId: string,
+  specialIngredientKeys: string[] = []
+): Promise<CookShopRecipeResult> {
   const { data, error } = await supabase.rpc("cook_shop_recipe", {
     p_recipe_id: recipeId,
+    p_special_ingredient_keys: specialIngredientKeys,
   });
   if (error) throw new Error(`cookShopRecipe: ${error.message}`);
   return normalizeCookShopRecipeResult(data);
 }
 
-/** Moves one cooked dish to a different shelf category (default/drinks/desserts/hotmeal). The only path allowed to touch shop_cooked_dishes.shelf_category after insert. */
-export async function moveShopCookedDish(
-  dishId: string,
-  shelfCategory: string
-): Promise<MoveShopCookedDishResult> {
-  const { data, error } = await supabase.rpc("move_shop_cooked_dish", {
-    p_dish_id: dishId,
-    p_shelf_category: shelfCategory,
-  });
-  if (error) throw new Error(`moveShopCookedDish: ${error.message}`);
-  return normalizeMoveShopCookedDishResult(data);
+/** Bulk-moves every one of the caller's countertop dishes onto the shelf in a single call -- there is no per-dish variant, since which shelf tab a dish displays under is derived from its recipe's foodType, not chosen by the child. */
+export async function organizeShopKitchenCountertop(): Promise<OrganizeKitchenCountertopResult> {
+  const { data, error } = await supabase.rpc("organize_shop_kitchen_countertop", {});
+  if (error) throw new Error(`organizeShopKitchenCountertop: ${error.message}`);
+  return normalizeOrganizeKitchenCountertopResult(data);
 }
 
 // ─── Coin Redemptions ────────────────────────────────────────────────────────

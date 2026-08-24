@@ -1289,8 +1289,8 @@ async function section9_shopIngredientRewards(): Promise<void> {
 // on both tables (same shape as shop_ingredient_rewards), but -- unlike
 // shop_ingredient_rewards, which at least allows a defense-in-depth
 // user-scoped INSERT -- neither table has ANY direct client write policy at
-// all. cook_shop_recipe and move_shop_cooked_dish (both security invoker)
-// are the only writers; every direct insert/update/delete attempted here,
+// all. cook_shop_recipe and organize_shop_kitchen_countertop (both security
+// definer) are the only writers; every direct insert/update/delete attempted here,
 // even one correctly scoped to the caller's own user_id, must be rejected
 // or silently affect 0 rows.
 async function section10_shopKitchen(): Promise<void> {
@@ -1333,7 +1333,7 @@ async function section10_shopKitchen(): Promise<void> {
       user_id: testChildAUserId,
       family_id: testFamilyAId,
       recipe_id: testRecipeId,
-      shelf_category: 'default',
+      location: 'countertop',
     })
     .select('id')
     .single();
@@ -1377,7 +1377,7 @@ async function section10_shopKitchen(): Promise<void> {
       user_id: testChildAUserId,
       family_id: testFamilyAId,
       recipe_id: testRecipeId,
-      shelf_category: 'default',
+      location: 'countertop',
     })
     .select('id');
   if (directInsertErr) {
@@ -1389,10 +1389,10 @@ async function section10_shopKitchen(): Promise<void> {
     await admin.from('shop_cooked_dishes').delete().in('id', directInsertData.map((row) => (row as { id: string }).id));
   }
 
-  // ── No direct update policy: child JWT UPDATE of shelf_category (even their own row) must be rejected ──
+  // ── No direct update policy: child JWT UPDATE of location (even their own row) must be rejected ──
   const { data: directUpdateData, error: directUpdateErr } = await familyAChildClient
     .from('shop_cooked_dishes')
-    .update({ shelf_category: 'drinks' })
+    .update({ location: 'shelf' })
     .eq('id', testDishId)
     .select('id');
   if (directUpdateErr) {
@@ -1400,7 +1400,7 @@ async function section10_shopKitchen(): Promise<void> {
   } else if (!directUpdateData || directUpdateData.length === 0) {
     pass('shop_cooked_dishes no direct update: child JWT UPDATE silently affected 0 rows');
   } else {
-    fail('shop_cooked_dishes no direct update: child JWT UPDATE SUCCEEDED — move_shop_cooked_dish is not the only writer!');
+    fail('shop_cooked_dishes no direct update: child JWT UPDATE SUCCEEDED — organize_shop_kitchen_countertop is not the only writer!');
   }
 
   // ── No direct delete policy ──

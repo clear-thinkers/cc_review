@@ -387,9 +387,9 @@ Runs against dev only — no `--prod` flag. Never point this at prod without fir
 
 **Known state (2026-08-23):** Two standing failures, neither introduced by the most recent run:
 - Section 6 (`vocab_phrases`/`vocab_phrase_lesson_tags`) — `vocab_phrase_lesson_tags setup: service role INSERT lesson_tag failed: Could not find the 'grade' column of 'lesson_tags' in the schema cache`. Pre-existing since it first appeared, not yet fixed.
-- Section 10 (Shop Kitchen, `shop_ingredient_consumptions`) — `shop_ingredient_consumptions no direct insert: child JWT INSERT SUCCEEDED — cook_shop_recipe is not the only writer!`. Surfaced 2026-08-23 when this script was first run live against dev after the Shop Kitchen migration shipped (see item J's `0_PRODUCT_ROADMAP.md` row — its "not yet run" note was stale by the time this ran). Contradicts `0_ARCHITECTURE.md`'s Shop Kitchen Rule 3 (neither `shop_cooked_dishes` nor `shop_ingredient_consumptions` should have a direct client write policy at all) — an insert policy is present on `shop_ingredient_consumptions` that shouldn't be. Not fixed here; flagged for follow-up.
+- Section 10 (Shop Kitchen, `shop_ingredient_consumptions`) — `shop_ingredient_consumptions no direct insert: child JWT INSERT SUCCEEDED — cook_shop_recipe is not the only writer!`. Surfaced 2026-08-23 when this script was first run live against dev after the original Shop Kitchen migration shipped. Contradicts `0_ARCHITECTURE.md`'s Shop Kitchen Rules (neither `shop_cooked_dishes` nor `shop_ingredient_consumptions` should have a direct client write policy at all) — a stray insert policy, copied from `shop_ingredient_rewards`' own pattern, was present on `shop_ingredient_consumptions`. **Fix written same day** in `supabase/migrations/20260823020000_shop_kitchen_countertop_redesign.sql` (drops the policy outright) but **not yet deployed** — this section's known-failure count won't drop until that migration is pushed to dev and the script is re-run to confirm.
 
-Expect 79/81, not 81/81, until both are addressed.
+Expect 79/81, not 81/81, until all three are addressed (the two above plus this one pending re-verification after the pending migration deploys).
 
 ---
 

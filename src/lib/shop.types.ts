@@ -15,10 +15,17 @@ export type ShopIngredient = {
 export type ShopVariantIconRule = {
   match: string[];
   iconPath: string;
+  /** Optional display name for this exact variant (e.g. "黑糖奶茶"), shown instead of the recipe's own title when this rule is the one matched. Absent/blank means fall back to the recipe's title, same as before this field existed. */
+  titleI18n?: ShopLocalizedValue<string>;
 };
 
 /** Which appliance a recipe is cooked on. `null` means not cookable (Shop Kitchen). */
 export type ShopCookMethod = "stove" | "oven";
+
+/** Which shelf tab a cooked dish is organized under. `null` alongside a `null` cookMethod means the recipe isn't cookable; Shop Admin requires it whenever cookMethod is set. */
+export type ShopFoodType = "drinks" | "hotmeal" | "desserts";
+
+export const SHOP_FOOD_TYPES: readonly ShopFoodType[] = ["drinks", "hotmeal", "desserts"];
 
 export type ShopRecipe = {
   id: string;
@@ -36,6 +43,7 @@ export type ShopRecipe = {
   specialIngredientsI18n: ShopLocalizedValue<ShopIngredient[]>;
   variantIconRules: ShopVariantIconRule[];
   cookMethod: ShopCookMethod | null;
+  foodType: ShopFoodType | null;
 };
 
 export type ShopRecipeUnlock = {
@@ -147,20 +155,19 @@ export type ShopIngredientLedgerEntry = {
   ingredientKey: string;
 };
 
-export type ShopShelfCategory = "default" | "drinks" | "desserts" | "hotmeal";
+/** Where a cooked dish physically sits. The countertop is capacity-limited (SHOP_KITCHEN_COUNTERTOP_CAPACITY); the shelf is unlimited and dishes there are grouped for display by their *recipe's* foodType, not stored per-dish. */
+export type ShopDishLocation = "countertop" | "shelf";
 
-export const SHOP_SHELF_CATEGORIES: readonly ShopShelfCategory[] = [
-  "default",
-  "drinks",
-  "desserts",
-  "hotmeal",
-];
+/** Max number of dishes that can sit on the countertop before organize_shop_kitchen_countertop must be called (cooking is blocked past this). Kept in sync by hand with the same constant baked into the cook_shop_recipe migration -- no shared config layer between SQL and TS in this codebase. */
+export const SHOP_KITCHEN_COUNTERTOP_CAPACITY = 6;
 
 export type ShopCookedDish = {
   id: string;
   userId: string;
   recipeId: string;
-  shelfCategory: ShopShelfCategory;
+  location: ShopDishLocation;
+  /** Which of the recipe's own special_ingredient_slots keys were added when this specific dish was cooked. Raw facts, not a resolved icon -- pair with the recipe's variantIconRules and resolveShopRecipeIconPath to get the actual variant icon to display. */
+  specialIngredientKeys: string[];
   cookedAt: number;
 };
 
@@ -168,6 +175,7 @@ export type CookShopRecipeErrorCode =
   | "forbidden"
   | "recipe_not_cookable"
   | "recipe_not_unlocked"
+  | "countertop_full"
   | "insufficient_ingredients"
   | "unknown";
 
@@ -177,7 +185,8 @@ export type CookShopRecipeResult =
       code: "cooked";
       dishId: string;
       recipeId: string;
-      shelfCategory: ShopShelfCategory;
+      location: ShopDishLocation;
+      specialIngredientKeys: string[];
     }
   | {
       success: false;
@@ -185,22 +194,17 @@ export type CookShopRecipeResult =
       missingIngredientKeys: string[];
     };
 
-export type MoveShopCookedDishErrorCode =
-  | "forbidden"
-  | "invalid_shelf_category"
-  | "dish_not_found"
-  | "unknown";
+export type OrganizeKitchenCountertopErrorCode = "forbidden" | "unknown";
 
-export type MoveShopCookedDishResult =
+export type OrganizeKitchenCountertopResult =
   | {
       success: true;
-      code: "moved";
-      dishId: string;
-      shelfCategory: ShopShelfCategory;
+      code: "organized";
+      movedCount: number;
     }
   | {
       success: false;
-      code: MoveShopCookedDishErrorCode;
+      code: OrganizeKitchenCountertopErrorCode;
     };
 
 /** Cook-readiness for one recipe against the caller's current available ingredients. */
