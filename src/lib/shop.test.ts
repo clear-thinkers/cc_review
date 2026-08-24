@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildShopIngredientAvailabilityMap,
   buildShopIngredientPriceMap,
+  canAffordIngredientPurchase,
   canAffordRecipeUnlock,
   computeShopCookReadiness,
   getShopRecipeContentForLocale,
   normalizeCookShopRecipeResult,
   normalizeMoveShopCookedDishResult,
+  normalizePurchaseShopIngredientResult,
   normalizeShopCookMethod,
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
@@ -26,6 +28,17 @@ describe("canAffordRecipeUnlock", () => {
   it("uses unlockCostCoins from the recipe row", () => {
     expect(canAffordRecipeUnlock(25, { unlockCostCoins: 25 })).toBe(true);
     expect(canAffordRecipeUnlock(24, { unlockCostCoins: 25 })).toBe(false);
+  });
+});
+
+describe("canAffordIngredientPurchase", () => {
+  it("multiplies per-unit cost by quantity", () => {
+    expect(canAffordIngredientPurchase(12, 4, 3)).toBe(true);
+    expect(canAffordIngredientPurchase(11, 4, 3)).toBe(false);
+  });
+
+  it("treats zero quantity as always affordable", () => {
+    expect(canAffordIngredientPurchase(0, 4, 0)).toBe(true);
   });
 });
 
@@ -348,6 +361,65 @@ describe("normalizeUnlockShopRecipeResult", () => {
       code: "plain_icon_missing",
       recipeId: "recipe-1",
       remainingCoins: null,
+      coinsSpent: 0,
+    });
+  });
+});
+
+describe("normalizePurchaseShopIngredientResult", () => {
+  it("normalizes a successful rpc payload", () => {
+    expect(
+      normalizePurchaseShopIngredientResult({
+        success: true,
+        code: "purchased",
+        recipeId: "recipe-1",
+        ingredientKey: "milk",
+        remainingCoins: 12,
+        coinsSpent: 8,
+        quantity: 2,
+      })
+    ).toEqual({
+      success: true,
+      code: "purchased",
+      recipeId: "recipe-1",
+      ingredientKey: "milk",
+      remainingCoins: 12,
+      coinsSpent: 8,
+      quantity: 2,
+    });
+  });
+
+  it("falls back to unknown for unexpected failure codes", () => {
+    expect(
+      normalizePurchaseShopIngredientResult({
+        success: false,
+        code: "mystery_failure",
+      })
+    ).toEqual({
+      success: false,
+      code: "unknown",
+      recipeId: null,
+      ingredientKey: null,
+      remainingCoins: null,
+      coinsSpent: 0,
+    });
+  });
+
+  it("normalizes insufficient_coins failures", () => {
+    expect(
+      normalizePurchaseShopIngredientResult({
+        success: false,
+        code: "insufficient_coins",
+        recipeId: "recipe-1",
+        ingredientKey: "milk",
+        remainingCoins: 3,
+      })
+    ).toEqual({
+      success: false,
+      code: "insufficient_coins",
+      recipeId: "recipe-1",
+      ingredientKey: "milk",
+      remainingCoins: 3,
       coinsSpent: 0,
     });
   });

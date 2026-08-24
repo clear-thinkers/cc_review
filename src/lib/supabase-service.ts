@@ -30,6 +30,7 @@ import type {
   ShopCookedDish,
   CookShopRecipeResult,
   MoveShopCookedDishResult,
+  PurchaseShopIngredientResult,
 } from "./shop.types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade, GradeResult } from "./scheduler";
@@ -46,6 +47,7 @@ import {
   normalizeShopCookMethod,
   normalizeCookShopRecipeResult,
   normalizeMoveShopCookedDishResult,
+  normalizePurchaseShopIngredientResult,
 } from "./shop";
 import type {
   Textbook,
@@ -348,7 +350,8 @@ interface SupabaseShopTransactionRow {
   id: string;
   user_id: string;
   recipe_id: string | null;
-  action_type: "unlock_recipe";
+  ingredient_key: string | null;
+  action_type: "unlock_recipe" | "purchase_ingredient";
   coins_spent: number;
   beginning_balance: number;
   ending_balance: number;
@@ -409,6 +412,7 @@ function toShopTransaction(row: SupabaseShopTransactionRow): ShopTransaction {
     id: row.id,
     userId: row.user_id,
     recipeId: row.recipe_id,
+    ingredientKey: row.ingredient_key,
     actionType: row.action_type,
     coinsSpent: row.coins_spent,
     beginningBalance: row.beginning_balance,
@@ -1429,6 +1433,20 @@ export async function unlockShopRecipe(recipeId: string): Promise<UnlockShopReci
   return normalizeUnlockShopRecipeResult(data);
 }
 
+export async function purchaseShopIngredient(
+  recipeId: string,
+  ingredientKey: string,
+  quantity = 1
+): Promise<PurchaseShopIngredientResult> {
+  const { data, error } = await supabase.rpc("purchase_shop_ingredient", {
+    p_recipe_id: recipeId,
+    p_ingredient_key: ingredientKey,
+    p_quantity: quantity,
+  });
+  if (error) throw new Error(`purchaseShopIngredient: ${error.message}`);
+  return normalizePurchaseShopIngredientResult(data);
+}
+
 interface SupabaseRewardedIngredientRow {
   ingredient_key: string;
   label_i18n?: unknown;
@@ -1513,6 +1531,21 @@ export async function listShopIngredientConsumptions(
     .eq("family_id", familyId)
     .eq("user_id", consumptionUserId);
   if (error) throw new Error(`listShopIngredientConsumptions: ${error.message}`);
+  return ((data ?? []) as SupabaseShopIngredientLedgerRow[]).map(toShopIngredientLedgerEntry);
+}
+
+/** Every ingredient unit the child has bought via purchase_shop_ingredient -- one row per unit, not aggregated. Pair with listShopIngredientRewards and listShopIngredientConsumptions in buildShopIngredientAvailabilityMap to get spendable counts for the Kitchen cupboard. */
+export async function listShopIngredientPurchases(
+  targetUserId?: string
+): Promise<ShopIngredientLedgerEntry[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const purchaseUserId = targetUserId ?? userId;
+  const { data, error } = await supabase
+    .from("shop_ingredient_purchases")
+    .select("ingredient_key")
+    .eq("family_id", familyId)
+    .eq("user_id", purchaseUserId);
+  if (error) throw new Error(`listShopIngredientPurchases: ${error.message}`);
   return ((data ?? []) as SupabaseShopIngredientLedgerRow[]).map(toShopIngredientLedgerEntry);
 }
 

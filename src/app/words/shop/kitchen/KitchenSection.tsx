@@ -25,6 +25,7 @@ import {
   listShopCookedDishes,
   listShopIngredientConsumptions,
   listShopIngredientPrices,
+  listShopIngredientPurchases,
   listShopIngredientRewards,
   listShopRecipeUnlocks,
   listShopRecipes,
@@ -262,6 +263,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [unlocks, setUnlocks] = useState<ShopRecipeUnlock[]>([]);
   const [ingredientPrices, setIngredientPrices] = useState<ShopIngredientPrice[]>([]);
   const [rewards, setRewards] = useState<ShopIngredientLedgerEntry[]>([]);
+  const [purchases, setPurchases] = useState<ShopIngredientLedgerEntry[]>([]);
   const [consumptions, setConsumptions] = useState<ShopIngredientLedgerEntry[]>([]);
   const [dishes, setDishes] = useState<ShopCookedDish[]>([]);
 
@@ -287,12 +289,13 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     async function loadKitchen(): Promise<void> {
       setLoadState("loading");
       try {
-        const [recipeRows, unlockRows, priceRows, rewardRows, consumptionRows, dishRows] =
+        const [recipeRows, unlockRows, priceRows, rewardRows, purchaseRows, consumptionRows, dishRows] =
           await Promise.all([
             listShopRecipes(),
             listShopRecipeUnlocks(),
             listShopIngredientPrices(),
             listShopIngredientRewards(),
+            listShopIngredientPurchases(),
             listShopIngredientConsumptions(),
             listShopCookedDishes(),
           ]);
@@ -301,6 +304,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
         setUnlocks(unlockRows);
         setIngredientPrices(priceRows);
         setRewards(rewardRows);
+        setPurchases(purchaseRows);
         setConsumptions(consumptionRows);
         setDishes(dishRows);
         setLoadState("ready");
@@ -321,8 +325,11 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     [ingredientPrices]
   );
   const availabilityByKey = useMemo(
-    () => buildShopIngredientAvailabilityMap(rewards, consumptions),
-    [rewards, consumptions]
+    // Purchased ingredients (roadmap item F) feed into the same client-side
+    // availability aggregation as quiz rewards -- a second reward-like input,
+    // per 0_ARCHITECTURE.md's Shop Kitchen Rule 10, not a redesign of this helper.
+    () => buildShopIngredientAvailabilityMap([...rewards, ...purchases], consumptions),
+    [rewards, purchases, consumptions]
   );
   const unlockedRecipeIds = useMemo(
     () => new Set(unlocks.map((unlock) => unlock.recipeId)),
@@ -599,7 +606,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
               onClick={() => setIsCupboardOpen(true)}
               aria-haspopup="dialog"
               aria-label={str.cupboardOpenAria}
-              className="flex flex-col items-center gap-2 rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)]"
+              className="flex flex-col items-center gap-2 self-start rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)]"
             >
               <span className="text-3xl" aria-hidden="true">🗄️</span>
               <span className="text-sm font-semibold text-[#6a5530]">{str.cupboardLabel}</span>
@@ -613,12 +620,21 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
               onClick={() => void handleCook("stove")}
               disabled={cookingRecipeId !== null}
               aria-label={str.stovetopAria}
-              className="flex flex-col items-center gap-2 rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)] disabled:opacity-60"
+              className="relative flex aspect-square flex-col items-center justify-end overflow-hidden rounded-[1.25rem] border border-[#dcc38a] shadow-[0_16px_34px_rgba(115,92,40,0.08)] disabled:opacity-60"
             >
-              <span className="text-3xl" aria-hidden="true">🔥</span>
-              <span className="text-sm font-semibold text-[#6a5530]">{str.stovetopLabel}</span>
+              <img
+                src="/kitchen/stovetop.png"
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <span className="relative z-10 mb-2 rounded-full bg-[#fcf8ef]/90 px-2 py-0.5 text-sm font-semibold text-[#6a5530] shadow-sm">
+                {str.stovetopLabel}
+              </span>
               {cookingRecipeId && selectedRecipe?.cookMethod === "stove" ? (
-                <span className="text-xs text-gray-500">{str.cooking}</span>
+                <span className="relative z-10 mb-2 rounded-full bg-white/85 px-2 py-0.5 text-xs text-gray-600">
+                  {str.cooking}
+                </span>
               ) : null}
             </button>
 
@@ -627,7 +643,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
               onClick={() => void handleCook("oven")}
               disabled={cookingRecipeId !== null}
               aria-label={str.ovenAria}
-              className="flex flex-col items-center gap-2 rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)] disabled:opacity-60"
+              className="flex flex-col items-center gap-2 self-start rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)] disabled:opacity-60"
             >
               <span className="text-3xl" aria-hidden="true">♨️</span>
               <span className="text-sm font-semibold text-[#6a5530]">{str.ovenLabel}</span>
@@ -641,7 +657,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
               onClick={() => setIsBookOpen(true)}
               aria-haspopup="dialog"
               aria-label={str.bookOpenAria}
-              className="flex flex-col items-center gap-2 rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)]"
+              className="flex flex-col items-center gap-2 self-start rounded-[1.25rem] border border-[#dcc38a] bg-[linear-gradient(180deg,rgba(255,252,244,0.98),rgba(249,242,224,0.98))] p-4 text-center shadow-[0_16px_34px_rgba(115,92,40,0.08)]"
             >
               <span className="text-3xl" aria-hidden="true">📖</span>
               <span className="text-sm font-semibold text-[#6a5530]">{str.bookLabel}</span>

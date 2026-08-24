@@ -16,6 +16,8 @@ import type {
   CookShopRecipeErrorCode,
   MoveShopCookedDishResult,
   MoveShopCookedDishErrorCode,
+  PurchaseShopIngredientResult,
+  PurchaseShopIngredientErrorCode,
 } from "./shop.types";
 import {
   canonicalizeShopIngredientKey,
@@ -74,6 +76,14 @@ export function canAffordRecipeUnlock(
   recipe: Pick<ShopRecipe, "unlockCostCoins">
 ): boolean {
   return totalCoins >= recipe.unlockCostCoins;
+}
+
+export function canAffordIngredientPurchase(
+  totalCoins: number,
+  costCoinsPerUnit: number,
+  quantity: number
+): boolean {
+  return totalCoins >= costCoinsPerUnit * quantity;
 }
 
 export function resolveShopRecipeIconPath(
@@ -704,6 +714,60 @@ export function normalizeCookShopRecipeResult(raw: unknown): CookShopRecipeResul
     missingIngredientKeys: Array.isArray(source.missingIngredientKeys)
       ? source.missingIngredientKeys.filter((key): key is string => typeof key === "string")
       : [],
+  };
+}
+
+type PurchaseShopIngredientRpcResult = {
+  success?: boolean;
+  code?: string;
+  recipeId?: string | null;
+  ingredientKey?: string | null;
+  remainingCoins?: number | null;
+  coinsSpent?: number;
+  quantity?: number;
+};
+
+export function normalizePurchaseShopIngredientResult(raw: unknown): PurchaseShopIngredientResult {
+  const source = raw && typeof raw === "object" ? (raw as PurchaseShopIngredientRpcResult) : {};
+
+  if (
+    source.success === true &&
+    typeof source.recipeId === "string" &&
+    typeof source.ingredientKey === "string"
+  ) {
+    return {
+      success: true,
+      code: "purchased",
+      recipeId: source.recipeId,
+      ingredientKey: source.ingredientKey,
+      remainingCoins: typeof source.remainingCoins === "number" ? source.remainingCoins : 0,
+      coinsSpent: typeof source.coinsSpent === "number" ? source.coinsSpent : 0,
+      quantity: typeof source.quantity === "number" ? source.quantity : 0,
+    };
+  }
+
+  const validCodes: PurchaseShopIngredientErrorCode[] = [
+    "forbidden",
+    "invalid_quantity",
+    "ingredient_not_available",
+    "recipe_not_available",
+    "recipe_not_unlocked",
+    "insufficient_coins",
+  ];
+  const code = source.code;
+  const normalizedCode: PurchaseShopIngredientErrorCode = validCodes.includes(
+    code as PurchaseShopIngredientErrorCode
+  )
+    ? (code as PurchaseShopIngredientErrorCode)
+    : "unknown";
+
+  return {
+    success: false,
+    code: normalizedCode,
+    recipeId: typeof source.recipeId === "string" ? source.recipeId : null,
+    ingredientKey: typeof source.ingredientKey === "string" ? source.ingredientKey : null,
+    remainingCoins: typeof source.remainingCoins === "number" ? source.remainingCoins : null,
+    coinsSpent: typeof source.coinsSpent === "number" ? source.coinsSpent : 0,
   };
 }
 

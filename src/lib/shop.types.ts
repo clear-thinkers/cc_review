@@ -60,12 +60,13 @@ export type RewardedIngredient = {
   iconPath?: string | null;
 };
 
-export type ShopTransactionAction = "unlock_recipe";
+export type ShopTransactionAction = "unlock_recipe" | "purchase_ingredient";
 
 export type ShopTransaction = {
   id: string;
   userId: string;
   recipeId: string | null;
+  ingredientKey: string | null;
   actionType: ShopTransactionAction;
   coinsSpent: number;
   beginningBalance: number;
@@ -207,3 +208,33 @@ export type ShopCookReadiness = {
   isReady: boolean;
   missingIngredientKeys: string[];
 };
+
+// ─── Ingredient shopping for kids (feature spec 2026-03-30-shop-ingredient-shopping.md) ───
+
+export type PurchaseShopIngredientErrorCode =
+  | "forbidden"
+  | "invalid_quantity"
+  | "ingredient_not_available"
+  | "recipe_not_available"
+  | "recipe_not_unlocked"
+  | "insufficient_coins"
+  | "unknown";
+
+export type PurchaseShopIngredientResult =
+  | {
+      success: true;
+      code: "purchased";
+      recipeId: string;
+      ingredientKey: string;
+      remainingCoins: number;
+      coinsSpent: number;
+      quantity: number;
+    }
+  | {
+      success: false;
+      code: PurchaseShopIngredientErrorCode;
+      recipeId: string | null;
+      ingredientKey: string | null;
+      remainingCoins: number | null;
+      coinsSpent: number;
+    };

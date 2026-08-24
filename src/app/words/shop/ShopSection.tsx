@@ -8,6 +8,7 @@ import { resolveChildProfileTarget } from "@/lib/child-profile-target";
 import type {
   CoinBreakdown,
   CoinRedemption,
+  PurchaseShopIngredientResult,
   ShopIngredient,
   ShopIngredientPrice,
   ShopRecipe,
@@ -22,16 +23,24 @@ import {
   listShopRecipeUnlocks,
   listShopRecipes,
   listShopTransactions,
+  purchaseShopIngredient,
   redeemCoins,
   unlockShopRecipe,
 } from "@/lib/supabase-service";
 import {
+  buildShopIngredientPriceMap,
   buildShopIngredientRecordMap,
+  SHOP_INGREDIENT_QUANTITY_MAX,
+  SHOP_INGREDIENT_QUANTITY_MIN,
   SHOP_WALL_SIZE,
+  canAffordIngredientPurchase,
   canAffordRecipeUnlock,
   getShopRecipeContentForLocale,
+  parseShopIngredientQuantity,
   resolvePlainShopRecipeIconPath,
+  resolveShopIngredientCatalogEntry,
   resolveShopIngredientIconPath,
+  resolveShopIngredientLabel,
   resolveShopRecipeIconPath,
 } from "@/lib/shop";
 
@@ -62,6 +71,28 @@ function buildUnlockNotice(
   }
 }
 
+function buildPurchaseNotice(
+  resultCode: string,
+  strings: WordsWorkspaceVM["str"]["shop"]
+): string {
+  switch (resultCode) {
+    case "insufficient_coins":
+      return strings.modal.buyInsufficientCoins;
+    case "recipe_not_unlocked":
+      return strings.modal.buyRecipeNotUnlocked;
+    case "invalid_quantity":
+      return strings.modal.buyInvalidQuantity;
+    case "ingredient_not_available":
+      return strings.modal.ingredientNoPriceAvailable;
+    case "recipe_not_available":
+      return strings.recipeUnavailable;
+    case "forbidden":
+      return strings.childOnly;
+    default:
+      return strings.modal.buyFailed;
+  }
+}
+
 function formatShopDateTime(timestamp: number, locale: "en" | "zh"): string {
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
     year: "numeric",
@@ -79,16 +110,31 @@ function formatIngredientAmount(ingredient: ShopIngredient): string {
 function buildShopTransactionActionLabel(
   transaction: ShopTransaction,
   recipesById: Map<string, ShopRecipe>,
+  ingredientRecordsByKey: ReadonlyMap<string, ShopIngredientPrice>,
   locale: "en" | "zh",
   strings: WordsWorkspaceVM["str"]["shop"]
 ): string {
+  const recipeTitle =
+    (transaction.recipeId
+      ? recipesById.get(transaction.recipeId)
+        ? getShopRecipeContentForLocale(recipesById.get(transaction.recipeId)!, locale).title
+        : null
+      : null) ?? strings.history.unknownRecipe;
+
+  if (transaction.actionType === "purchase_ingredient") {
+    const ingredientLabel = resolveShopIngredientLabel(
+      transaction.ingredientKey ? ingredientRecordsByKey.get(transaction.ingredientKey) : undefined,
+      locale,
+      strings.history.unknownIngredient
+    );
+    return formatWithToken(
+      formatWithToken(strings.history.actionPurchaseIngredient, "{ingredient}", ingredientLabel),
+      "{title}",
+      recipeTitle
+    );
+  }
+
   if (transaction.actionType === "unlock_recipe") {
-    const recipeTitle =
-      (transaction.recipeId
-        ? recipesById.get(transaction.recipeId)
-          ? getShopRecipeContentForLocale(recipesById.get(transaction.recipeId)!, locale).title
-          : null
-        : null) ?? strings.history.unknownRecipe;
     return formatWithToken(strings.history.actionUnlockRecipe, "{title}", recipeTitle);
   }
   return strings.history.unknownRecipe;
@@ -114,23 +160,81 @@ function getTileArtClassName(recipeState: "reserved" | "locked" | "unlocked"): s
 function RecipeModal({
   recipe,
   ingredientRecordsByKey,
+  ingredientPriceByKey,
   locale,
   strings,
+  canBuy,
+  availableCoins,
+  buyingIngredientKey,
+  onBuyIngredient,
   onClose,
 }: {
   recipe: ShopRecipe;
   ingredientRecordsByKey: ReadonlyMap<string, ShopIngredientPrice>;
+  ingredientPriceByKey: ReadonlyMap<string, number>;
   locale: "en" | "zh";
   strings: WordsWorkspaceVM["str"]["shop"];
+  canBuy: boolean;
+  availableCoins: number;
+  buyingIngredientKey: string | null;
+  onBuyIngredient: (ingredientKey: string, quantity: number) => Promise<PurchaseShopIngredientResult>;
   onClose: () => void;
 }) {
   const [selectedIngredient, setSelectedIngredient] = useState<ShopIngredient | null>(null);
+  const [buyQuantityInput, setBuyQuantityInput] = useState("1");
+  const [buyNotice, setBuyNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [lastSelectedIngredientKey, setLastSelectedIngredientKey] = useState<string | null>(null);
+
+  // Reset the buy form whenever a different ingredient is opened -- adjusted
+  // during render (React's recommended pattern for state that depends on a
+  // changing prop) rather than in a useEffect, to avoid the extra render pass.
+  const selectedIngredientIdentity = selectedIngredient
+    ? (selectedIngredient.ingredientKey ?? selectedIngredient.name)
+    : null;
+  if (selectedIngredientIdentity !== lastSelectedIngredientKey) {
+    setLastSelectedIngredientKey(selectedIngredientIdentity);
+    setBuyQuantityInput("1");
+    setBuyNotice(null);
+  }
+
   if (typeof document === "undefined") return null;
 
   const localizedRecipe = getShopRecipeContentForLocale(recipe, locale);
   const selectedIngredientIconPath = selectedIngredient
     ? resolveShopIngredientIconPath(selectedIngredient, ingredientRecordsByKey)
     : null;
+  const selectedIngredientCatalogEntry = selectedIngredient
+    ? resolveShopIngredientCatalogEntry(selectedIngredient, ingredientRecordsByKey)
+    : null;
+  const selectedIngredientCostPerUnit = selectedIngredientCatalogEntry
+    ? ingredientPriceByKey.get(selectedIngredientCatalogEntry.key) ??
+      selectedIngredientCatalogEntry.defaultCostCoins
+    : null;
+  const buyQuantity = parseShopIngredientQuantity(buyQuantityInput);
+  const isBuying = Boolean(
+    selectedIngredientCatalogEntry && buyingIngredientKey === selectedIngredientCatalogEntry.key
+  );
+
+  async function handleBuyClick(): Promise<void> {
+    if (!selectedIngredientCatalogEntry || buyQuantity === null || selectedIngredientCostPerUnit === null) {
+      return;
+    }
+    setBuyNotice(null);
+    const result = await onBuyIngredient(selectedIngredientCatalogEntry.key, buyQuantity);
+    if (!result.success) {
+      setBuyNotice({ tone: "error", text: buildPurchaseNotice(result.code, strings) });
+      return;
+    }
+    setBuyQuantityInput("1");
+    setBuyNotice({
+      tone: "success",
+      text: formatWithToken(
+        formatWithToken(strings.modal.buySuccess, "{quantity}", String(result.quantity)),
+        "{name}",
+        selectedIngredient?.name ?? ""
+      ),
+    });
+  }
 
   return createPortal(
     <div
@@ -274,6 +378,85 @@ function RecipeModal({
                     <div className="text-sm font-semibold text-gray-900">{strings.modal.ingredientQuantityNeeded}</div>
                     <div className="mt-1 text-lg font-semibold text-[#8b6f2f]">{formatIngredientAmount(selectedIngredient)}</div>
                   </div>
+
+                  {selectedIngredientCatalogEntry && selectedIngredientCostPerUnit !== null ? (
+                    <div className="space-y-3 rounded-xl border border-[#eadfbe] bg-white px-4 py-3">
+                      <div className="text-sm font-semibold text-[#8b6f2f]">
+                        {formatWithToken(strings.modal.ingredientCost, "{coins}", String(selectedIngredientCostPerUnit))}
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium text-gray-700" htmlFor="shop-ingredient-buy-quantity">
+                          {strings.modal.ingredientQuantityToBuy}
+                        </label>
+                        <div className="mt-1 flex items-center gap-2">
+                          <button
+                            type="button"
+                            aria-label={strings.modal.ingredientQuantityDecreaseAria}
+                            className="h-9 w-9 rounded-md border-2 border-gray-300 bg-gray-100 text-lg font-semibold text-gray-700 disabled:opacity-50"
+                            disabled={buyQuantity === null || buyQuantity <= SHOP_INGREDIENT_QUANTITY_MIN}
+                            onClick={() =>
+                              setBuyQuantityInput(String(Math.max(SHOP_INGREDIENT_QUANTITY_MIN, (buyQuantity ?? 1) - 1)))
+                            }
+                          >
+                            −
+                          </button>
+                          <input
+                            id="shop-ingredient-buy-quantity"
+                            type="number"
+                            min={SHOP_INGREDIENT_QUANTITY_MIN}
+                            max={SHOP_INGREDIENT_QUANTITY_MAX}
+                            value={buyQuantityInput}
+                            onChange={(event) => setBuyQuantityInput(event.target.value)}
+                            className="w-16 rounded-md border border-[#d2b15b] bg-white px-2 py-1.5 text-center text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                          />
+                          <button
+                            type="button"
+                            aria-label={strings.modal.ingredientQuantityIncreaseAria}
+                            className="h-9 w-9 rounded-md border-2 border-gray-300 bg-gray-100 text-lg font-semibold text-gray-700 disabled:opacity-50"
+                            disabled={buyQuantity === null || buyQuantity >= SHOP_INGREDIENT_QUANTITY_MAX}
+                            onClick={() =>
+                              setBuyQuantityInput(String(Math.min(SHOP_INGREDIENT_QUANTITY_MAX, (buyQuantity ?? 1) + 1)))
+                            }
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      {buyQuantity !== null ? (
+                        <div className="text-sm text-gray-600">
+                          {formatWithToken(
+                            strings.modal.ingredientTotalCost,
+                            "{coins}",
+                            String(selectedIngredientCostPerUnit * buyQuantity)
+                          )}
+                        </div>
+                      ) : null}
+
+                      {buyNotice ? (
+                        <p className={buyNotice.tone === "success" ? "text-sm text-blue-700" : "text-sm text-red-600"}>
+                          {buyNotice.text}
+                        </p>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        className="w-full rounded-md border-2 border-[#d8bc76] bg-[#fff6dc] px-4 py-2 text-sm font-semibold text-[#7b5b24] shadow-[0_8px_18px_rgba(168,127,43,0.12)] transition hover:bg-[#fff0c6] disabled:opacity-50"
+                        disabled={
+                          !canBuy ||
+                          isBuying ||
+                          buyQuantity === null ||
+                          !canAffordIngredientPurchase(availableCoins, selectedIngredientCostPerUnit, buyQuantity)
+                        }
+                        onClick={() => void handleBuyClick()}
+                      >
+                        {isBuying ? strings.modal.ingredientBuying : strings.modal.ingredientBuy}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">{strings.modal.ingredientNoPriceAvailable}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -288,12 +471,14 @@ function RecipeModal({
 function HistoryModal({
   transactions,
   recipesById,
+  ingredientRecordsByKey,
   strings,
   locale,
   onClose,
 }: {
   transactions: ShopTransaction[];
   recipesById: Map<string, ShopRecipe>;
+  ingredientRecordsByKey: ReadonlyMap<string, ShopIngredientPrice>;
   strings: WordsWorkspaceVM["str"]["shop"];
   locale: "en" | "zh";
   onClose: () => void;
@@ -350,7 +535,13 @@ function HistoryModal({
                     <tr key={transaction.id} className="border-t border-[#f0e2c2]">
                       <td className="px-3 py-2">{formatShopDateTime(transaction.createdAt, locale)}</td>
                       <td className="px-3 py-2">
-                        {buildShopTransactionActionLabel(transaction, recipesById, locale, strings)}
+                        {buildShopTransactionActionLabel(
+                          transaction,
+                          recipesById,
+                          ingredientRecordsByKey,
+                          locale,
+                          strings
+                        )}
                       </td>
                       <td className="px-3 py-2 font-semibold text-[#a24d1f]">-{transaction.coinsSpent}</td>
                       <td className="px-3 py-2">{transaction.beginningBalance}</td>
@@ -465,6 +656,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [selectedRecipe, setSelectedRecipe] = useState<ShopRecipe | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [unlockingRecipeId, setUnlockingRecipeId] = useState<string | null>(null);
+  const [buyingIngredientKey, setBuyingIngredientKey] = useState<string | null>(null);
 
   // Cash-out form state
   const [cashOutCoins, setCashOutCoins] = useState("");
@@ -575,7 +767,43 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
     [ingredientRecords]
   );
 
+  const ingredientPriceByKey = useMemo(
+    () => buildShopIngredientPriceMap(ingredientRecords),
+    [ingredientRecords]
+  );
+
   if (vm.page !== "shop") return null;
+
+  async function handleBuyIngredient(
+    ingredientKey: string,
+    quantity: number
+  ): Promise<PurchaseShopIngredientResult> {
+    if (!selectedRecipe) {
+      throw new Error("handleBuyIngredient called with no recipe selected");
+    }
+    setBuyingIngredientKey(ingredientKey);
+    try {
+      const result = await purchaseShopIngredient(selectedRecipe.id, ingredientKey, quantity);
+      if (result.success) {
+        setBreakdown((prev) => ({
+          ...prev,
+          available: result.remainingCoins,
+          spentOnRecipes: prev.spentOnRecipes + result.coinsSpent,
+        }));
+        try {
+          const transactionRows = await listShopTransactions(childTarget?.userId);
+          setTransactions(transactionRows);
+        } catch (transactionError) {
+          console.error("Failed to refresh shop transactions:", transactionError);
+        }
+      } else if (typeof result.remainingCoins === "number") {
+        setBreakdown((prev) => ({ ...prev, available: result.remainingCoins as number }));
+      }
+      return result;
+    } finally {
+      setBuyingIngredientKey(null);
+    }
+  }
 
   async function handleUnlock(recipe: ShopRecipe): Promise<void> {
     setNotice(null);
@@ -1029,8 +1257,13 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
         <RecipeModal
           recipe={selectedRecipe}
           ingredientRecordsByKey={ingredientRecordsByKey}
+          ingredientPriceByKey={ingredientPriceByKey}
           locale={locale}
           strings={str}
+          canBuy={canActOnWallet}
+          availableCoins={breakdown.available}
+          buyingIngredientKey={buyingIngredientKey}
+          onBuyIngredient={handleBuyIngredient}
           onClose={() => setSelectedRecipe(null)}
         />
       ) : null}
@@ -1039,6 +1272,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
         <HistoryModal
           transactions={transactions}
           recipesById={recipesById}
+          ingredientRecordsByKey={ingredientRecordsByKey}
           strings={str}
           locale={locale}
           onClose={() => setIsHistoryOpen(false)}

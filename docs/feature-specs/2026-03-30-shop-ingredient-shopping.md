@@ -1,6 +1,20 @@
 # Feature Spec — 2026-03-30 — Ingredient Shopping for Kids (Row F)
 
-## Status: Draft
+## Status: Shipped (buy-only slice) — 2026-08-23
+
+**Update 2026-08-23:** Shipped a narrower slice than this draft describes, on explicit request: the
+Buy action (§1 below) shipped as **bulk purchase** (a quantity stepper — default 1, +/− or type
+directly, buys N units in one tap and spends `cost × quantity` coins) rather than the one-unit-per-tap
+design this draft originally specified — see the superseded note under §1. The ingredient inventory
+page (§3), the recipe-ready visual indicator (§2), and coin-history label resolution beyond a minimal
+fix (§4) were **not** built in this pass — they remain open follow-ups, not abandoned. Everything
+below is preserved as the original design reference; inline notes mark what changed.
+
+Data model note: `shop_ingredient_purchases` shipped as **one row per unit purchased** (matching
+`shop_ingredient_rewards`/`shop_ingredient_consumptions`'s existing ledger convention), not the
+`quantity integer` column §Data Model originally proposed — this lets a purchase feed directly into
+Shop Kitchen's `buildShopIngredientAvailabilityMap` cupboard aggregation with no expansion logic.
+See `0_ARCHITECTURE.md`'s Recipe Shop Rules 17–22 and Shop Kitchen Rule 10 for the shipped behavior.
 
 ---
 
@@ -45,6 +59,14 @@ The requested behavior is:
 ## Proposed Behavior
 
 ### 1. Ingredient detail sub-modal — Buy action
+
+**Superseded 2026-08-23:** Shipped as a bulk-quantity buy (quantity stepper, default 1, +/− or type
+directly, one RPC call spends `cost × quantity`) instead of the one-unit-per-tap design below —
+this was the explicit ask. "Owned count" / "progress toward this recipe's required quantity" (a
+purchase-completion concept distinct from Shop Kitchen's own `computeShopCookReadiness`) was not
+built — no per-recipe purchase inventory is tracked in this pass, so there is nothing to show a
+progress bar against yet.
+
 
 - The existing ingredient detail sub-modal currently shows: large icon, ingredient name, quantity needed.
 - Add the following to the modal:
@@ -333,17 +355,22 @@ Both English and Chinese strings required. Chinese strings follow the existing `
 
 ## Acceptance Criteria
 
-- [ ] A child can tap an ingredient in the recipe modal and see its coin price.
-- [ ] A child can tap "Buy" to spend coins and collect one unit of that ingredient.
-- [ ] The owned count and progress indicator update immediately in the open modal after a purchase.
-- [ ] The Buy button is disabled when the wallet has fewer coins than the ingredient's price.
-- [ ] Ingredients without a price set (`ingredientKey` absent) show no Buy UI.
-- [ ] Purchasing an ingredient only works for recipes the child has already unlocked.
+**Shipped 2026-08-23 (buy-only slice):**
+
+- [x] A child can tap an ingredient in the recipe modal and see its coin price.
+- [x] A child can tap "Buy" to spend coins and buy a chosen quantity (default 1, +/− or typed) of that ingredient in one action — superseded from "collect one unit" per the bulk-purchase decision above.
+- [x] The Buy button is disabled when the wallet has fewer coins than `cost × quantity`.
+- [x] Ingredients without a price set (`ingredientKey` absent) show no Buy UI.
+- [x] Purchasing an ingredient only works for recipes the child has already unlocked.
+- [x] Purchases appear in the coin history modal with ingredient name and recipe name.
+- [x] All coin mutations go through the `purchase_shop_ingredient` RPC — no direct client writes.
+
+**Not built in this pass (open follow-ups):**
+
+- [ ] The owned count and progress-toward-required-quantity indicator update immediately in the open modal after a purchase.
 - [ ] A recipe tile and modal show a "ready" indicator when all priced base ingredients are collected in required quantities.
-- [ ] Purchases appear in the coin history modal with ingredient name and recipe name.
 - [ ] `/words/shop/inventory` is accessible to child users only.
 - [ ] The inventory page lists all purchased ingredients with total quantities.
 - [ ] The inventory page can be filtered by unlocked recipe.
 - [ ] The inventory page sorts by most-recent purchase by default.
 - [ ] The inventory empty state renders when no purchases exist.
-- [ ] All coin mutations go through the `purchase_shop_ingredient` RPC — no direct client writes.
