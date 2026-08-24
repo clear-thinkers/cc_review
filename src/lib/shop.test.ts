@@ -18,6 +18,7 @@ import {
   resolvePlainShopRecipeIconPath,
   resolveShopIngredientCost,
   resolveShopIngredientIconPath,
+  resolveShopIngredientLabel,
   resolveShopRecipeIconPath,
 } from "./shop";
 
@@ -524,6 +525,41 @@ describe("normalizeShopCookMethod", () => {
     expect(normalizeShopCookMethod(undefined)).toBeNull();
     expect(normalizeShopCookMethod("microwave")).toBeNull();
     expect(normalizeShopCookMethod(123)).toBeNull();
+  });
+});
+
+describe("resolveShopIngredientLabel", () => {
+  const record = {
+    ingredientKey: "milk",
+    costCoins: 5,
+    updatedAt: 0,
+    labelI18n: { en: "Fresh Milk", zh: "鲜奶" },
+    iconPath: null,
+  };
+
+  it("returns the zh label under zh locale (regression: Kitchen previously hardcoded .en)", () => {
+    expect(resolveShopIngredientLabel(record, "zh", "milk")).toBe("鲜奶");
+  });
+
+  it("returns the en label under en locale", () => {
+    expect(resolveShopIngredientLabel(record, "en", "milk")).toBe("Fresh Milk");
+  });
+
+  it("falls back when the record is missing entirely", () => {
+    expect(resolveShopIngredientLabel(undefined, "zh", "milk")).toBe("milk");
+  });
+
+  it("falls back when the record has no labelI18n", () => {
+    expect(resolveShopIngredientLabel({ ...record, labelI18n: undefined }, "zh", "milk")).toBe("milk");
+  });
+
+  it("falls back to en, then to the fallback, when zh is blank (resolveShopLocalizedString precedent)", () => {
+    expect(
+      resolveShopIngredientLabel({ ...record, labelI18n: { en: "Fresh Milk", zh: "  " } }, "zh", "milk")
+    ).toBe("Fresh Milk");
+    expect(
+      resolveShopIngredientLabel({ ...record, labelI18n: { en: "  ", zh: "  " } }, "zh", "milk")
+    ).toBe("milk");
   });
 });
 

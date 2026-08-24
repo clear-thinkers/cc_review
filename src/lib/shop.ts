@@ -364,6 +364,23 @@ export function resolveShopLocalizedString(
   return fallback;
 }
 
+/**
+ * Resolves an ingredient's display label for the given locale from a
+ * shop_ingredient_prices record, falling back to `fallback` (e.g. the raw
+ * ingredient key) when the record is missing or has no labelI18n at all --
+ * distinct from resolveShopLocalizedString, which requires labelI18n to
+ * already be present.
+ */
+export function resolveShopIngredientLabel(
+  record: ShopIngredientPrice | undefined,
+  locale: ShopLocale,
+  fallback: string
+): string {
+  return record?.labelI18n
+    ? resolveShopLocalizedString(record.labelI18n, locale, fallback)
+    : fallback;
+}
+
 export function resolveShopLocalizedList<T>(
   localized: ShopLocalizedValue<T[]>,
   locale: ShopLocale,

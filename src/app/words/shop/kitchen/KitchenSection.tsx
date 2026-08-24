@@ -18,6 +18,7 @@ import {
   computeShopCookReadiness,
   getShopRecipeContentForLocale,
   resolvePlainShopRecipeIconPath,
+  resolveShopIngredientLabel,
 } from "@/lib/shop";
 import {
   cookShopRecipe,
@@ -51,12 +52,14 @@ function CupboardModal({
   ingredients,
   ingredientRecordsByKey,
   availabilityByKey,
+  locale,
   strings,
   onClose,
 }: {
   ingredients: ShopIngredientPrice[];
   ingredientRecordsByKey: ReadonlyMap<string, ShopIngredientPrice>;
   availabilityByKey: ReadonlyMap<string, number>;
+  locale: "en" | "zh";
   strings: (typeof kitchenStrings)["en"];
   onClose: () => void;
 }) {
@@ -98,7 +101,7 @@ function CupboardModal({
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
               {availableIngredients.map((ingredient) => {
                 const record = ingredientRecordsByKey.get(ingredient.ingredientKey);
-                const label = record?.labelI18n?.en || ingredient.ingredientKey;
+                const label = resolveShopIngredientLabel(record, locale, ingredient.ingredientKey);
                 const iconPath = record?.iconPath ?? null;
                 const available = availabilityByKey.get(ingredient.ingredientKey) ?? 0;
                 return (
@@ -223,7 +226,7 @@ function RecipeBookModal({
                       {localized.baseIngredients
                         .map((ingredient) => {
                           const key = ingredient.ingredientKey ?? "";
-                          const label = ingredientRecordsByKey.get(key)?.labelI18n?.en ?? ingredient.name;
+                          const label = resolveShopIngredientLabel(ingredientRecordsByKey.get(key), locale, ingredient.name);
                           return `${label} x${ingredient.quantity}`;
                         })
                         .join(", ")}
@@ -234,7 +237,7 @@ function RecipeBookModal({
                       <span className="text-xs font-semibold text-[#9f6027]">
                         {strings.missingIngredientsPrefix}{" "}
                         {readiness.missingIngredientKeys
-                          .map((key) => ingredientRecordsByKey.get(key)?.labelI18n?.en ?? key)
+                          .map((key) => resolveShopIngredientLabel(ingredientRecordsByKey.get(key), locale, key))
                           .join(", ")}
                       </span>
                     )}
@@ -376,7 +379,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     const readiness = computeShopCookReadiness(selectedRecipe, availabilityByKey);
     if (!readiness.isReady) {
       const names = readiness.missingIngredientKeys
-        .map((key) => ingredientRecordsByKey.get(key)?.labelI18n?.en ?? key)
+        .map((key) => resolveShopIngredientLabel(ingredientRecordsByKey.get(key), locale, key))
         .join(", ");
       setNotice({ tone: "error", text: replaceToken(str.missingIngredientsTemplate, "{ingredients}", names) });
       return;
@@ -390,7 +393,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
         if (result.code === "insufficient_ingredients") {
           await refreshConsumptionsAndDishes();
           const names = result.missingIngredientKeys
-            .map((key) => ingredientRecordsByKey.get(key)?.labelI18n?.en ?? key)
+            .map((key) => resolveShopIngredientLabel(ingredientRecordsByKey.get(key), locale, key))
             .join(", ");
           setNotice({ tone: "error", text: replaceToken(str.missingIngredientsTemplate, "{ingredients}", names) });
         } else {
@@ -657,6 +660,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
           ingredients={ingredientPrices}
           ingredientRecordsByKey={ingredientRecordsByKey}
           availabilityByKey={availabilityByKey}
+          locale={locale}
           strings={str}
           onClose={() => setIsCupboardOpen(false)}
         />
