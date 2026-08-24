@@ -37,8 +37,8 @@ Primary admin user flow:
                                          → Supabase `review_test_sessions*` tables.
 6. Review & quiz   → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test`
                                          → reads persisted data only; phrase rounds run separately from character rounds.
-7. Reward loop     → `/words/results`, `/words/shop`
-                                         → Supabase `quiz_sessions`, `wallets`, and shop tables.
+7. Reward loop     → `/words/results`, `/words/shop`, `/words/shop/kitchen`
+                                         → Supabase `quiz_sessions`, `wallets`, and shop tables (including the Shop Kitchen cooking ledgers).
 8. Manage shop     → `/words/shop-admin`, `/words/debug`
                                          → shared recipe metadata, ingredient catalog, and icon audits.
 
@@ -372,6 +372,22 @@ These rules govern the platform-admin recipe metadata editor:
 7. Removing an ingredient from the shared catalog must also remove that key from recipe ingredient rows and variant mappings before persistence.
 8. Shop Admin must never award or spend coins, and must never modify scheduler, quiz, or flashcard content state.
 9. If the database schema lacks `shop_ingredient_prices.icon_path`, icon-path saves must fail with an explicit admin-facing error rather than silently dropping the field.
+10. **Added by Shop Kitchen (2026-08-23):** Recipe saves may also set `cook_method` (`null` / `'stove'` / `'oven'`) on the recipe form. A recipe defaults to `null` (not cookable) until a platform admin explicitly opts it in; this is the only Shop Admin change Shop Kitchen makes.
+
+### Shop Kitchen Rules (`/words/shop/kitchen`)
+
+These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature-specs/2026-08-23-kitchen-page.md`):
+
+1. `/words/shop/kitchen` is accessible to child profiles and platform admin only, matching `/words/shop`'s role gate exactly. Parent profiles are route-blocked. Nav-labeled "Shop Kitchen," positioned immediately after "Recipe Shop."
+2. Shop Kitchen introduces no unlock mechanism of its own — a recipe is cookable the moment it is both (a) flagged with a `cook_method` by Shop Admin and (b) already present in `shop_recipe_unlocks` for the caller via the existing `/words/shop` unlock flow. Shop Kitchen never writes to `shop_recipe_unlocks`.
+3. Ingredient spend is persisted through the `cook_shop_recipe` RPC only. UI code must not manually write `shop_cooked_dishes` or `shop_ingredient_consumptions` rows. Both `cook_shop_recipe` and `move_shop_cooked_dish` are `security definer` — deliberately unlike `unlock_shop_recipe`/`reward_random_ingredients` (`security invoker`) — because their two tables carry no RLS write policy at all; a `security invoker` function cannot write through a table with no applicable write policy, since RLS still applies inside an invoker function body. This means RLS is not a backstop for either function's own validation — a bug in their role/ownership/availability checks is not caught by any policy underneath them.
+4. `cook_shop_recipe` is atomic: it verifies role, recipe unlock state, and `cook_method` is set, computes required quantities from `base_ingredients`, checks the caller's available (rewards − consumptions) balance for every required key, and — only if every key is sufficient — inserts one `shop_cooked_dishes` row plus one `shop_ingredient_consumptions` row per spent unit, all in one transaction. A shortfall in any single ingredient rejects the whole cook; nothing is partially spent.
+5. Shelf reorganization (dragging a cooked dish between the default/unsorted shelf and the Drinks/Desserts/Hot Meals shelves) is persisted through the `move_shop_cooked_dish` RPC only, which may update only `shelf_category` on a dish the caller owns.
+6. A newly-cooked dish always lands on the `'default'` shelf category, regardless of where any existing dishes of that same recipe currently sit. Re-cooking an already-cooked-and-organized recipe bumps the count of the dish wherever it currently sits — it is never reset back to `'default'`.
+7. No cap exists on how many times a recipe may be cooked, subject only to ingredient availability.
+8. Cooking spends ingredients only — it never spends or touches coins, `wallets`, or `shop_coin_transactions`. This is a deliberate second, orthogonal economy from the existing coin-unlock system.
+9. Shop Kitchen has no parent-facing view; parents cannot see a child's cooked dishes, ingredient spend, or kitchen activity, matching `/words/shop`'s existing parent-blocked posture.
+10. Ingredient availability shown in the Cupboard reflects only `shop_ingredient_rewards` (quiz rewards) as of first ship — roadmap item F's ingredient-purchasing flow (`shop_ingredient_purchases`) does not exist yet; when it ships, it must plug into the same client-side availability aggregation (`buildShopIngredientAvailabilityMap`) as a second reward-like input, not a redesign of this mechanism.
 
 ### Debug Tools Rules (`/words/debug`)
 
@@ -725,6 +741,7 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `special_ingredient_slots` | jsonb | Persisted special-ingredient rows |
 | `special_ingredient_slots_i18n` | jsonb | Localized special-ingredient rows aligned by index |
 | `variant_icon_rules` | jsonb | Variant icon rules keyed by ingredient-match combinations |
+| `cook_method` | text (nullable) | `'stove'` \| `'oven'` \| `null` — added by Shop Kitchen (2026-08-23). `null` means the recipe is unlockable/inspectable as before but not cookable; never appears in the Recipe Book |
 | `created_at` | timestamptz | Server timestamp |
 | `updated_at` | timestamptz | Server timestamp |
 | **Scope** | | Shared/global content; authenticated read, platform-admin write |
@@ -783,6 +800,46 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `created_at` | timestamptz | Server timestamp |
 | `updated_at` | timestamptz | Server timestamp |
 | **Scope** | | Shared/global catalog; authenticated read, platform-admin write |
+
+**`shop_ingredient_rewards` table** — append-only per-user ledger of ingredients rewarded for finishing a paragraph quiz (2026-08-22; documented here 2026-08-23 after being found missing from this section during the Shop Kitchen spec — see `docs/feature-specs/2026-08-23-kitchen-page.md` Status). One row per rewarded unit, not per reward event; a child's total of ingredient X is the count of matching rows.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | Foreign key → `users.id`; cascades on delete |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `ingredient_key` | text | Foreign key → `shop_ingredient_prices.ingredient_key` |
+| `quiz_session_id` | text | Foreign key → `quiz_sessions.id`; cascades on delete |
+| `rewarded_at` | timestamptz | Server timestamp |
+| **RLS Guarantee** | | Family-scoped read; insert only via `reward_random_ingredients` RPC (defense-in-depth insert policy scoped to the caller, but the RPC is the only path the app calls); no update/delete for non-admins |
+
+**`shop_ingredient_consumptions` table** — append-only per-user ledger of ingredient units spent cooking a recipe (Shop Kitchen, 2026-08-23)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | Foreign key → `users.id`; cascades on delete |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `ingredient_key` | text | Foreign key → `shop_ingredient_prices.ingredient_key` |
+| `cooked_dish_id` | uuid | The `shop_cooked_dishes` row this unit was spent on |
+| `consumed_at` | timestamptz | Server timestamp |
+| **RLS Guarantee** | | Family-scoped read; insert only via `cook_shop_recipe` RPC; no update/delete for non-admins |
+
+A child's spendable count of ingredient X is `count(shop_ingredient_rewards where key = X) − count(shop_ingredient_consumptions where key = X)`, computed client-side (`buildShopIngredientAvailabilityMap` in `src/lib/shop.ts`) — there is no running-balance column.
+
+**`shop_cooked_dishes` table** — one row per dish a child has cooked (Shop Kitchen, 2026-08-23); not aggregated server-side, the client aggregates by `recipe_id` for shelf-tile counts
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | Foreign key → `users.id`; cascades on delete |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `recipe_id` | uuid | Foreign key → `shop_recipes.id`; cascades on delete |
+| `shelf_category` | text | `'default'` \| `'drinks'` \| `'desserts'` \| `'hotmeal'`; default `'default'` |
+| `cooked_at` | timestamptz | Server timestamp |
+| **RLS Guarantee** | | Family-scoped read; **no direct client insert/update/delete policy at all** — `cook_shop_recipe` is the only inserter, `move_shop_cooked_dish` is the only updater (and only of `shelf_category`) |
+
+`shelf_category` is the one field on any shop-adjacent table in this codebase that a child can mutate post-insert — a deliberate, called-out departure from the append-only convention everywhere else (see the feature spec's Risks section), because dragging a dish to reorganize it is inherently a mutation, not an event log.
 
 **`prompt_templates` table** — configurable LLM prompt templates (Phase 2, Feature #1)
 
@@ -923,7 +980,8 @@ These are the technical behaviors the system upholds. They are the factual basis
    - Parent component (`FlashcardReviewSection`) controls visibility toggle via `showPinyin` state (boolean); when `false`, pinyin spans are removed from DOM entirely (not hidden via CSS).
 6. **Shop recipe unlocks are atomic.** The `unlock_shop_recipe` RPC is the only write path that may create unlock rows, decrement wallets, and append shop spend history.
 6a. **Coin redemptions are atomic.** The `redeem_coins` RPC is the only write path that may decrement wallets and insert redemption rows. It validates coin amount, note, and signature; locks the wallet row with `FOR UPDATE`; checks available balance; decrements; and inserts the record in one transaction boundary. Direct client inserts to `coin_redemptions` are blocked by RLS.
-7. **Shop writes do not affect learning state.** Shop unlocks, spend history, coin redemptions, ingredient catalog edits, and recipe metadata edits never update `words`, `flashcard_contents`, scheduler fields, or quiz-session grading data.
+6b. **Shop Kitchen cooking is atomic and all-or-nothing.** The `cook_shop_recipe` RPC is the only write path that may insert `shop_cooked_dishes`/`shop_ingredient_consumptions` rows; it checks every required ingredient's availability before writing anything, so a shortfall in any one ingredient never partially spends the others. `move_shop_cooked_dish` is the only write path that may update `shop_cooked_dishes.shelf_category`, and only for a dish the caller owns. Direct client writes to either table are blocked by RLS.
+7. **Shop writes do not affect learning state.** Shop unlocks, spend history, coin redemptions, ingredient catalog edits, recipe metadata edits, and Shop Kitchen cooking/shelf moves never update `words`, `flashcard_contents`, scheduler fields, or quiz-session grading data.
 7a. **`quiz_sessions.coins_earned` is immutable.** Coin redemptions decrement `wallets.total_coins` only. The per-session earned totals in `quiz_sessions` are never modified by any redemption path.
 8. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists — this holds for the vocab-phrase familiarity nudge too, since `nudgeWordFamiliarity` calls the same unmodified `calculateNextState`, not a parallel scheduling path.
 9. **Due review pages wrap `WordsWorkspace` in `<Suspense>`.** Required for correct search-param handling in Next.js.

@@ -71,6 +71,7 @@ const recipeFixture: ShopRecipe = {
     { match: [], iconPath: "/rewards/bubble-tea_plain.png" },
     { match: ["brown-sugar", "jasmine"], iconPath: "/rewards/bubble-tea_combo.png" },
   ],
+  cookMethod: null,
 };
 
 describe("shopAdmin.types", () => {

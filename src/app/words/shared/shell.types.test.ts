@@ -13,12 +13,13 @@ describe("Shell & Navigation Types", () => {
       "all",
       "review",
       "shop",
+      "shopKitchen",
       "shopAdmin",
       "admin",
       "results",
       "prompts",
     ];
-    expect(pages).toHaveLength(9);
+    expect(pages).toHaveLength(10);
   });
 
   it("should allow creating WordsSectionPage values", () => {
@@ -28,6 +29,7 @@ describe("Shell & Navigation Types", () => {
       "all",
       "review",
       "shop",
+      "shopKitchen",
       "shopAdmin",
       "admin",
       "results",
@@ -35,7 +37,7 @@ describe("Shell & Navigation Types", () => {
       "flashcard",
       "fillTest",
     ];
-    expect(pages).toHaveLength(11);
+    expect(pages).toHaveLength(12);
   });
 
   it("should allow creating NavItem objects", () => {

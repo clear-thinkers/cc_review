@@ -30,4 +30,16 @@ describe("canAccessRoute", () => {
   it("allows platform admin access to the add-paragraph route regardless of role", () => {
     expect(canAccessRoute("/words/add-paragraph", "child", true)).toBe(true);
   });
+
+  it("allows child access to the shop kitchen route, matching /words/shop", () => {
+    expect(canAccessRoute("/words/shop/kitchen", "child", false)).toBe(true);
+  });
+
+  it("blocks parent access to the shop kitchen route", () => {
+    expect(canAccessRoute("/words/shop/kitchen", "parent", false)).toBe(false);
+  });
+
+  it("allows platform admin access to the shop kitchen route regardless of role", () => {
+    expect(canAccessRoute("/words/shop/kitchen", "parent", true)).toBe(true);
+  });
 });

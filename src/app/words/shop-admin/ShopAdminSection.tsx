@@ -10,7 +10,7 @@ import {
   parseShopIngredientQuantity,
   resolvePlainShopRecipeIconPath,
 } from "@/lib/shop";
-import type { ShopIngredient, ShopLocale, ShopRecipe } from "../shop/shop.types";
+import type { ShopCookMethod, ShopIngredient, ShopLocale, ShopRecipe } from "../shop/shop.types";
 import {
   canonicalizeShopIngredientKey,
   type ShopAdminIngredientCatalogItem,
@@ -325,6 +325,10 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         [targetLocale]: value,
       },
     }));
+  }
+
+  function updateCookMethod(value: ShopCookMethod | null): void {
+    updateDraft((current) => ({ ...current, cookMethod: value }));
   }
 
   function updateIngredientName(
@@ -1137,6 +1141,27 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                       rows={3}
                       maxLength={240}
                     />
+                  </label>
+                  <label className="block xl:col-span-2">
+                    <span className={LABEL}>{strings.fields.cookMethod}</span>
+                    <select
+                      value={draft.cookMethod ?? ""}
+                      onChange={(event) =>
+                        updateCookMethod(
+                          event.target.value === "stove" || event.target.value === "oven"
+                            ? event.target.value
+                            : null
+                        )
+                      }
+                      className={INPUT}
+                    >
+                      <option value="">{strings.fields.cookMethodNone}</option>
+                      <option value="stove">{strings.fields.cookMethodStove}</option>
+                      <option value="oven">{strings.fields.cookMethodOven}</option>
+                    </select>
+                    <p className="mt-1 text-xs leading-5 text-[var(--shop-admin-support-text)]">
+                      {strings.fields.cookMethodHelper}
+                    </p>
                   </label>
                 </div>
               </div>

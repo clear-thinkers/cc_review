@@ -26,6 +26,10 @@ import type {
   RedeemCoinsResult,
   CoinBreakdown,
   RewardedIngredient,
+  ShopIngredientLedgerEntry,
+  ShopCookedDish,
+  CookShopRecipeResult,
+  MoveShopCookedDishResult,
 } from "./shop.types";
 import { calculateNextState, isDue } from "./scheduler";
 import type { Grade, GradeResult } from "./scheduler";
@@ -39,6 +43,9 @@ import {
   normalizeShopSpecialIngredientList,
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopLocalizedTitle,
+  normalizeShopCookMethod,
+  normalizeCookShopRecipeResult,
+  normalizeMoveShopCookedDishResult,
 } from "./shop";
 import type {
   Textbook,
@@ -327,6 +334,7 @@ interface SupabaseShopRecipeRow {
   base_ingredients_i18n?: unknown;
   special_ingredient_slots: unknown;
   special_ingredient_slots_i18n?: unknown;
+  cook_method?: string | null;
 }
 
 interface SupabaseShopRecipeUnlockRow {
@@ -383,6 +391,7 @@ function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
       specialIngredients
     ),
     variantIconRules: normalizeShopVariantIconRules(row.variant_icon_rules),
+    cookMethod: normalizeShopCookMethod(row.cook_method),
   };
 }
 
@@ -1463,6 +1472,108 @@ export async function rewardRandomIngredients(quizSessionId: string): Promise<Re
   });
   if (error) throw new Error(`rewardRandomIngredients: ${error.message}`);
   return ((data ?? []) as SupabaseRewardedIngredientRow[]).map(toRewardedIngredient);
+}
+
+// ─── Shop Kitchen (feature spec 2026-08-23-kitchen-page.md) ────────────────
+
+interface SupabaseShopIngredientLedgerRow {
+  ingredient_key: string;
+}
+
+function toShopIngredientLedgerEntry(
+  row: SupabaseShopIngredientLedgerRow
+): ShopIngredientLedgerEntry {
+  return { ingredientKey: canonicalizeShopIngredientKey(row.ingredient_key) };
+}
+
+/** Every ingredient the child has ever been rewarded -- one row per unit, not aggregated. Pair with listShopIngredientConsumptions and buildShopIngredientAvailabilityMap to get spendable counts. */
+export async function listShopIngredientRewards(
+  targetUserId?: string
+): Promise<ShopIngredientLedgerEntry[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const rewardUserId = targetUserId ?? userId;
+  const { data, error } = await supabase
+    .from("shop_ingredient_rewards")
+    .select("ingredient_key")
+    .eq("family_id", familyId)
+    .eq("user_id", rewardUserId);
+  if (error) throw new Error(`listShopIngredientRewards: ${error.message}`);
+  return ((data ?? []) as SupabaseShopIngredientLedgerRow[]).map(toShopIngredientLedgerEntry);
+}
+
+/** Every ingredient unit the child has spent cooking a recipe -- one row per unit, not aggregated. */
+export async function listShopIngredientConsumptions(
+  targetUserId?: string
+): Promise<ShopIngredientLedgerEntry[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const consumptionUserId = targetUserId ?? userId;
+  const { data, error } = await supabase
+    .from("shop_ingredient_consumptions")
+    .select("ingredient_key")
+    .eq("family_id", familyId)
+    .eq("user_id", consumptionUserId);
+  if (error) throw new Error(`listShopIngredientConsumptions: ${error.message}`);
+  return ((data ?? []) as SupabaseShopIngredientLedgerRow[]).map(toShopIngredientLedgerEntry);
+}
+
+interface SupabaseShopCookedDishRow {
+  id: string;
+  user_id: string;
+  recipe_id: string;
+  shelf_category: string;
+  cooked_at: string;
+}
+
+function toShopCookedDish(row: SupabaseShopCookedDishRow): ShopCookedDish {
+  const shelfCategory =
+    row.shelf_category === "drinks" ||
+    row.shelf_category === "desserts" ||
+    row.shelf_category === "hotmeal"
+      ? row.shelf_category
+      : "default";
+  return {
+    id: row.id,
+    userId: row.user_id,
+    recipeId: row.recipe_id,
+    shelfCategory,
+    cookedAt: new Date(row.cooked_at).getTime(),
+  };
+}
+
+/** Every dish the child has ever cooked -- one row per cook, not aggregated. The UI aggregates by recipeId for the shelf-count badge. */
+export async function listShopCookedDishes(targetUserId?: string): Promise<ShopCookedDish[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const dishUserId = targetUserId ?? userId;
+  const { data, error } = await supabase
+    .from("shop_cooked_dishes")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("user_id", dishUserId)
+    .order("cooked_at", { ascending: true });
+  if (error) throw new Error(`listShopCookedDishes: ${error.message}`);
+  return ((data ?? []) as SupabaseShopCookedDishRow[]).map(toShopCookedDish);
+}
+
+/** Spends a recipe's required ingredients and inserts one shop_cooked_dishes row (lands on the "default" shelf). All validation (unlock, cook_method, availability) happens server-side in cook_shop_recipe. */
+export async function cookShopRecipe(recipeId: string): Promise<CookShopRecipeResult> {
+  const { data, error } = await supabase.rpc("cook_shop_recipe", {
+    p_recipe_id: recipeId,
+  });
+  if (error) throw new Error(`cookShopRecipe: ${error.message}`);
+  return normalizeCookShopRecipeResult(data);
+}
+
+/** Moves one cooked dish to a different shelf category (default/drinks/desserts/hotmeal). The only path allowed to touch shop_cooked_dishes.shelf_category after insert. */
+export async function moveShopCookedDish(
+  dishId: string,
+  shelfCategory: string
+): Promise<MoveShopCookedDishResult> {
+  const { data, error } = await supabase.rpc("move_shop_cooked_dish", {
+    p_dish_id: dishId,
+    p_shelf_category: shelfCategory,
+  });
+  if (error) throw new Error(`moveShopCookedDish: ${error.message}`);
+  return normalizeMoveShopCookedDishResult(data);
 }
 
 // ─── Coin Redemptions ────────────────────────────────────────────────────────

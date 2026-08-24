@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildShopIngredientAvailabilityMap,
   buildShopIngredientPriceMap,
   canAffordRecipeUnlock,
+  computeShopCookReadiness,
   getShopRecipeContentForLocale,
+  normalizeCookShopRecipeResult,
+  normalizeMoveShopCookedDishResult,
+  normalizeShopCookMethod,
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedSpecialIngredients,
@@ -374,6 +379,7 @@ describe("getShopRecipeContentForLocale", () => {
             zh: [{ ingredientKey: "brown-sugar", name: "\u9ed1\u7cd6", quantity: 1 }],
           },
           variantIconRules: [{ match: [], iconPath: "/rewards/bubble-tea_plain.png" }],
+          cookMethod: null,
         },
         "zh"
       )
@@ -406,6 +412,7 @@ describe("getShopRecipeContentForLocale", () => {
           specialIngredients: [],
           specialIngredientsI18n: { en: [], zh: [] },
           variantIconRules: [{ match: [], iconPath: "/rewards/cake_plain.png" }],
+          cookMethod: null,
         },
         "zh"
       )
@@ -503,5 +510,176 @@ describe("normalizeRedeemCoinsResult", () => {
   it("falls back to unknown when raw is not an object", () => {
     expect(normalizeRedeemCoinsResult(null)).toEqual({ success: false, code: "unknown" });
     expect(normalizeRedeemCoinsResult(undefined)).toEqual({ success: false, code: "unknown" });
+  });
+});
+
+describe("normalizeShopCookMethod", () => {
+  it("accepts stove and oven", () => {
+    expect(normalizeShopCookMethod("stove")).toBe("stove");
+    expect(normalizeShopCookMethod("oven")).toBe("oven");
+  });
+
+  it("returns null for anything else, including not-cookable recipes", () => {
+    expect(normalizeShopCookMethod(null)).toBeNull();
+    expect(normalizeShopCookMethod(undefined)).toBeNull();
+    expect(normalizeShopCookMethod("microwave")).toBeNull();
+    expect(normalizeShopCookMethod(123)).toBeNull();
+  });
+});
+
+describe("buildShopIngredientAvailabilityMap", () => {
+  it("counts rewards minus consumptions per ingredient key", () => {
+    const availability = buildShopIngredientAvailabilityMap(
+      [{ ingredientKey: "milk" }, { ingredientKey: "milk" }, { ingredientKey: "egg" }],
+      [{ ingredientKey: "milk" }]
+    );
+    expect(availability.get("milk")).toBe(1);
+    expect(availability.get("egg")).toBe(1);
+  });
+
+  it("can go negative if consumptions somehow exceed rewards (defensive, not expected in practice)", () => {
+    const availability = buildShopIngredientAvailabilityMap(
+      [{ ingredientKey: "milk" }],
+      [{ ingredientKey: "milk" }, { ingredientKey: "milk" }]
+    );
+    expect(availability.get("milk")).toBe(-1);
+  });
+
+  it("handles zero rewards and zero consumptions", () => {
+    expect(buildShopIngredientAvailabilityMap([], []).size).toBe(0);
+  });
+
+  it("ignores entries with no resolvable ingredient key", () => {
+    const availability = buildShopIngredientAvailabilityMap([{ ingredientKey: "" }], []);
+    expect(availability.size).toBe(0);
+  });
+});
+
+describe("computeShopCookReadiness", () => {
+  const recipe = {
+    baseIngredients: [
+      { ingredientKey: "milk", name: "Milk", quantity: 2 },
+      { ingredientKey: "egg", name: "Egg", quantity: 1 },
+    ],
+  };
+
+  it("is ready when every required ingredient has enough availability", () => {
+    const availability = new Map([["milk", 2], ["egg", 3]]);
+    expect(computeShopCookReadiness(recipe, availability)).toEqual({
+      isReady: true,
+      missingIngredientKeys: [],
+    });
+  });
+
+  it("names every short ingredient as missing, not just the first", () => {
+    const availability = new Map([["milk", 0], ["egg", 0]]);
+    const readiness = computeShopCookReadiness(recipe, availability);
+    expect(readiness.isReady).toBe(false);
+    expect(readiness.missingIngredientKeys.sort()).toEqual(["egg", "milk"]);
+  });
+
+  it("excludes ingredient rows with no resolvable ingredientKey from the requirement", () => {
+    const readiness = computeShopCookReadiness(
+      { baseIngredients: [{ name: "Mystery", quantity: 1 }] },
+      new Map()
+    );
+    expect(readiness).toEqual({ isReady: false, missingIngredientKeys: [] });
+  });
+
+  it("a recipe with no priced ingredients at all is never ready", () => {
+    expect(computeShopCookReadiness({ baseIngredients: [] }, new Map())).toEqual({
+      isReady: false,
+      missingIngredientKeys: [],
+    });
+  });
+});
+
+describe("normalizeCookShopRecipeResult", () => {
+  it("maps a successful cook", () => {
+    expect(
+      normalizeCookShopRecipeResult({
+        success: true,
+        code: "cooked",
+        dishId: "dish-1",
+        recipeId: "recipe-1",
+        shelfCategory: "default",
+      })
+    ).toEqual({
+      success: true,
+      code: "cooked",
+      dishId: "dish-1",
+      recipeId: "recipe-1",
+      shelfCategory: "default",
+    });
+  });
+
+  it("maps insufficient_ingredients with the missing keys", () => {
+    expect(
+      normalizeCookShopRecipeResult({
+        success: false,
+        code: "insufficient_ingredients",
+        missingIngredientKeys: ["milk", "egg"],
+      })
+    ).toEqual({
+      success: false,
+      code: "insufficient_ingredients",
+      missingIngredientKeys: ["milk", "egg"],
+    });
+  });
+
+  it("maps recipe_not_cookable, recipe_not_unlocked, and forbidden", () => {
+    for (const code of ["recipe_not_cookable", "recipe_not_unlocked", "forbidden"]) {
+      expect(normalizeCookShopRecipeResult({ success: false, code })).toEqual({
+        success: false,
+        code,
+        missingIngredientKeys: [],
+      });
+    }
+  });
+
+  it("falls back to unknown for unrecognised codes or non-object input", () => {
+    expect(normalizeCookShopRecipeResult({ success: false, code: "something_new" })).toEqual({
+      success: false,
+      code: "unknown",
+      missingIngredientKeys: [],
+    });
+    expect(normalizeCookShopRecipeResult(null)).toEqual({
+      success: false,
+      code: "unknown",
+      missingIngredientKeys: [],
+    });
+  });
+});
+
+describe("normalizeMoveShopCookedDishResult", () => {
+  it("maps a successful move", () => {
+    expect(
+      normalizeMoveShopCookedDishResult({
+        success: true,
+        code: "moved",
+        dishId: "dish-1",
+        shelfCategory: "drinks",
+      })
+    ).toEqual({ success: true, code: "moved", dishId: "dish-1", shelfCategory: "drinks" });
+  });
+
+  it("maps forbidden, invalid_shelf_category, and dish_not_found", () => {
+    for (const code of ["forbidden", "invalid_shelf_category", "dish_not_found"]) {
+      expect(normalizeMoveShopCookedDishResult({ success: false, code })).toEqual({
+        success: false,
+        code,
+      });
+    }
+  });
+
+  it("falls back to unknown for unrecognised codes or non-object input", () => {
+    expect(normalizeMoveShopCookedDishResult({ success: false, code: "nope" })).toEqual({
+      success: false,
+      code: "unknown",
+    });
+    expect(normalizeMoveShopCookedDishResult(undefined)).toEqual({
+      success: false,
+      code: "unknown",
+    });
   });
 });

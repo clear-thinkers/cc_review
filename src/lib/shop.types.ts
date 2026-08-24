@@ -17,6 +17,9 @@ export type ShopVariantIconRule = {
   iconPath: string;
 };
 
+/** Which appliance a recipe is cooked on. `null` means not cookable (Shop Kitchen). */
+export type ShopCookMethod = "stove" | "oven";
+
 export type ShopRecipe = {
   id: string;
   slug: string;
@@ -32,6 +35,7 @@ export type ShopRecipe = {
   specialIngredients: ShopIngredient[];
   specialIngredientsI18n: ShopLocalizedValue<ShopIngredient[]>;
   variantIconRules: ShopVariantIconRule[];
+  cookMethod: ShopCookMethod | null;
 };
 
 export type ShopRecipeUnlock = {
@@ -134,3 +138,72 @@ export type UnlockShopRecipeResult =
       coinsSpent: number;
       message?: string;
     };
+
+// ─── Shop Kitchen (feature spec 2026-08-23-kitchen-page.md) ────────────────
+
+/** One ledger row from either shop_ingredient_rewards or shop_ingredient_consumptions -- only the key is needed for client-side availability aggregation. */
+export type ShopIngredientLedgerEntry = {
+  ingredientKey: string;
+};
+
+export type ShopShelfCategory = "default" | "drinks" | "desserts" | "hotmeal";
+
+export const SHOP_SHELF_CATEGORIES: readonly ShopShelfCategory[] = [
+  "default",
+  "drinks",
+  "desserts",
+  "hotmeal",
+];
+
+export type ShopCookedDish = {
+  id: string;
+  userId: string;
+  recipeId: string;
+  shelfCategory: ShopShelfCategory;
+  cookedAt: number;
+};
+
+export type CookShopRecipeErrorCode =
+  | "forbidden"
+  | "recipe_not_cookable"
+  | "recipe_not_unlocked"
+  | "insufficient_ingredients"
+  | "unknown";
+
+export type CookShopRecipeResult =
+  | {
+      success: true;
+      code: "cooked";
+      dishId: string;
+      recipeId: string;
+      shelfCategory: ShopShelfCategory;
+    }
+  | {
+      success: false;
+      code: CookShopRecipeErrorCode;
+      missingIngredientKeys: string[];
+    };
+
+export type MoveShopCookedDishErrorCode =
+  | "forbidden"
+  | "invalid_shelf_category"
+  | "dish_not_found"
+  | "unknown";
+
+export type MoveShopCookedDishResult =
+  | {
+      success: true;
+      code: "moved";
+      dishId: string;
+      shelfCategory: ShopShelfCategory;
+    }
+  | {
+      success: false;
+      code: MoveShopCookedDishErrorCode;
+    };
+
+/** Cook-readiness for one recipe against the caller's current available ingredients. */
+export type ShopCookReadiness = {
+  isReady: boolean;
+  missingIngredientKeys: string[];
+};

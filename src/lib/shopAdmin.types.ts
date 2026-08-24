@@ -1,4 +1,5 @@
 import type {
+  ShopCookMethod,
   ShopIngredient,
   ShopLocalizedValue,
   ShopRecipe,
@@ -13,6 +14,7 @@ import {
 import {
   SHOP_INGREDIENT_QUANTITY_MAX,
   SHOP_INGREDIENT_QUANTITY_MIN,
+  normalizeShopCookMethod,
   normalizeShopVariantMatchKeys,
   parseShopIngredientQuantity,
 } from "./shop";
@@ -40,6 +42,8 @@ export type ShopRecipeAdminDraft = {
   baseIngredients: ShopLocalizedValue<ShopIngredient[]>;
   specialIngredients: ShopLocalizedValue<ShopIngredient[]>;
   variantIconRules: ShopVariantIconRule[];
+  /** null = not cookable in Shop Kitchen (feature spec 2026-08-23-kitchen-page.md). */
+  cookMethod: ShopCookMethod | null;
 };
 
 export type ShopAdminVariantIngredientOption = {
@@ -235,6 +239,7 @@ export function buildShopRecipeAdminDraft(recipe: ShopRecipe): ShopRecipeAdminDr
       iconPath: rule.iconPath,
       match: normalizeVariantMatchKeys(rule.match),
     })),
+    cookMethod: recipe.cookMethod,
   };
 }
 
@@ -452,6 +457,7 @@ export function normalizeShopRecipeAdminDraft(draft: {
   baseIngredients?: unknown;
   specialIngredients?: unknown;
   variantIconRules?: unknown;
+  cookMethod?: unknown;
 }): ShopRecipeAdminDraft {
   return {
     recipeId: typeof draft.recipeId === "string" ? draft.recipeId.trim() : "",
@@ -460,6 +466,7 @@ export function normalizeShopRecipeAdminDraft(draft: {
     baseIngredients: normalizeLocalizedIngredientList(draft.baseIngredients),
     specialIngredients: normalizeLocalizedIngredientList(draft.specialIngredients),
     variantIconRules: normalizeVariantIconRules(draft.variantIconRules),
+    cookMethod: normalizeShopCookMethod(draft.cookMethod),
   };
 }
 

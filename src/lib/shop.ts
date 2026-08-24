@@ -8,6 +8,14 @@ import type {
   UnlockShopRecipeResult,
   RedeemCoinsResult,
   RedeemCoinsErrorCode,
+  ShopCookMethod,
+  ShopIngredientLedgerEntry,
+  ShopCookReadiness,
+  ShopShelfCategory,
+  CookShopRecipeResult,
+  CookShopRecipeErrorCode,
+  MoveShopCookedDishResult,
+  MoveShopCookedDishErrorCode,
 } from "./shop.types";
 import {
   canonicalizeShopIngredientKey,
@@ -562,4 +570,156 @@ export function normalizeRedeemCoinsResult(raw: unknown): RedeemCoinsResult {
       ? { remainingCoins: source.remainingCoins }
       : {}),
   };
+}
+
+// ─── Shop Kitchen (feature spec 2026-08-23-kitchen-page.md) ────────────────
+
+const SHOP_COOK_METHODS: readonly ShopCookMethod[] = ["stove", "oven"];
+
+export function normalizeShopCookMethod(raw: unknown): ShopCookMethod | null {
+  return typeof raw === "string" && (SHOP_COOK_METHODS as readonly string[]).includes(raw)
+    ? (raw as ShopCookMethod)
+    : null;
+}
+
+/**
+ * A child's available count of ingredient X is
+ * count(shop_ingredient_rewards where key = X) - count(shop_ingredient_consumptions
+ * where key = X) -- computed here client-side rather than as a running-balance
+ * column, matching this codebase's existing preference for client-side
+ * aggregation over readiness/availability questions.
+ */
+export function buildShopIngredientAvailabilityMap(
+  rewards: ShopIngredientLedgerEntry[],
+  consumptions: ShopIngredientLedgerEntry[]
+): Map<string, number> {
+  const availability = new Map<string, number>();
+
+  for (const reward of rewards) {
+    const key = canonicalizeShopIngredientKey(reward.ingredientKey);
+    if (!key) continue;
+    availability.set(key, (availability.get(key) ?? 0) + 1);
+  }
+
+  for (const consumption of consumptions) {
+    const key = canonicalizeShopIngredientKey(consumption.ingredientKey);
+    if (!key) continue;
+    availability.set(key, (availability.get(key) ?? 0) - 1);
+  }
+
+  return availability;
+}
+
+/**
+ * Cook-readiness for one recipe against the caller's current available
+ * ingredients -- a different question from item F's proposed (unbuilt)
+ * computeRecipeReadiness, which is about purchase completion, not spendable
+ * availability. Ingredient rows with no resolvable ingredientKey are skipped,
+ * same skip-invalid-silently precedent as reward_random_ingredients.
+ */
+export function computeShopCookReadiness(
+  recipe: Pick<ShopRecipe, "baseIngredients">,
+  availabilityByKey: ReadonlyMap<string, number>
+): ShopCookReadiness {
+  const requiredByKey = new Map<string, number>();
+
+  for (const ingredient of recipe.baseIngredients) {
+    const key = canonicalizeShopIngredientKey(ingredient.ingredientKey);
+    if (!key) continue;
+    requiredByKey.set(key, (requiredByKey.get(key) ?? 0) + ingredient.quantity);
+  }
+
+  const missingIngredientKeys: string[] = [];
+  for (const [key, requiredQty] of requiredByKey) {
+    if ((availabilityByKey.get(key) ?? 0) < requiredQty) {
+      missingIngredientKeys.push(key);
+    }
+  }
+
+  return {
+    isReady: requiredByKey.size > 0 && missingIngredientKeys.length === 0,
+    missingIngredientKeys,
+  };
+}
+
+type CookShopRecipeRpcResult = {
+  success?: boolean;
+  code?: string;
+  dishId?: string;
+  recipeId?: string;
+  shelfCategory?: string;
+  missingIngredientKeys?: unknown;
+};
+
+function normalizeShopShelfCategory(raw: unknown): ShopShelfCategory {
+  return raw === "drinks" || raw === "desserts" || raw === "hotmeal" ? raw : "default";
+}
+
+export function normalizeCookShopRecipeResult(raw: unknown): CookShopRecipeResult {
+  const source = raw && typeof raw === "object" ? (raw as CookShopRecipeRpcResult) : {};
+
+  if (source.success === true && typeof source.dishId === "string" && typeof source.recipeId === "string") {
+    return {
+      success: true,
+      code: "cooked",
+      dishId: source.dishId,
+      recipeId: source.recipeId,
+      shelfCategory: normalizeShopShelfCategory(source.shelfCategory),
+    };
+  }
+
+  const validCodes: CookShopRecipeErrorCode[] = [
+    "forbidden",
+    "recipe_not_cookable",
+    "recipe_not_unlocked",
+    "insufficient_ingredients",
+  ];
+  const code = source.code;
+  const normalizedCode: CookShopRecipeErrorCode = validCodes.includes(
+    code as CookShopRecipeErrorCode
+  )
+    ? (code as CookShopRecipeErrorCode)
+    : "unknown";
+
+  return {
+    success: false,
+    code: normalizedCode,
+    missingIngredientKeys: Array.isArray(source.missingIngredientKeys)
+      ? source.missingIngredientKeys.filter((key): key is string => typeof key === "string")
+      : [],
+  };
+}
+
+type MoveShopCookedDishRpcResult = {
+  success?: boolean;
+  code?: string;
+  dishId?: string;
+  shelfCategory?: string;
+};
+
+export function normalizeMoveShopCookedDishResult(raw: unknown): MoveShopCookedDishResult {
+  const source = raw && typeof raw === "object" ? (raw as MoveShopCookedDishRpcResult) : {};
+
+  if (source.success === true && typeof source.dishId === "string") {
+    return {
+      success: true,
+      code: "moved",
+      dishId: source.dishId,
+      shelfCategory: normalizeShopShelfCategory(source.shelfCategory),
+    };
+  }
+
+  const validCodes: MoveShopCookedDishErrorCode[] = [
+    "forbidden",
+    "invalid_shelf_category",
+    "dish_not_found",
+  ];
+  const code = source.code;
+  const normalizedCode: MoveShopCookedDishErrorCode = validCodes.includes(
+    code as MoveShopCookedDishErrorCode
+  )
+    ? (code as MoveShopCookedDishErrorCode)
+    : "unknown";
+
+  return { success: false, code: normalizedCode };
 }

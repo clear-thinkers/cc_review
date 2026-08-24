@@ -17,6 +17,10 @@
  *                                       isolation, user-scoped insert/update/delete)
  *   ✅ shop_ingredient_rewards RLS   → Section 9 (family-scoped read incl. cross-family
  *                                       isolation, user-scoped insert, no update/delete)
+ *   ✅ Shop Kitchen RLS              → Section 10 (shop_cooked_dishes / shop_ingredient_consumptions:
+ *                                       family-scoped read incl. cross-family isolation,
+ *                                       NO direct client insert/update/delete at all — both
+ *                                       tables are RPC-only writers, unlike shop_ingredient_rewards)
  *
  * Env vars (auto-loaded from .env.local if present):
  *   NEXT_PUBLIC_SUPABASE_URL        — Supabase project URL
@@ -1276,6 +1280,208 @@ async function section9_shopIngredientRewards(): Promise<void> {
   }
 }
 
+// ─── Section 10: Shop Kitchen RLS (shop_cooked_dishes / shop_ingredient_consumptions) ──
+//
+// Shop Kitchen (feature spec 2026-08-23-kitchen-page.md): family-scoped read
+// on both tables (same shape as shop_ingredient_rewards), but -- unlike
+// shop_ingredient_rewards, which at least allows a defense-in-depth
+// user-scoped INSERT -- neither table has ANY direct client write policy at
+// all. cook_shop_recipe and move_shop_cooked_dish (both security invoker)
+// are the only writers; every direct insert/update/delete attempted here,
+// even one correctly scoped to the caller's own user_id, must be rejected
+// or silently affect 0 rows.
+async function section10_shopKitchen(): Promise<void> {
+  console.log('\n■ Section 10: Shop Kitchen RLS (shop_cooked_dishes / shop_ingredient_consumptions)');
+
+  if (!testFamilyAId || !testFamilyBId || !familyAParentClient || !familyAChildClient || !testChildAUserId) {
+    fail(
+      'section10 setup incomplete — Section 2/4 must have succeeded',
+      'testFamilyAId, testFamilyBId, testChildAUserId, and Section 4 clients must all be set'
+    );
+    return;
+  }
+
+  // ── Setup: a throwaway recipe + cooked-dish row, both via service role (admin bypasses RLS) ──
+  const testRecipeSlug = `${TEST_TAG}_recipe`;
+  const { data: recipeRow, error: recipeErr } = await admin
+    .from('shop_recipes')
+    .insert({
+      slug: testRecipeSlug,
+      title: testRecipeSlug,
+      display_order: 999999,
+      is_active: true,
+      intro: 'test',
+      unlock_cost_coins: 0,
+      base_ingredients: [],
+      variant_icon_rules: [],
+      cook_method: 'stove',
+    })
+    .select('id')
+    .single();
+  if (recipeErr || !recipeRow) {
+    fail('section10 setup: service role INSERT shop_recipes row', recipeErr?.message);
+    return;
+  }
+  const testRecipeId = (recipeRow as { id: string }).id;
+
+  const { data: dishRow, error: dishErr } = await admin
+    .from('shop_cooked_dishes')
+    .insert({
+      user_id: testChildAUserId,
+      family_id: testFamilyAId,
+      recipe_id: testRecipeId,
+      shelf_category: 'default',
+    })
+    .select('id')
+    .single();
+  if (dishErr || !dishRow) {
+    fail('section10 setup: service role INSERT shop_cooked_dishes row', dishErr?.message);
+    await admin.from('shop_recipes').delete().eq('id', testRecipeId);
+    return;
+  }
+  const testDishId = (dishRow as { id: string }).id;
+
+  // ── Family-scoped read: parent JWT can read the child's cooked-dish row ──
+  const { data: parentRead, error: parentReadErr } = await familyAParentClient
+    .from('shop_cooked_dishes')
+    .select('id')
+    .eq('id', testDishId);
+  if (parentReadErr) {
+    fail('shop_cooked_dishes family scoped read: parent JWT SELECT failed', parentReadErr.message);
+  } else if (parentRead && parentRead.length > 0) {
+    pass("shop_cooked_dishes family scoped read: parent JWT can read child's cooked-dish row");
+  } else {
+    fail('shop_cooked_dishes family scoped read: parent JWT SELECT returned 0 rows — read policy not enforced!');
+  }
+
+  // ── Unenriched session cannot read ──
+  const { data: unenrichedRead, error: unenrichedReadErr } = await anon
+    .from('shop_cooked_dishes')
+    .select('id')
+    .eq('id', testDishId);
+  if (unenrichedReadErr) {
+    pass(`shop_cooked_dishes isolation: unenriched SELECT blocked by RLS error: "${unenrichedReadErr.message}"`);
+  } else if (!unenrichedRead || unenrichedRead.length === 0) {
+    pass('shop_cooked_dishes isolation: unenriched session cannot read the cooked-dish row');
+  } else {
+    fail('shop_cooked_dishes isolation: unenriched session can read the cooked-dish row — RLS not enforcing!');
+  }
+
+  // ── No direct insert policy: child JWT INSERT for their own user_id must still be rejected ──
+  const { data: directInsertData, error: directInsertErr } = await familyAChildClient
+    .from('shop_cooked_dishes')
+    .insert({
+      user_id: testChildAUserId,
+      family_id: testFamilyAId,
+      recipe_id: testRecipeId,
+      shelf_category: 'default',
+    })
+    .select('id');
+  if (directInsertErr) {
+    pass(`shop_cooked_dishes no direct insert: child JWT INSERT rejected by RLS: "${directInsertErr.message}"`);
+  } else if (!directInsertData || directInsertData.length === 0) {
+    pass('shop_cooked_dishes no direct insert: child JWT INSERT silently inserted 0 rows');
+  } else {
+    fail('shop_cooked_dishes no direct insert: child JWT INSERT SUCCEEDED — cook_shop_recipe is not the only writer!');
+    await admin.from('shop_cooked_dishes').delete().in('id', directInsertData.map((row) => (row as { id: string }).id));
+  }
+
+  // ── No direct update policy: child JWT UPDATE of shelf_category (even their own row) must be rejected ──
+  const { data: directUpdateData, error: directUpdateErr } = await familyAChildClient
+    .from('shop_cooked_dishes')
+    .update({ shelf_category: 'drinks' })
+    .eq('id', testDishId)
+    .select('id');
+  if (directUpdateErr) {
+    pass(`shop_cooked_dishes no direct update: child JWT UPDATE rejected by RLS: "${directUpdateErr.message}"`);
+  } else if (!directUpdateData || directUpdateData.length === 0) {
+    pass('shop_cooked_dishes no direct update: child JWT UPDATE silently affected 0 rows');
+  } else {
+    fail('shop_cooked_dishes no direct update: child JWT UPDATE SUCCEEDED — move_shop_cooked_dish is not the only writer!');
+  }
+
+  // ── No direct delete policy ──
+  const { data: directDeleteData, error: directDeleteErr } = await familyAChildClient
+    .from('shop_cooked_dishes')
+    .delete()
+    .eq('id', testDishId)
+    .select('id');
+  if (directDeleteErr) {
+    pass(`shop_cooked_dishes no direct delete: child JWT DELETE rejected by RLS: "${directDeleteErr.message}"`);
+  } else if (!directDeleteData || directDeleteData.length === 0) {
+    pass('shop_cooked_dishes no direct delete: child JWT DELETE silently affected 0 rows');
+  } else {
+    fail('shop_cooked_dishes no direct delete: child JWT DELETE SUCCEEDED — record was removed by a direct client write!');
+  }
+
+  // ── shop_ingredient_consumptions: family-scoped read + no direct insert, mirroring the above ──
+  const testIngredientKey = `${TEST_TAG}_kitchen_ingredient`;
+  const { error: ingredientPriceErr } = await admin
+    .from('shop_ingredient_prices')
+    .insert({ ingredient_key: testIngredientKey, cost_coins: 1 });
+  if (ingredientPriceErr) {
+    fail('section10 setup: service role INSERT shop_ingredient_prices row', ingredientPriceErr.message);
+  } else {
+    const { data: consumptionRow, error: consumptionErr } = await admin
+      .from('shop_ingredient_consumptions')
+      .insert({
+        user_id: testChildAUserId,
+        family_id: testFamilyAId,
+        ingredient_key: testIngredientKey,
+        cooked_dish_id: testDishId,
+      })
+      .select('id')
+      .single();
+
+    if (consumptionErr || !consumptionRow) {
+      fail('section10 setup: service role INSERT shop_ingredient_consumptions row', consumptionErr?.message);
+    } else {
+      const testConsumptionId = (consumptionRow as { id: string }).id;
+
+      const { data: consumptionParentRead, error: consumptionParentReadErr } = await familyAParentClient
+        .from('shop_ingredient_consumptions')
+        .select('id')
+        .eq('id', testConsumptionId);
+      if (consumptionParentReadErr) {
+        fail('shop_ingredient_consumptions family scoped read: parent JWT SELECT failed', consumptionParentReadErr.message);
+      } else if (consumptionParentRead && consumptionParentRead.length > 0) {
+        pass("shop_ingredient_consumptions family scoped read: parent JWT can read child's consumption row");
+      } else {
+        fail('shop_ingredient_consumptions family scoped read: parent JWT SELECT returned 0 rows — read policy not enforced!');
+      }
+
+      const { data: consumptionDirectInsertData, error: consumptionDirectInsertErr } = await familyAChildClient
+        .from('shop_ingredient_consumptions')
+        .insert({
+          user_id: testChildAUserId,
+          family_id: testFamilyAId,
+          ingredient_key: testIngredientKey,
+          cooked_dish_id: testDishId,
+        })
+        .select('id');
+      if (consumptionDirectInsertErr) {
+        pass(`shop_ingredient_consumptions no direct insert: child JWT INSERT rejected by RLS: "${consumptionDirectInsertErr.message}"`);
+      } else if (!consumptionDirectInsertData || consumptionDirectInsertData.length === 0) {
+        pass('shop_ingredient_consumptions no direct insert: child JWT INSERT silently inserted 0 rows');
+      } else {
+        fail('shop_ingredient_consumptions no direct insert: child JWT INSERT SUCCEEDED — cook_shop_recipe is not the only writer!');
+        await admin
+          .from('shop_ingredient_consumptions')
+          .delete()
+          .in('id', consumptionDirectInsertData.map((row) => (row as { id: string }).id));
+      }
+    }
+  }
+
+  // ── Section-local cleanup: throwaway recipe + ingredient-price catalog rows ──
+  // (shop_cooked_dishes/shop_ingredient_consumptions rows cascade-delete with
+  // the test families in the global cleanup() below; shop_recipes and
+  // shop_ingredient_prices have no family_id and do not, so they need their
+  // own cleanup here.)
+  await admin.from('shop_recipes').delete().eq('id', testRecipeId);
+  await admin.from('shop_ingredient_prices').delete().eq('ingredient_key', testIngredientKey);
+}
+
 // ─── Cleanup ───────────────────────────────────────────────────────────────
 async function cleanup(): Promise<void> {
   console.log('\n■ Cleanup: Removing synthetic test data');
@@ -1328,6 +1534,7 @@ async function main(): Promise<void> {
     await section7_paragraphs();
     await section8_paragraphTestModes();
     await section9_shopIngredientRewards();
+    await section10_shopKitchen();
   } finally {
     await cleanup();
   }
