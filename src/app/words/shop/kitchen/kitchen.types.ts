@@ -1,4 +1,4 @@
-import type { ShopCookedDish, ShopFoodType, ShopLocale, ShopRecipe } from "@/lib/shop.types";
+import type { ShopCookedDish, ShopCookMethod, ShopFoodType, ShopLocale, ShopRecipe } from "@/lib/shop.types";
 import { SHOP_FOOD_TYPES, SHOP_KITCHEN_COUNTERTOP_CAPACITY } from "@/lib/shop.types";
 import {
   resolvePlainShopRecipeIconPath,
@@ -139,6 +139,14 @@ export function buildShelfTilesByFoodType(
 /** Total dishes ever cooked, across the countertop and shelf combined -- for the "N dishes made" summary line. */
 export function countTotalCookedDishes(dishes: ShopCookedDish[]): number {
   return dishes.length;
+}
+
+/** The localized appliance label for a recipe's own `cookMethod` -- e.g. for the "X needs the {appliance}" wrong-appliance notice, the appliance named must be the recipe's actual required one, never whichever appliance the child clicked. */
+export function resolveApplianceLabel(
+  cookMethod: ShopCookMethod,
+  labels: { stovetopLabel: string; ovenLabel: string }
+): string {
+  return cookMethod === "stove" ? labels.stovetopLabel : labels.ovenLabel;
 }
 
 /** One special ingredient the child can choose to add, already filtered to ones this recipe actually offers and the child currently has enough of. */

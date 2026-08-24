@@ -5,6 +5,7 @@ import {
   buildShelfTilesByFoodType,
   countCountertopDishes,
   countTotalCookedDishes,
+  resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
   SHOP_FOOD_TYPES,
 } from "./kitchen.types";
@@ -297,6 +298,15 @@ describe("resolveAvailableSpecialIngredients", () => {
       new Map([["chocolate", 2]])
     );
     expect(options).toEqual([{ ingredientKey: "chocolate", name: "Chocolate", quantity: 2, available: 2 }]);
+  });
+});
+
+describe("resolveApplianceLabel", () => {
+  const labels = { stovetopLabel: "Stovetop", ovenLabel: "Oven" };
+
+  it("names the appliance the recipe itself requires, not any other appliance", () => {
+    expect(resolveApplianceLabel("stove", labels)).toBe("Stovetop");
+    expect(resolveApplianceLabel("oven", labels)).toBe("Oven");
   });
 });
 

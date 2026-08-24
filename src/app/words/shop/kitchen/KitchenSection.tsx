@@ -37,6 +37,7 @@ import {
   buildShelfTilesByFoodType,
   countCountertopDishes,
   countTotalCookedDishes,
+  resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
   SHOP_FOOD_TYPES,
   SHOP_KITCHEN_COUNTERTOP_CAPACITY,
@@ -240,7 +241,9 @@ function RecipeBookModal({
                 const isUnlocked = unlockedRecipeIds.has(recipe.id);
                 const readiness = computeShopCookReadiness(recipe, availabilityByKey);
                 const isSelected = selectedRecipeId === recipe.id;
-                const applianceLabel = recipe.cookMethod === "stove" ? strings.stovetopLabel : strings.ovenLabel;
+                const applianceLabel = recipe.cookMethod
+                  ? resolveApplianceLabel(recipe.cookMethod, strings)
+                  : null;
 
                 if (!isUnlocked) {
                   return (
@@ -695,7 +698,9 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
 
     if (selectedRecipe.cookMethod !== method) {
       const localized = getShopRecipeContentForLocale(selectedRecipe, locale);
-      const applianceLabel = method === "stove" ? str.stovetopLabel : str.ovenLabel;
+      const applianceLabel = selectedRecipe.cookMethod
+        ? resolveApplianceLabel(selectedRecipe.cookMethod, str)
+        : str.ovenLabel;
       setNotice({
         tone: "error",
         text: replaceToken(
