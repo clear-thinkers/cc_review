@@ -242,7 +242,16 @@ function normalizeReviewTestSessionDraftTargets(
     // constraint) so two different blanks for the same character/phrase
     // aren't collapsed into one target before they even reach the DB.
     const key = `${character}|${pronunciation}|${target.paragraphSpanId ?? ""}`;
-    if (!character || !pronunciation || seenKeys.has(key)) {
+    // A paragraph-quiz target's pronunciation is denormalized DISPLAY data
+    // only -- resolution happens via paragraphSpanId's own resolvedWordId/
+    // resolvedVocabPhraseId at runtime, not character/pronunciation matching
+    // (see createReviewTestSession) -- and is legitimately "" whenever the
+    // blank resolved to a standalone word rather than a vocab phrase with
+    // pinyin. Requiring non-empty pronunciation is still correct for
+    // non-paragraph (Content Admin / Due Review) targets, which always
+    // carry real pinyin by the time they reach this function.
+    const pronunciationRequired = !target.paragraphSpanId;
+    if (!character || (pronunciationRequired && !pronunciation) || seenKeys.has(key)) {
       continue;
     }
 

@@ -26,6 +26,7 @@ import TestModeBlankSelector, {
   resolvePendingSpan,
 } from "./TestModeBlankSelector";
 import { buildSentenceRenderTokens } from "./ParagraphSpanSelector";
+import { spanHasHintableContent } from "./paragraphQuizContentCheck";
 
 function groupBySentence<T extends { sentenceIndex: number }>(matches: T[]): Map<number, T[]> {
   const map = new Map<number, T[]>();
@@ -184,6 +185,25 @@ export default function TestModeSection({ vm }: { vm: WordsWorkspaceVM }) {
       setNotice(str.packageMinBlanksError);
       return;
     }
+    if (!paragraph) return;
+
+    const spansById = new Map(
+      paragraph.sentences.flatMap((sentence) => sentence.spans.map((span) => [span.id, span]))
+    );
+    const missingContentTexts = Array.from(
+      new Set(
+        mode.spanIds
+          .map((spanId) => spansById.get(spanId))
+          .filter((span): span is ParagraphSpan => span !== undefined)
+          .filter((span) => !spanHasHintableContent(span, vm.words, vm.vocabPhrases, vm.allFlashcardContents))
+          .map((span) => span.text)
+      )
+    );
+    if (missingContentTexts.length > 0) {
+      setNotice(str.packageMissingContentError.replace("{list}", missingContentTexts.join("、")));
+      return;
+    }
+
     setPackagingMode(mode);
     setPackageName(mode.name);
     setPackageError(null);

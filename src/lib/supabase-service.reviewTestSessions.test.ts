@@ -256,6 +256,47 @@ describe("supabase-service review test sessions", () => {
     ]);
   });
 
+  it("keeps a paragraph-quiz target whose pronunciation is empty (a standalone-word blank, not a phrase)", async () => {
+    // Regression test: TestModeSection.tsx's submitPackage() sends
+    // pronunciation: "" for any blank that resolved to a `words` row rather
+    // than a `vocab_phrases` row -- pinyin isn't cheaply available
+    // client-side for a standalone character. This must not be treated as
+    // an invalid target the way it would for a Content Admin / Due Review
+    // target, whose pronunciation is always real pinyin by the time it
+    // reaches createReviewTestSession. Previously this silently zeroed out
+    // the whole session, surfacing as a generic "Something went wrong
+    // creating the quiz session" error to the user.
+    const sessionInsert = vi.fn().mockResolvedValue({ error: null });
+    const targetInsert = vi.fn().mockResolvedValue({ error: null });
+
+    fromMock.mockImplementation((table: string) => {
+      if (table === "review_test_sessions") {
+        return { insert: sessionInsert };
+      }
+      if (table === "review_test_session_targets") {
+        return { insert: targetInsert };
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    const session = await createReviewTestSession(
+      "Prep Fill Test",
+      [
+        { character: "艰", pronunciation: "", key: "unused", paragraphId: "paragraph-1", paragraphSpanId: "s0-0" },
+        { character: "难", pronunciation: "", key: "unused", paragraphId: "paragraph-1", paragraphSpanId: "s0-1" },
+        { character: "帮助", pronunciation: "", key: "unused", paragraphId: "paragraph-1", paragraphSpanId: "s0-2" },
+      ],
+      "test-mode-1"
+    );
+
+    expect(session.targets).toHaveLength(3);
+    expect(targetInsert).toHaveBeenCalledWith([
+      expect.objectContaining({ paragraph_span_id: "s0-0", pronunciation: "" }),
+      expect.objectContaining({ paragraph_span_id: "s0-1", pronunciation: "" }),
+      expect.objectContaining({ paragraph_span_id: "s0-2", pronunciation: "" }),
+    ]);
+  });
+
   it("deletes an active review test session", async () => {
     const deleteBuilder = {
       delete: vi.fn(),

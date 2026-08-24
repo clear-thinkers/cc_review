@@ -96,6 +96,8 @@ export const addParagraphStrings = {
       packageNameLabel: "Session name",
       packageSubmitButton: "Create Quiz Session",
       packageMinBlanksError: "A test mode needs at least 2 blanks to be packaged as a quiz.",
+      packageMissingContentError:
+        "This test mode can't be packaged yet — Hint won't work during the quiz for these blanks because they have no saved content: {list}. Add content for them in Content Admin first.",
       packagedNotice: "Quiz session created. It's ready to play from Due Review.",
       packageError: "Something went wrong creating the quiz session. Please try again.",
       deleteBlockedNotice:
@@ -198,6 +200,8 @@ export const addParagraphStrings = {
       packageNameLabel: "测验名称",
       packageSubmitButton: "创建测验",
       packageMinBlanksError: "测试模式至少需要 2 个空格才能打包为测验。",
+      packageMissingContentError:
+        "该测试模式暂时无法打包——以下空格尚未保存内容，测验中的提示功能将无法使用：{list}。请先在内容管理中为它们添加内容。",
       packagedNotice: "测验已创建，可在“待复习”中开始。",
       packageError: "创建测验时出现问题，请重试。",
       deleteBlockedNotice: "此测试模式有一个正在进行的测验，请先完成或移除该测验再删除。",
