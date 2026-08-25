@@ -215,3 +215,16 @@ export function buildReviewTestSessionRuntime(
     paragraphQuiz: null,
   };
 }
+
+/**
+ * Ingredient-reward panel headline, shared by every packaged-session
+ * completion flow (fill-test and paragraph-quiz alike) -- singular/plural
+ * English needs picking a different string, not just interpolating a count
+ * into one template.
+ */
+export function buildRewardHeadline(
+  count: number,
+  strings: { headlineSingular: string; headlinePlural: string }
+): string {
+  return count === 1 ? strings.headlineSingular : strings.headlinePlural.replace("{count}", String(count));
+}

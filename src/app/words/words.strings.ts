@@ -340,13 +340,6 @@ export const wordsStrings = {
         popupCloseButton: "Close",
         noContentMessage: "No extra info for this word yet.",
       },
-      reward: {
-        eyebrow: "Quiz complete!",
-        headlineSingular: "You earned 1 ingredient!",
-        headlinePlural: "You earned {count} ingredients!",
-        subtext: "Take them back to the kitchen to cook something new.",
-        continueButton: "Continue",
-      },
       emptyState: {
         noSessionTitle: "No quiz session is active.",
         noSessionBody: "Start from Due Review to choose a packaged paragraph quiz first.",
@@ -366,6 +359,16 @@ export const wordsStrings = {
         completeError: "Quiz finished, but the test session could not be marked complete: {name}",
         returnToDueReviewButton: "Return to Due Review",
       },
+    },
+
+    // ============= INGREDIENT REWARD PANEL (shared by every packaged-session
+    // completion flow -- fill-test and paragraph-quiz alike) =============
+    ingredientReward: {
+      eyebrow: "Quiz complete!",
+      headlineSingular: "You earned 1 ingredient!",
+      headlinePlural: "You earned {count} ingredients!",
+      subtext: "Take them back to the kitchen to cook something new.",
+      continueButton: "Continue",
     },
 
     // ============= QUIZ RESULTS PAGE =============
@@ -1669,13 +1672,6 @@ export const wordsStrings = {
         popupCloseButton: "关闭",
         noContentMessage: "这个词还没有更多内容。",
       },
-      reward: {
-        eyebrow: "测验完成！",
-        headlineSingular: "你获得了 1 个食材！",
-        headlinePlural: "你获得了 {count} 个食材！",
-        subtext: "把它们带回厨房，做点新东西吧！",
-        continueButton: "继续",
-      },
       emptyState: {
         noSessionTitle: "当前没有正在进行的测验。",
         noSessionBody: "请先从待复习页面开始一个已打包的短文测验。",
@@ -1694,6 +1690,15 @@ export const wordsStrings = {
         completeError: "测验已完成，但无法把测验标记为已完成：{name}",
         returnToDueReviewButton: "返回待复习",
       },
+    },
+
+    // ============= 食材奖励面板（共享于所有已打包测验的完成流程——填空测验与短文测验） =============
+    ingredientReward: {
+      eyebrow: "测验完成！",
+      headlineSingular: "你获得了 1 个食材！",
+      headlinePlural: "你获得了 {count} 个食材！",
+      subtext: "把它们带回厨房，做点新东西吧！",
+      continueButton: "继续",
     },
 
     // ============= 测验结果页面 =============

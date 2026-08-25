@@ -41,6 +41,7 @@ import {
   listParagraphs,
   listAllParagraphTestModes,
   getActiveSessionTargetKeys,
+  rewardRandomIngredients,
 } from "@/lib/supabase-service";
 import { gradeBundledFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -291,6 +292,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setQuizSessionStartTime,
     completedReviewTestSessionName,
     setCompletedReviewTestSessionName,
+    quizRewardedIngredients,
+    setQuizRewardedIngredients,
   } = fillTestState;
 
   const {
@@ -4182,6 +4185,80 @@ const gradeLabels = getGradeLabels(str);
     }
   }
 
+  // Second half of quiz completion -- marks the review test session complete
+  // (or cleans up ad-hoc progress), stops the runtime session, and surfaces
+  // the completion notice. Split out from moveQuizForward so the ingredient
+  // reward panel (packaged sessions only) can defer this until the child
+  // clicks Continue, while an unrewarded/ad-hoc completion still runs it
+  // immediately -- same two-phase shape ParagraphQuizReviewSection.tsx
+  // already uses for its own finishSession/completeSessionAndReturn split.
+  async function finalizeQuizCompletion(
+    completedReviewTestSession: (typeof reviewTestSessions)[number] | null
+  ) {
+    // Tracks whether completeReviewTestSession actually succeeded, so the
+    // unconditional notice below never clobbers a real error with a false
+    // "completed" message -- see build-fix-log-2026-07-30-packaged-session-limbo.md.
+    let reviewTestSessionCompletionFailed = false;
+
+    if (completedReviewTestSession) {
+      try {
+        await completeReviewTestSession(completedReviewTestSession.id);
+        setCompletedReviewTestSessionName(completedReviewTestSession.name);
+      } catch (error) {
+        console.error("Failed to complete review test session:", error);
+        reviewTestSessionCompletionFailed = true;
+        setQuizNotice(
+          str.fillTest.reviewTestSession.completeError.replace(
+            "{name}",
+            completedReviewTestSession.name
+          )
+        );
+      }
+    } else if (activeProgressKeyRef.current) {
+      // Ad-hoc due-review completion: the session finished normally via
+      // the quiz_sessions insert above, so the saved progress row is now
+      // stale -- delete it. Packaged-session cleanup is handled
+      // server-side by complete_review_test_session (E1), not here, so
+      // this branch only ever runs for ad-hoc sessions.
+      try {
+        await deleteReviewSessionProgress(activeProgressKeyRef.current);
+      } catch (error) {
+        console.error("Failed to delete review session progress after completion:", error);
+        // Don't block quiz completion if cleanup fails -- matches the
+        // recordQuizSession failure-tolerance pattern above.
+      }
+    }
+
+    stopQuizSession();
+    setQuizCompleted(true);
+    const completionNotice = resolveQuizCompletionNotice({
+      reviewTestSessionCompletionFailed,
+      completedReviewTestSessionName: completedReviewTestSession?.name ?? null,
+      completedNoticeTemplate: str.fillTest.reviewTestSession.completed,
+      adHocNoticeMessage: str.fillTest.completionMessage,
+    });
+    if (completionNotice !== null) {
+      setQuizNotice(completionNotice);
+    }
+    await refreshAll();
+  }
+
+  // Continue button on the ingredient reward panel -- dismisses the panel
+  // and runs the deferred second half of completion. activeReviewTestSession
+  // is safe to re-derive here (rather than stashing the value moveQuizForward
+  // computed): nothing changes it while the reward panel is showing.
+  async function continueQuizAfterIngredientReward() {
+    const completedReviewTestSession =
+      requestedReviewTestSessionId && activeReviewTestSession ? activeReviewTestSession : null;
+    setQuizRewardedIngredients(null);
+    setQuizSubmitting(true);
+    try {
+      await finalizeQuizCompletion(completedReviewTestSession);
+    } finally {
+      setQuizSubmitting(false);
+    }
+  }
+
   async function moveQuizForward() {
     if (!quizResult) {
       return;
@@ -4202,6 +4279,7 @@ const gradeLabels = getGradeLabels(str);
             : null;
 
         // Create and save the quiz session before finishing
+        let quizSessionId: string | null = null;
         try {
           if (quizSessionStartTime !== null) {
             const sessionEndTime = Date.now();
@@ -4250,58 +4328,33 @@ const gradeLabels = getGradeLabels(str);
             };
 
             await recordQuizSession(session);
+            quizSessionId = session.id;
           }
         } catch (error) {
           console.error("Failed to save quiz session:", error);
           // Don't block quiz completion if session save fails
         }
 
-        // Tracks whether completeReviewTestSession actually succeeded, so the
-        // unconditional notice below never clobbers a real error with a false
-        // "completed" message -- see build-fix-log-2026-07-30-packaged-session-limbo.md.
-        let reviewTestSessionCompletionFailed = false;
-
-        if (completedReviewTestSession) {
+        // Ingredient reward -- packaged sessions only (character, phrase, or
+        // mixed alike; broadened from the original paragraph-quiz-only scope,
+        // see docs/feature-specs/2026-08-22-paragraph-quiz-ingredient-reward.md).
+        // A failure here, or an empty result (no unlocked recipes / empty
+        // pool / already rewarded), must never block normal completion --
+        // fall straight through to finalizeQuizCompletion exactly as before
+        // this feature existed.
+        if (completedReviewTestSession && quizSessionId) {
           try {
-            await completeReviewTestSession(completedReviewTestSession.id);
-            setCompletedReviewTestSessionName(completedReviewTestSession.name);
+            const rewards = await rewardRandomIngredients(quizSessionId);
+            if (rewards.length > 0) {
+              setQuizRewardedIngredients(rewards);
+              return; // defer finalizeQuizCompletion until Continue is clicked
+            }
           } catch (error) {
-            console.error("Failed to complete review test session:", error);
-            reviewTestSessionCompletionFailed = true;
-            setQuizNotice(
-              str.fillTest.reviewTestSession.completeError.replace(
-                "{name}",
-                completedReviewTestSession.name
-              )
-            );
-          }
-        } else if (activeProgressKeyRef.current) {
-          // Ad-hoc due-review completion: the session finished normally via
-          // the quiz_sessions insert above, so the saved progress row is now
-          // stale -- delete it. Packaged-session cleanup is handled
-          // server-side by complete_review_test_session (E1), not here, so
-          // this branch only ever runs for ad-hoc sessions.
-          try {
-            await deleteReviewSessionProgress(activeProgressKeyRef.current);
-          } catch (error) {
-            console.error("Failed to delete review session progress after completion:", error);
-            // Don't block quiz completion if cleanup fails -- matches the
-            // recordQuizSession failure-tolerance pattern above.
+            console.error("Failed to reward ingredients for packaged fill-test session:", error);
           }
         }
 
-        stopQuizSession();
-        setQuizCompleted(true);
-        const completionNotice = resolveQuizCompletionNotice({
-          reviewTestSessionCompletionFailed,
-          completedReviewTestSessionName: completedReviewTestSession?.name ?? null,
-          completedNoticeTemplate: str.fillTest.reviewTestSession.completed,
-          adHocNoticeMessage: str.fillTest.completionMessage,
-        });
-        if (completionNotice !== null) {
-          setQuizNotice(completionNotice);
-        }
-        await refreshAll();
+        await finalizeQuizCompletion(completedReviewTestSession);
       } finally {
         quizFinishInFlightRef.current = false;
         setQuizSubmitting(false);
@@ -4434,6 +4487,8 @@ const gradeLabels = getGradeLabels(str);
     quizSubmitting,
     unansweredCount,
     moveQuizForward,
+    quizRewardedIngredients,
+    continueQuizAfterIngredientReward,
     quizSummary,
     quizSessionCoins,
     completedReviewTestSessionName,

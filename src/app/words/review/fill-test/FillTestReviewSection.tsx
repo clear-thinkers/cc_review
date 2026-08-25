@@ -7,6 +7,7 @@ import type { TestableWord } from "./fillTest.types";
 import { CoinAnimation } from "./coins.animation";
 import { playCelebrationSound } from "../../shared/coins.sound";
 import { findFlashcardPhrasePinyin, renderPhraseWithPinyin } from "../../shared/words.shared.utils";
+import IngredientRewardPanel from "../IngredientRewardPanel";
 
 type QuizCelebrationWindow = Window & {
   __quizEasyGradeEvent?: number;
@@ -43,6 +44,8 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     quizSubmitting,
     unansweredCount,
     moveQuizForward,
+    quizRewardedIngredients,
+    continueQuizAfterIngredientReward,
     quizSummary,
     quizSessionCoins,
     gradeLabels,
@@ -108,6 +111,24 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
   // branch dispatch (see WordsWorkspace.tsx).
   if (!isFillTestReviewPage || activeReviewTestSessionRuntime?.paragraphQuiz) {
     return null;
+  }
+
+  // Packaged-session completion (character/phrase/mixed) earned ingredient
+  // rewards -- see moveQuizForward's ingredient-reward branch in
+  // words.shared.state.ts. Shows in place of the normal quiz UI until the
+  // child clicks Continue, matching ParagraphQuizReviewSection.tsx's own
+  // reward-panel precedent.
+  if (quizRewardedIngredients) {
+    return (
+      <section className="space-y-3 rounded-lg border p-4">
+        <h2 className="font-medium">{str.fillTest.pageTitle}</h2>
+        <IngredientRewardPanel
+          ingredients={quizRewardedIngredients}
+          strings={str.ingredientReward}
+          onContinue={continueQuizAfterIngredientReward}
+        />
+      </section>
+    );
   }
 
   return (

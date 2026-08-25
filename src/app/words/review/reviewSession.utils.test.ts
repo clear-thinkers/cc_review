@@ -5,6 +5,7 @@ import type { Paragraph, ParagraphSpan } from "@/lib/paragraph.types";
 import type { ParagraphTestMode } from "@/lib/paragraphTestMode.types";
 import type { ReviewTestSession } from "./review.types";
 import {
+  buildRewardHeadline,
   buildReviewTestSessionRuntime,
   sortReviewTestSessionTargets,
 } from "./reviewSession.utils";
@@ -335,5 +336,22 @@ describe("buildReviewTestSessionRuntime — paragraph-quiz branch", () => {
 
     expect(runtime.errorCode).toBeNull();
     expect(runtime.paragraphQuiz?.pages[0]?.bankSpanIds).toEqual(["s0-0"]);
+  });
+});
+
+describe("buildRewardHeadline", () => {
+  const strings = { headlineSingular: "You earned 1 ingredient!", headlinePlural: "You earned {count} ingredients!" };
+
+  it("uses the singular string for a count of exactly 1", () => {
+    expect(buildRewardHeadline(1, strings)).toBe("You earned 1 ingredient!");
+  });
+
+  it("interpolates the count into the plural string for any other count", () => {
+    expect(buildRewardHeadline(3, strings)).toBe("You earned 3 ingredients!");
+    expect(buildRewardHeadline(2, strings)).toBe("You earned 2 ingredients!");
+  });
+
+  it("uses the plural string for 0 (never expected in practice, but not the singular string)", () => {
+    expect(buildRewardHeadline(0, strings)).toBe("You earned 0 ingredients!");
   });
 });
