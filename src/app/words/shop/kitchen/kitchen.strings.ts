@@ -70,6 +70,10 @@ export const kitchenStrings = {
     tabDessertsLabel: "Desserts",
     shelfTabEmptyTemplate: "No {tab} yet.",
 
+    // Section: Dish Enlarge (countertop and shelf tiles both use this)
+    dishEnlargeAriaTemplate: "Enlarge {title}",
+    dishEnlargeCloseButton: "Close",
+
     // Section: Special Ingredients
     specialModalTitleTemplate: "Add special ingredients to {title}?",
     specialModalDescription: "Tap any you'd like to add. Matching the right combination makes a special version — but any you pick get used either way.",
@@ -144,6 +148,10 @@ export const kitchenStrings = {
     tabHotMealLabel: "热菜",
     tabDessertsLabel: "甜点",
     shelfTabEmptyTemplate: "还没有{tab}。",
+
+    // Section: Dish Enlarge (countertop and shelf tiles both use this)
+    dishEnlargeAriaTemplate: "放大{title}",
+    dishEnlargeCloseButton: "关闭",
 
     // Section: Special Ingredients
     specialModalTitleTemplate: "要给{title}加特殊食材吗?",

@@ -99,6 +99,12 @@ export const wordsStrings = {
             "Both parent and child can inspect what has been added. Parents can also manage tags, reset character familiarity, and delete added characters or phrases here when needed.",
           cta: "Open All Characters & Phrases",
         },
+        manageParagraphs: {
+          title: "Parent Manages Paragraphs",
+          description:
+            "Import passages, split them into word/phrase spans, and save them to the paragraph library for quiz practice.",
+          cta: "Go to Manage Paragraphs",
+        },
         addContent: {
           title: "Parent Adds Content",
           description:
@@ -116,6 +122,18 @@ export const wordsStrings = {
           description:
             "Both parent and child can review recent quiz results and cumulative coins here.",
           cta: "Open Quiz Results",
+        },
+        recipeShop: {
+          title: "Child Visits the Recipe Shop",
+          description:
+            "Spend earned coins to unlock recipes and buy ingredients, ready to bring to the kitchen.",
+          cta: "Open Recipe Shop",
+        },
+        shopKitchen: {
+          title: "Child Cooks in the Shop Kitchen",
+          description:
+            "Use unlocked recipes and collected ingredients to cook dishes and stock the shelf.",
+          cta: "Open Shop Kitchen",
         },
       },
     },
@@ -1435,6 +1453,11 @@ export const wordsStrings = {
             "家长和孩子都可以查看已经添加的汉字和词语。家长也可以在这里按需要管理标签、重置汉字熟悉度，并删除已添加的汉字或词语。",
           cta: "打开全部汉字和词语",
         },
+        manageParagraphs: {
+          title: "家长管理短文",
+          description: "导入短文，将其拆分成汉字和词语片段，保存到短文库中用于测验练习。",
+          cta: "前往管理短文",
+        },
         addContent: {
           title: "家长添加内容",
           description: "为新汉字生成或编辑释义、词语和例句，同时管理独立词语内容，并把选中的汉字和词语打包成测验来定向复习。",
@@ -1449,6 +1472,16 @@ export const wordsStrings = {
           title: "一起查看测验结果",
           description: "家长和孩子都可以在这里查看最近的测验结果和累积的金币。",
           cta: "打开测验结果",
+        },
+        recipeShop: {
+          title: "孩子逛食谱商店",
+          description: "孩子可以用赚到的金币解锁食谱、购买食材，为进厨房做准备。",
+          cta: "打开食谱商店",
+        },
+        shopKitchen: {
+          title: "孩子在厨房做饭",
+          description: "使用已解锁的食谱和收集到的食材烹饪菜肴，摆上置物架。",
+          cta: "打开食谱厨房",
         },
       },
     },

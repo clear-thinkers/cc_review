@@ -6,8 +6,24 @@ import { canAccessRoute } from "@/lib/permissions";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 
 type HomeFlowStep = {
-  id: "addCharacters" | "allCharacters" | "addContent" | "dueReview" | "results";
-  route: "/words/add" | "/words/all" | "/words/admin" | "/words/review" | "/words/results";
+  id:
+    | "addCharacters"
+    | "allCharacters"
+    | "manageParagraphs"
+    | "addContent"
+    | "dueReview"
+    | "results"
+    | "recipeShop"
+    | "shopKitchen";
+  route:
+    | "/words/add"
+    | "/words/all"
+    | "/words/add-paragraph"
+    | "/words/admin"
+    | "/words/review"
+    | "/words/results"
+    | "/words/shop"
+    | "/words/shop/kitchen";
   role: "parent" | "child" | "shared";
   getPageTitle: (vm: WordsWorkspaceVM) => string;
 };
@@ -26,6 +42,12 @@ const HOME_FLOW_STEPS: HomeFlowStep[] = [
     getPageTitle: (vm) => vm.str.all.pageTitle,
   },
   {
+    id: "manageParagraphs",
+    route: "/words/add-paragraph",
+    role: "parent",
+    getPageTitle: (vm) => vm.str.nav.addParagraph,
+  },
+  {
     id: "addContent",
     route: "/words/admin",
     role: "parent",
@@ -42,6 +64,18 @@ const HOME_FLOW_STEPS: HomeFlowStep[] = [
     route: "/words/results",
     role: "shared",
     getPageTitle: (vm) => vm.str.results.pageTitle,
+  },
+  {
+    id: "recipeShop",
+    route: "/words/shop",
+    role: "child",
+    getPageTitle: (vm) => vm.str.shop.pageTitle,
+  },
+  {
+    id: "shopKitchen",
+    route: "/words/shop/kitchen",
+    role: "child",
+    getPageTitle: (vm) => vm.str.nav.shopKitchen,
   },
 ];
 

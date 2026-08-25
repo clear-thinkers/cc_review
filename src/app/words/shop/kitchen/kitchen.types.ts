@@ -103,6 +103,11 @@ export function countCountertopDishes(dishes: ShopCookedDish[]): number {
   return dishes.filter((dish) => dish.location === "countertop").length;
 }
 
+/** How many dishes are currently organized onto the shelf (`location === "shelf"`). */
+export function countShelfDishes(dishes: ShopCookedDish[]): number {
+  return dishes.filter((dish) => dish.location === "shelf").length;
+}
+
 export type KitchenShelfTilesByFoodType = Record<ShopFoodType, KitchenDishTile[]>;
 
 /**
@@ -139,6 +144,27 @@ export function buildShelfTilesByFoodType(
 /** Total dishes ever cooked, across the countertop and shelf combined -- for the "N dishes made" summary line. */
 export function countTotalCookedDishes(dishes: ShopCookedDish[]): number {
   return dishes.length;
+}
+
+/**
+ * Which kitchen-scene illustration to show, based on how many dishes are
+ * currently organized onto the shelf (2026-08-25) -- `kitchen_empty.png`
+ * (the original `full-kitchen.png`, renamed once it was no longer the only
+ * scene) for an empty shelf, `kitchen_half_stocked.png` for 1-5 shelved
+ * dishes, `kitchen_stocked.png` for more than 5. All three share the same
+ * artwork layout, so the existing SceneHotspot percentage boxes apply
+ * unchanged regardless of which one renders.
+ */
+export const KITCHEN_SCENE_IMAGE_PATHS = {
+  empty: "/kitchen/kitchen_empty.png",
+  halfStocked: "/kitchen/kitchen_half_stocked.png",
+  stocked: "/kitchen/kitchen_stocked.png",
+} as const;
+
+export function resolveKitchenSceneImagePath(shelfDishCount: number): string {
+  if (shelfDishCount > 5) return KITCHEN_SCENE_IMAGE_PATHS.stocked;
+  if (shelfDishCount >= 1) return KITCHEN_SCENE_IMAGE_PATHS.halfStocked;
+  return KITCHEN_SCENE_IMAGE_PATHS.empty;
 }
 
 /** The localized appliance label for a recipe's own `cookMethod` -- e.g. for the "X needs the {appliance}" wrong-appliance notice, the appliance named must be the recipe's actual required one, never whichever appliance the child clicked. */

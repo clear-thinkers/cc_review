@@ -4,9 +4,12 @@ import {
   buildCountertopTiles,
   buildShelfTilesByFoodType,
   countCountertopDishes,
+  countShelfDishes,
   countTotalCookedDishes,
+  KITCHEN_SCENE_IMAGE_PATHS,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
+  resolveKitchenSceneImagePath,
   SHOP_FOOD_TYPES,
 } from "./kitchen.types";
 import { kitchenStrings } from "./kitchen.strings";
@@ -264,6 +267,38 @@ describe("countTotalCookedDishes", () => {
 
   it("is zero for no dishes", () => {
     expect(countTotalCookedDishes([])).toBe(0);
+  });
+});
+
+describe("countShelfDishes", () => {
+  it("counts only shelved dishes", () => {
+    expect(
+      countShelfDishes([
+        dish({ id: "d1", location: "shelf" }),
+        dish({ id: "d2", location: "shelf" }),
+        dish({ id: "d3", location: "countertop" }),
+      ])
+    ).toBe(2);
+  });
+
+  it("is zero for no dishes", () => {
+    expect(countShelfDishes([])).toBe(0);
+  });
+});
+
+describe("resolveKitchenSceneImagePath", () => {
+  it("returns the empty scene for zero shelved dishes", () => {
+    expect(resolveKitchenSceneImagePath(0)).toBe(KITCHEN_SCENE_IMAGE_PATHS.empty);
+  });
+
+  it("returns the half-stocked scene for 1 to 5 shelved dishes", () => {
+    expect(resolveKitchenSceneImagePath(1)).toBe(KITCHEN_SCENE_IMAGE_PATHS.halfStocked);
+    expect(resolveKitchenSceneImagePath(5)).toBe(KITCHEN_SCENE_IMAGE_PATHS.halfStocked);
+  });
+
+  it("returns the stocked scene for more than 5 shelved dishes", () => {
+    expect(resolveKitchenSceneImagePath(6)).toBe(KITCHEN_SCENE_IMAGE_PATHS.stocked);
+    expect(resolveKitchenSceneImagePath(20)).toBe(KITCHEN_SCENE_IMAGE_PATHS.stocked);
   });
 });
 

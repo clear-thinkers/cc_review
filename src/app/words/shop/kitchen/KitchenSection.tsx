@@ -36,9 +36,11 @@ import {
   buildCountertopTiles,
   buildShelfTilesByFoodType,
   countCountertopDishes,
+  countShelfDishes,
   countTotalCookedDishes,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
+  resolveKitchenSceneImagePath,
   SHOP_FOOD_TYPES,
   SHOP_KITCHEN_COUNTERTOP_CAPACITY,
   type KitchenSpecialIngredientOption,
@@ -61,11 +63,14 @@ function replaceToken(template: string, token: string, value: string): string {
 }
 
 /**
- * One clickable region over the full-kitchen.png illustration. Position is
- * expressed as percentages of the image's own box, tied to this specific
- * artwork's fixed layout -- there's no static Tailwind class for "the top
- * half of the appliance in this particular picture," so inline style is the
- * documented exception here (BUILD_CONVENTIONS.md §7).
+ * One clickable region over the kitchen-scene illustration (one of
+ * kitchen_empty/kitchen_half_stocked/kitchen_stocked.png -- see
+ * resolveKitchenSceneImagePath). Position is expressed as percentages of the
+ * image's own box, tied to this specific artwork's fixed layout, shared
+ * identically across all three shelf-stock variants -- there's no static
+ * Tailwind class for "the top half of the appliance in this particular
+ * picture," so inline style is the documented exception here
+ * (BUILD_CONVENTIONS.md §7).
  */
 function SceneHotspot({
   left,
@@ -399,11 +404,19 @@ function DishTileGrid({
   tiles,
   emptyText,
   size = "sm",
+  enlargeAriaTemplate,
+  enlargeCloseLabel,
 }: {
   tiles: { recipeId: string; iconPath: string | null; title: string; count: number }[];
   emptyText: string;
   size?: "sm" | "lg";
+  enlargeAriaTemplate: string;
+  enlargeCloseLabel: string;
 }) {
+  const [enlargedTile, setEnlargedTile] = useState<
+    { recipeId: string; iconPath: string | null; title: string; count: number } | null
+  >(null);
+
   if (tiles.length === 0) {
     return <p className="text-sm italic text-gray-500">{emptyText}</p>;
   }
@@ -423,25 +436,81 @@ function DishTileGrid({
   const itemPaddingClass = size === "lg" ? "px-3 py-2" : "px-2 py-1";
 
   return (
-    <div className={`flex flex-wrap ${tileGapClass}`}>
-      {tiles.map((tile) => (
+    <>
+      <div className={`flex flex-wrap ${tileGapClass}`}>
+        {tiles.map((tile) => (
+          <button
+            type="button"
+            key={`${tile.recipeId}::${tile.iconPath ?? ""}`}
+            title={`${tile.title} (x${tile.count})`}
+            aria-label={replaceToken(enlargeAriaTemplate, "{title}", tile.title)}
+            onClick={() => setEnlargedTile(tile)}
+            className={`flex flex-col items-center ${itemGapClass} rounded-xl border border-[#eadfbe] bg-white ${itemPaddingClass} shadow-sm transition hover:border-[#dcc38a] hover:shadow-md`}
+          >
+            <span className="relative" aria-hidden="true">
+              {tile.iconPath ? (
+                <img src={tile.iconPath} alt="" className={`${iconBoxClass} object-contain`} />
+              ) : (
+                <span className={fallbackEmojiClass}>🍽️</span>
+              )}
+              {tile.count > 1 ? <span className={badgeClass}>{tile.count}</span> : null}
+            </span>
+            <span className={nameClass}>{tile.title}</span>
+          </button>
+        ))}
+      </div>
+      {enlargedTile ? (
+        <DishEnlargeModal
+          tile={enlargedTile}
+          closeLabel={enlargeCloseLabel}
+          onClose={() => setEnlargedTile(null)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function DishEnlargeModal({
+  tile,
+  closeLabel,
+  onClose,
+}: {
+  tile: { recipeId: string; iconPath: string | null; title: string; count: number };
+  closeLabel: string;
+  onClose: () => void;
+}) {
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[110] overflow-y-auto bg-black/45 p-4" onClick={onClose}>
+      <div className="flex min-h-full items-center justify-center">
         <div
-          key={`${tile.recipeId}::${tile.iconPath ?? ""}`}
-          title={`${tile.title} (x${tile.count})`}
-          className={`flex flex-col items-center ${itemGapClass} rounded-xl border border-[#eadfbe] bg-white ${itemPaddingClass} shadow-sm`}
+          className="w-full max-w-xs rounded-[1.5rem] border-2 border-[#dcc38a] bg-[#fffaf0] p-6 shadow-[0_24px_60px_rgba(85,122,84,0.18)]"
+          role="dialog"
+          aria-modal="true"
+          aria-label={tile.title}
+          onClick={(event) => event.stopPropagation()}
         >
-          <span className="relative" aria-hidden="true">
-            {tile.iconPath ? (
-              <img src={tile.iconPath} alt="" className={`${iconBoxClass} object-contain`} />
-            ) : (
-              <span className={fallbackEmojiClass}>🍽️</span>
-            )}
-            {tile.count > 1 ? <span className={badgeClass}>{tile.count}</span> : null}
-          </span>
-          <span className={nameClass}>{tile.title}</span>
+          <div className="flex flex-col items-center gap-3">
+            <span className="flex h-40 w-40 items-center justify-center" aria-hidden="true">
+              {tile.iconPath ? (
+                <img src={tile.iconPath} alt="" className="h-full w-full object-contain" />
+              ) : (
+                <span className="text-8xl">🍽️</span>
+              )}
+            </span>
+            <p className="text-center text-lg font-bold text-gray-900">{tile.title}</p>
+            {tile.count > 1 ? (
+              <p className="text-sm font-semibold text-[#9f6027]">×{tile.count}</p>
+            ) : null}
+            <button type="button" className={NAV_BUTTON} onClick={onClose}>
+              {closeLabel}
+            </button>
+          </div>
         </div>
-      ))}
-    </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -525,6 +594,8 @@ function ShelfModal({
               size="lg"
               tiles={tilesByFoodType[activeTab]}
               emptyText={replaceToken(strings.shelfTabEmptyTemplate, "{tab}", tabLabel[activeTab])}
+              enlargeAriaTemplate={strings.dishEnlargeAriaTemplate}
+              enlargeCloseLabel={strings.dishEnlargeCloseButton}
             />
           </div>
         </div>
@@ -618,6 +689,11 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     [dishes, recipesById, locale]
   );
   const countertopCount = useMemo(() => countCountertopDishes(dishes), [dishes]);
+  const shelfDishCount = useMemo(() => countShelfDishes(dishes), [dishes]);
+  const kitchenSceneImagePath = useMemo(
+    () => resolveKitchenSceneImagePath(shelfDishCount),
+    [shelfDishCount]
+  );
   const shelfTilesByFoodType = useMemo(
     () => buildShelfTilesByFoodType(dishes, recipesById, locale),
     [dishes, recipesById, locale]
@@ -807,14 +883,16 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
         <p className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{str.loadError}</p>
       ) : (
         <div className="space-y-4">
-          {/* The kitchen scene: full-kitchen.png with clickable hotspots for the
-              fridge, recipe book, stovetop (top of the appliance), oven (bottom
-              of the appliance), and shelf -- positions are approximate percentage
-              boxes over the artwork and may need a small visual nudge once
-              checked in a real browser against the actual rendered image. */}
+          {/* The kitchen scene: kitchen_empty/kitchen_half_stocked/kitchen_stocked.png
+              (chosen by resolveKitchenSceneImagePath based on how many dishes are on
+              the shelf) with clickable hotspots for the fridge, recipe book, stovetop
+              (top of the appliance), oven (bottom of the appliance), and shelf --
+              positions are approximate percentage boxes over the artwork and may need
+              a small visual nudge once checked in a real browser against the actual
+              rendered image. */}
           <div className="relative mx-auto w-full max-w-3xl" style={{ aspectRatio: "1337 / 1176" }}>
             <img
-              src="/kitchen/full-kitchen.png"
+              src={kitchenSceneImagePath}
               alt=""
               aria-hidden="true"
               className="absolute inset-0 h-full w-full rounded-2xl object-contain"
@@ -904,7 +982,12 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
               </div>
             </div>
             <div className="mt-3">
-              <DishTileGrid tiles={countertopTiles} emptyText={str.countertopEmpty} />
+              <DishTileGrid
+                tiles={countertopTiles}
+                emptyText={str.countertopEmpty}
+                enlargeAriaTemplate={str.dishEnlargeAriaTemplate}
+                enlargeCloseLabel={str.dishEnlargeCloseButton}
+              />
             </div>
           </div>
 
