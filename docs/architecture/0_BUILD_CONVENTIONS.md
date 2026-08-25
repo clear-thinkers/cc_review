@@ -1,6 +1,6 @@
 # Build Conventions — HanziQuest (`cc_review`)
 
-_Last updated: 2026-08-13 (§5, §7, §8 corrected; §10 gained two script entries)_
+_Last updated: 2026-08-25 (§4.5/§8 corrected — no CI enforcement of EN/ZH parity actually exists; §10 gained `verify:rls`'s npm command and an updated migration-deployment status)_
 
 For authority hierarchy, hard stops, doc update policy, and fix log policy — see `AI_CONTRACT.md`.
 For where to file new documents — see `0_ARCHITECTURE.md §6`.
@@ -143,9 +143,9 @@ export const featureStrings = {
 
 ---
 
-### 4.5 · CI Enforcement
+### 4.5 · Parity Enforcement
 
-`en` and `zh` must have identical key sets across all `*.strings.ts` files. **Build fails on mismatch.**
+`en` and `zh` must have identical key sets across all `*.strings.ts` files. **This is not CI-enforced repo-wide today** — see §8 for exactly which files have a parity test and how it's run.
 
 ---
 
@@ -218,9 +218,9 @@ Every new feature must have tests before it is considered complete.
 
 ## 8 · Build & CI Guardrails
 
-- **Encoding check:** `npm run check:encoding` — runs `scripts/check-mojibake.mjs`, scans for garbled characters in source and docs.
-- **String parity check:** where it exists, asserts identical EN/ZH top-level key sets for one strings file (e.g. `prompts.strings.ts` → `prompts.test.tsx`) and runs as part of `npm test`. **Not a repo-wide guarantee** — `words.strings.ts`, the largest and most-edited strings file, has no such test today; EN/ZH parity there is manual-review only. Add a parity test for any strings file you touch that doesn't already have one — don't assume `npm test` catches a mismatch.
-- **CI workflow:** `.github/workflows/encoding-guardrails.yml` — triggers on all PRs and pushes to `main`/`master`.
+- **Encoding check:** `npm run check:encoding` — runs `scripts/check-mojibake.mjs`, scans for garbled characters in source and docs. This is the only check CI actually runs (see CI workflow below) — it has nothing to do with EN/ZH key parity.
+- **String parity check:** a per-file vitest test that asserts identical EN/ZH (nested) key sets, where one exists — e.g. `prompts.strings.ts` → `prompts.test.tsx`, `addParagraph.strings.ts` → `addParagraph.strings.test.ts`, `words.strings.ts` → `words.strings.test.ts`. **Not a repo-wide guarantee** — add a parity test for any strings file you touch that doesn't already have one. **Not CI-enforced either way** — no workflow runs `npm test` (see below); a parity test only catches a mismatch when a human or agent runs `npm test` locally, per the §0 pre-PR checklist. Don't assume CI catches a mismatch.
+- **CI workflow:** `.github/workflows/encoding-guardrails.yml` — triggers on all PRs and pushes to `main`/`master`; runs `npm run check:encoding` only. There is no CI workflow that runs `npm test`, `npm run typecheck`, or `npm run lint` — all three are manual pre-PR steps (§0) enforced by convention, not by a gate.
 
 ---
 
@@ -372,6 +372,8 @@ npm run generate:coin-compensation-sql -- \
 
 ### `scripts/verify-rls.ts`
 
+**npm command:** `npm run verify:rls`
+
 **Purpose:** Verifies RLS policy correctness against a live Supabase dev project. Covers table accessibility, platform-admin bypass, unenriched session isolation, cross-family isolation, child write scope, and quiz session immutability.
 
 **When to use:** After any migration that adds or modifies RLS policies, or as a sanity check before a prod deployment that touches auth or RLS.
@@ -387,9 +389,9 @@ Runs against dev only — no `--prod` flag. Never point this at prod without fir
 
 **Known state (2026-08-23):** Two standing failures, neither introduced by the most recent run:
 - Section 6 (`vocab_phrases`/`vocab_phrase_lesson_tags`) — `vocab_phrase_lesson_tags setup: service role INSERT lesson_tag failed: Could not find the 'grade' column of 'lesson_tags' in the schema cache`. Pre-existing since it first appeared, not yet fixed.
-- Section 10 (Shop Kitchen, `shop_ingredient_consumptions`) — `shop_ingredient_consumptions no direct insert: child JWT INSERT SUCCEEDED — cook_shop_recipe is not the only writer!`. Surfaced 2026-08-23 when this script was first run live against dev after the original Shop Kitchen migration shipped. Contradicts `0_ARCHITECTURE.md`'s Shop Kitchen Rules (neither `shop_cooked_dishes` nor `shop_ingredient_consumptions` should have a direct client write policy at all) — a stray insert policy, copied from `shop_ingredient_rewards`' own pattern, was present on `shop_ingredient_consumptions`. **Fix written same day** in `supabase/migrations/20260823020000_shop_kitchen_countertop_redesign.sql` (drops the policy outright) but **not yet deployed** — this section's known-failure count won't drop until that migration is pushed to dev and the script is re-run to confirm.
+- Section 10 (Shop Kitchen, `shop_ingredient_consumptions`) — `shop_ingredient_consumptions no direct insert: child JWT INSERT SUCCEEDED — cook_shop_recipe is not the only writer!`. Surfaced 2026-08-23 when this script was first run live against dev after the original Shop Kitchen migration shipped. Contradicted `0_ARCHITECTURE.md`'s Shop Kitchen Rules (neither `shop_cooked_dishes` nor `shop_ingredient_consumptions` should have a direct client write policy at all) — a stray insert policy, copied from `shop_ingredient_rewards`' own pattern, was present on `shop_ingredient_consumptions`. **Fixed same day** in `supabase/migrations/20260823020000_shop_kitchen_countertop_redesign.sql` (drops the policy outright) — **confirmed deployed to dev** (`npm run db:status` shows `20260823020000` in both Local and Remote columns), but the script itself has not been re-run since to confirm this failure actually cleared. Treat Section 10 as likely-fixed-but-unverified until someone reruns it.
 
-Expect 79/81, not 81/81, until all three are addressed (the two above plus this one pending re-verification after the pending migration deploys).
+Last confirmed count was 79/81 (the two failures above), from before the Section 10 fix deployed — re-run the script to get a current count rather than assuming 79/81 or 81/81.
 
 ---
 

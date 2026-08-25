@@ -1,8 +1,10 @@
 # Feature Spec — 2026-08-23 — Kitchen Page
 
-## Status
+## Status: Shipped — 2026-08-25
 
 **Genuinely new — not in `0_PRODUCT_ROADMAP.md` at all (unlisted, not deferred).** No roadmap row, no prior spec, and no code anywhere in `src/app/words/` implemented a "kitchen," a consumable ingredient inventory, or a cooking action before this. Flagged per `AI_CONTRACT.md §3` step 1 when first drafted; authorized and built the same day.
+
+**Fully shipped 2026-08-25.** The remaining open items from the Test Plan/Acceptance Criteria below — the manual live-QA checklist against a dev Supabase project (cook past the countertop cap, Organize, a matched and an unmatched special-ingredient cook, hotspot alignment in an actual browser) and a re-run of `scripts/verify-rls.ts` Section 10 against the currently deployed schema — both passed. See `0_PRODUCT_ROADMAP.md` item J.
 
 A visual mockup of this page was built and iterated on as an Artifact earlier in the same conversation (cupboard → ingredient grid, side-by-side stovetop + oven, a countertop recipe book, and four color-coded drag-to-organize shelves), using placeholder emoji art and invented demo data. **That mockup's interaction model is now superseded** — see Revision below — once a real kitchen illustration (`public/kitchen/full-kitchen.png`) was supplied and the shelf-organizing mechanic was redirected from child drag-and-drop to admin-preassigned food categories.
 
@@ -163,21 +165,21 @@ No AI layer involvement. No change to `words`, `flashcard_contents`, scheduler, 
 - Shop Admin: validation requires `food_type` whenever `cook_method` is set; passes when both are set or both are null.
 - UI: Fridge/Recipe Book/Shelf modals render correctly; clicking the wrong appliance, an unready recipe, or cooking at capacity never calls the RPC; Organize is disabled at 0 countertop dishes.
 - `scripts/verify-rls.ts` Section 10: family-scoped read on both tables; **no** direct client insert/update/delete succeeds on `shop_cooked_dishes` or `shop_ingredient_consumptions` under any caller, including the owning child.
-- **Live QA against a dev Supabase project** (not yet run — see roadmap row J): cook past the countertop cap and confirm the block; organize and confirm dishes land in the correct shelf tab per their recipe's `food_type`; confirm a real browser renders the five hotspots roughly where expected against the actual artwork.
+- **Live QA against a dev Supabase project** (completed 2026-08-25): cooked past the countertop cap and confirmed the block; organized and confirmed dishes land in the correct shelf tab per their recipe's `food_type`; confirmed a real browser renders the five hotspots roughly where expected against the actual artwork. `scripts/verify-rls.ts` Section 10 was also re-run against the currently deployed schema and confirmed passing.
 
 ## Acceptance criteria
 
-- [ ] `/words/shop/kitchen` is reachable by child and platform-admin sessions only; the "Shop Kitchen" nav entry appears immediately after "Recipe Shop."
-- [ ] The fridge shows every available ingredient (rewards + purchases − consumptions) with real icons.
-- [ ] The Recipe Book lists only cookable recipes; un-unlocked ones link back to `/words/shop`; unlocked ones show accurate Ready/Missing state.
-- [ ] Cooking a ready recipe on its matching appliance spends exactly its required ingredients and lands one new dish on the countertop.
-- [ ] Cooking is blocked, with a clear message, once the countertop holds 6 dishes.
-- [ ] Organize moves every countertop dish to the shelf in one action; dishes then appear under the correct Drinks/Hot Meal/Desserts tab per their recipe's `food_type`.
-- [ ] Shop Admin requires `food_type` whenever `cook_method` is set, and can clear both back to not-cookable.
-- [ ] Selecting a recipe with at least one affordable special ingredient opens the special-ingredients picker; selecting one with none skips straight to cooking, unchanged from Revision 1.
-- [ ] Cooking with a matched special-ingredient combination consumes both base and special ingredients and the resulting dish displays the matching variant icon; cooking with an unmatched combination still consumes the selected special ingredients but displays the plain icon.
-- [ ] `scripts/verify-rls.ts` Section 10 passes for both new tables.
-- [ ] Live-QA checklist completed against a dev Supabase project through the actual app UI (not yet done).
+- [x] `/words/shop/kitchen` is reachable by child and platform-admin sessions only; the "Shop Kitchen" nav entry appears immediately after "Recipe Shop."
+- [x] The fridge shows every available ingredient (rewards + purchases − consumptions) with real icons.
+- [x] The Recipe Book lists only cookable recipes; un-unlocked ones link back to `/words/shop`; unlocked ones show accurate Ready/Missing state.
+- [x] Cooking a ready recipe on its matching appliance spends exactly its required ingredients and lands one new dish on the countertop.
+- [x] Cooking is blocked, with a clear message, once the countertop holds 6 dishes.
+- [x] Organize moves every countertop dish to the shelf in one action; dishes then appear under the correct Drinks/Hot Meal/Desserts tab per their recipe's `food_type`.
+- [x] Shop Admin requires `food_type` whenever `cook_method` is set, and can clear both back to not-cookable.
+- [x] Selecting a recipe with at least one affordable special ingredient opens the special-ingredients picker; selecting one with none skips straight to cooking, unchanged from Revision 1.
+- [x] Cooking with a matched special-ingredient combination consumes both base and special ingredients and the resulting dish displays the matching variant icon; cooking with an unmatched combination still consumes the selected special ingredients but displays the plain icon.
+- [x] `scripts/verify-rls.ts` Section 10 passes for both new tables.
+- [x] Live-QA checklist completed against a dev Supabase project through the actual app UI. Completed 2026-08-25.
 
 ## Open questions
 

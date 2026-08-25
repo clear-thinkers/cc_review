@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-08-13_
+_Last updated: 2026-08-25_
 
 ---
 
@@ -27,6 +27,7 @@ Tier 1 rules (active):
 
 Primary admin user flow:
 1. Add Hanzi/phrases → `/words/add`   → Supabase `words` table (characters) or `vocab_phrases` table (comma/space/line-separated batch), both unreviewed until curated.
+1a. Import paragraphs → `/words/add-paragraph` ("Manage Paragraphs") → paste an article, triage it against existing `words`/`vocab_phrases`, and select known/unknown spans to add → same `words`/`vocab_phrases` tables as step 1, plus the `paragraphs` table for the raw text and span structure. An alternate/additional ingestion entry point alongside step 1, not a replacement — newly-added characters/phrases still need step 4 (Curate content) before they carry flashcard/example content. Once curated, the parent returns to `/words/add-paragraph` to select blanks and package a paragraph quiz — see the step 5 note below.
 2. Manage tags     → `/words/add`, `/words/all`, `/words/admin`
                                          → assign textbook / grade / unit / lesson
                                          → Supabase `word_lesson_tags` / `vocab_phrase_lesson_tags` + tag tables.
@@ -35,6 +36,7 @@ Primary admin user flow:
                                          → Supabase `flashcard_contents` / `vocab_phrases` tables.
 5. Package tests   → `/words/admin`   → named review test sessions, characters and/or phrases
                                          → Supabase `review_test_sessions*` tables.
+                                         → Paragraph-sourced quizzes are packaged differently: back on `/words/add-paragraph`, the parent selects which of the paragraph's already-added spans become blanks ("Prep Fill Test", saved as a `paragraph_test_modes` row), then "Package as Quiz" turns that test mode into its own `review_test_sessions` row (`paragraph_test_mode_id` set) — same target table as step 5, a paragraph-specific packaging path (see Fill-Test Review Rules 28+).
 6. Review & quiz   → `/words/review`, `/words/review/flashcard`, `/words/review/fill-test`
                                          → reads persisted data only; phrase rounds run separately from character rounds.
 7. Reward loop     → `/words/results`, `/words/shop`, `/words/shop/kitchen`
@@ -383,10 +385,10 @@ These rules govern the platform-admin recipe metadata editor:
 
 ### Shop Kitchen Rules (`/words/shop/kitchen`)
 
-These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature-specs/2026-08-23-kitchen-page.md`), revised same day once a real kitchen illustration (originally `public/kitchen/full-kitchen.png`, since renamed -- see Rule 14 below) replaced the original card-grid design with clickable regions over the artwork, and child-driven shelf drag-and-drop was replaced with admin-preassigned food types — see the spec's Revision section for the full before/after:
+These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature-specs/2026-08-23-kitchen-page.md`), revised same day once a real kitchen illustration (originally `public/kitchen/full-kitchen.png`, since renamed -- see Rule 15 below) replaced the original card-grid design with clickable regions over the artwork, and child-driven shelf drag-and-drop was replaced with admin-preassigned food types — see the spec's Revision section for the full before/after:
 
 1. `/words/shop/kitchen` is accessible to child profiles and platform admin only, matching `/words/shop`'s role gate exactly. Parent profiles are route-blocked. Nav-labeled "Shop Kitchen," positioned immediately after "Recipe Shop."
-2. The page renders one of three kitchen-scene illustrations (Rule 14) as its scene background with five clickable regions over it: the fridge (ingredients), the recipe book (recipe selection), the top half of the stove/oven appliance (stovetop), its bottom half (oven), and the shelf unit. There is no card-grid fallback layout.
+2. The page renders one of three kitchen-scene illustrations (Rule 15) as its scene background with five clickable regions over it: the fridge (ingredients), the recipe book (recipe selection), the top half of the stove/oven appliance (stovetop), its bottom half (oven), and the shelf unit. There is no card-grid fallback layout.
 3. Shop Kitchen introduces no unlock mechanism of its own — a recipe is cookable the moment it is both (a) flagged with a `cook_method` by Shop Admin and (b) already present in `shop_recipe_unlocks` for the caller via the existing `/words/shop` unlock flow. Shop Kitchen never writes to `shop_recipe_unlocks`.
 4. Ingredient spend is persisted through the `cook_shop_recipe` RPC only. UI code must not manually write `shop_cooked_dishes` or `shop_ingredient_consumptions` rows. Both `cook_shop_recipe` and `organize_shop_kitchen_countertop` are `security definer` — deliberately unlike `unlock_shop_recipe`/`reward_random_ingredients` (`security invoker`) — because their two tables carry no RLS write policy at all; a `security invoker` function cannot write through a table with no applicable write policy, since RLS still applies inside an invoker function body. This means RLS is not a backstop for either function's own validation — a bug in their role/ownership/availability checks is not caught by any policy underneath them.
 5. `cook_shop_recipe` is atomic: it verifies role, recipe unlock state, `cook_method` is set, and **countertop capacity** (fewer than `SHOP_KITCHEN_COUNTERTOP_CAPACITY` = 6 of the caller's dishes currently have `location = 'countertop'`), computes required quantities from `base_ingredients` plus any submitted special-ingredient keys (see Rule 12), checks the caller's available (rewards + purchases − consumptions) balance for every required key, and — only if every check passes — inserts one `shop_cooked_dishes` row (`location = 'countertop'`) plus one `shop_ingredient_consumptions` row per spent unit (base and special together), all in one transaction. A full countertop or a shortfall in any single ingredient rejects the whole cook; nothing is partially spent.
@@ -398,9 +400,9 @@ These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature
 11. Shop Kitchen has no parent-facing view; parents cannot see a child's cooked dishes, ingredient spend, or kitchen activity, matching `/words/shop`'s existing parent-blocked posture.
 12. **Special-ingredient variants (2026-08-24 revision).** After selecting a recipe with at least one affordable special-ingredient slot (`resolveAvailableSpecialIngredients`), the child is offered a picker before cooking; any combination they select is passed to `cook_shop_recipe` as `p_special_ingredient_keys`. The RPC validates submitted keys against the recipe's own `special_ingredients` (dropping anything not in that list), requires and consumes them alongside the base ingredients regardless of whether the combination matches any `variant_icon_rules` entry, and records the raw `special_ingredient_keys` on the dish row. **Which icon a dish displays is resolved at read time, never stored**, via the pre-existing `resolveShopRecipeIconPath(recipe.variantIconRules, dish.specialIngredientKeys)` (already used by `ShopSection.tsx`'s recipe wall), falling back to the recipe's plain rule (`match: []`) when no rule matches — an unmatched combination still consumes ingredients and produces a dish that displays as plain. Because two dishes of the same recipe can now resolve to different icons, `buildCountertopTiles`/`buildShelfTilesByFoodType` aggregate tiles by recipe **and** resolved icon, not recipe alone.
 13. **Named variants (2026-08-24, same-day follow-up).** `shop_recipes.variant_icon_rules` entries may carry an optional `titleI18n: { en, zh }` (Shop Admin, two text inputs per variant card) — no schema migration needed, since the column is jsonb. `resolveShopRecipeVariant(variantIconRules, activeSpecialIngredientKeys)` resolves the single matched rule used by *both* `resolveShopRecipeIconPath` and the new `resolveShopRecipeVariantTitle`, so a dish's icon and displayed name can never come from different rules. A rule with no title (the default) falls back to the recipe's own localized title, exactly as before this existed. `KitchenDishTile.title` carries the resolved name directly, so `buildCountertopTiles`/`buildShelfTilesByFoodType` require a `locale` parameter.
-12. Ingredient availability shown in the fridge reflects both `shop_ingredient_rewards` (quiz rewards) and `shop_ingredient_purchases` (roadmap item F, shipped 2026-08-23) — the two reward-like ledgers are concatenated client-side (`[...rewards, ...purchases]`) before being passed into `buildShopIngredientAvailabilityMap(additions, consumptions)`.
-14. **Shelf-stock scene illustration (2026-08-25).** `full-kitchen.png` was renamed to `kitchen_empty.png` and two sibling illustrations were added, all three sharing the exact same artwork layout (so the existing `SceneHotspot` percentage boxes apply unchanged to whichever one renders): `kitchen_half_stocked.png` and `kitchen_stocked.png`. Which one displays is derived purely from how many dishes currently have `location = 'shelf'` (`countShelfDishes`), via `resolveKitchenSceneImagePath` in `kitchen.types.ts` — 0 shelved dishes renders `kitchen_empty.png`, 1–5 renders `kitchen_half_stocked.png`, more than 5 renders `kitchen_stocked.png`. The countertop is not part of this count; only organized (shelved) dishes affect which scene shows.
-15. **Click-to-enlarge dish tiles (2026-08-25).** Every dish tile rendered by the shared `DishTileGrid` component — both the countertop's "Fresh from the Kitchen" row and every shelf tab inside `ShelfModal` — is a click target (`aria-label` via `dishEnlargeAriaTemplate`) that opens `DishEnlargeModal`, a portal-rendered lightbox (`z-[110]`, above the shelf modal's own `z-[100]`) showing the same icon at a larger size plus the dish's title and count. Purely presentational — enlarging never mutates `dishes`, ingredient availability, or any other kitchen state, and closing it (backdrop click or the Close button) never affects the underlying modal it was opened from.
+14. Ingredient availability shown in the fridge reflects both `shop_ingredient_rewards` (quiz rewards) and `shop_ingredient_purchases` (roadmap item F, shipped 2026-08-23) — the two reward-like ledgers are concatenated client-side (`[...rewards, ...purchases]`) before being passed into `buildShopIngredientAvailabilityMap(additions, consumptions)`.
+15. **Shelf-stock scene illustration (2026-08-25).** `full-kitchen.png` was renamed to `kitchen_empty.png` and two sibling illustrations were added, all three sharing the exact same artwork layout (so the existing `SceneHotspot` percentage boxes apply unchanged to whichever one renders): `kitchen_half_stocked.png` and `kitchen_stocked.png`. Which one displays is derived purely from how many dishes currently have `location = 'shelf'` (`countShelfDishes`), via `resolveKitchenSceneImagePath` in `kitchen.types.ts` — 0 shelved dishes renders `kitchen_empty.png`, 1–5 renders `kitchen_half_stocked.png`, more than 5 renders `kitchen_stocked.png`. The countertop is not part of this count; only organized (shelved) dishes affect which scene shows.
+16. **Click-to-enlarge dish tiles (2026-08-25).** Every dish tile rendered by the shared `DishTileGrid` component — both the countertop's "Fresh from the Kitchen" row and every shelf tab inside `ShelfModal` — is a click target (`aria-label` via `dishEnlargeAriaTemplate`) that opens `DishEnlargeModal`, a portal-rendered lightbox (`z-[110]`, above the shelf modal's own `z-[100]`) showing the same icon at a larger size plus the dish's title and count. Purely presentational — enlarging never mutates `dishes`, ingredient availability, or any other kitchen state, and closing it (backdrop click or the Close button) never affects the underlying modal it was opened from.
 
 ### Debug Tools Rules (`/words/debug`)
 
@@ -468,8 +470,8 @@ These rules govern the two-layer authentication and session protection system:
 ### Role-Based Routing Rules (`/words/*`)
 
 Route access enforced by client-side RouteGuard using session role:
-- **Child**: Can access review (flashcard and fill-test), all characters, quiz results. Cannot access add or admin (content curation restricted to parents).
-- **Parent**: Can access add, add-paragraph, admin, all, results, review, flashcard. Cannot access fill-test (learning mode restricted to children).
+- **Child**: Can access review (flashcard and fill-test), all characters, quiz results, Recipe Shop, and Shop Kitchen. Cannot access add, add-paragraph, or admin (content curation restricted to parents).
+- **Parent**: Can access add, add-paragraph, admin, all, results, review, flashcard. Cannot access fill-test (learning mode restricted to children), Recipe Shop, or Shop Kitchen (the reward layer is child-facing only).
 - **Platform admin**: Full access (isPlatformAdmin flag bypasses role restrictions).
 
 Blocked routes are hidden from navigation (not shown as disabled). Direct URL access to blocked routes redirects to `/words/review` with no error message.
@@ -490,6 +492,7 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | `/words/prompts` | ❌ | ✅ | ✅ |
 | `/words/results` | ✅ | ✅ | ✅ |
 | `/words/shop` | ✅ | ❌ | ✅ |
+| `/words/shop/kitchen` | ✅ | ❌ | ✅ |
 | `/words/shop-admin` | ❌ | ❌ | ✅ |
 | `/words/review` | ✅ | ✅ | ✅ |
 | `/words/review/flashcard` | ✅ | ✅ | ✅ |
@@ -650,7 +653,7 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `updated_at` | timestamptz | Server timestamp |
 | **RLS Guarantee** | | Family-scoped read; insert/update/delete are parent (or platform admin) only — **not** family-scoped-for-children the way `vocab_phrases`' UPDATE policy is, since a paragraph is never graded or written to by a child |
 
-**`paragraph_test_modes` table** — named, reusable blank-selection templates per paragraph (Tier 1, Item I, Phase 2). Purely a saved selection of which of a paragraph's already-eligible spans should become fill-test blanks — creates nothing runnable on its own (no `review_test_sessions` row). Actually wiring a test mode into the quiz runtime is a future Phase 3, not yet built
+**`paragraph_test_modes` table** — named, reusable blank-selection templates per paragraph (Tier 1, Item I, Phase 2). A saved selection of which of a paragraph's already-eligible spans should become fill-test blanks — saving one creates nothing runnable on its own (no `review_test_sessions` row). Packaging a test mode into a runnable session (Phase 3, shipped 2026-08-19) is a separate step — see `review_test_sessions.paragraph_test_mode_id` below and Fill-Test Review Rules 28+
 
 | Field | Type | Notes |
 |---|---|---|
@@ -676,6 +679,7 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `created_at` | timestamptz | Server timestamp |
 | `completed_at` | timestamptz (nullable) | Null while active; set when child completes the session |
 | `completed_by_user_id` | uuid (nullable) | Foreign key → `users.id`; child who completed the session |
+| `paragraph_test_mode_id` | uuid (nullable) | Foreign key → `paragraph_test_modes.id`; cascades on delete. Added 2026-08-19 (Item I, Phase 3). Session-level discriminator: non-null means this ENTIRE session is a paragraph quiz, packaged from that test mode's `span_ids` at packaging time (a snapshot — editing the test mode afterward never retroactively changes an already-packaged session). Never set alongside a session that also has ordinary character/phrase targets |
 | **Active-name uniqueness** | | Partial unique index on `(family_id, name)` where `completed_at is null` |
 
 **`review_test_session_targets` table** — packaged Content Admin targets for a review session
@@ -685,11 +689,13 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `id` | uuid | Primary key |
 | `session_id` | text | Foreign key → `review_test_sessions.id`; cascades on delete |
 | `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
-| `character` | text | Packaged Hanzi character, or a phrase target's own `phrase` text (display data) |
-| `pronunciation` | text | Packaged pronunciation, or a phrase target's own `pinyin` (display data) |
-| `vocab_phrase_id` | uuid (nullable) | Foreign key → `vocab_phrases.id`; cascades on delete. Discriminator: non-null means this target grades against `vocab_phrases`, not `words` — `character`/`pronunciation` stay populated either way so existing display/grouping code needs no branch |
+| `character` | text | Packaged Hanzi character, or a phrase/paragraph-blank target's own display text (display data) |
+| `pronunciation` | text | Packaged pronunciation, or a phrase/paragraph-blank target's own resolved pinyin (display data; empty-string fallback if unresolved) |
+| `vocab_phrase_id` | uuid (nullable) | Foreign key → `vocab_phrases.id`; cascades on delete. Discriminator: non-null means this target grades against `vocab_phrases`, not `words` — `character`/`pronunciation` stay populated either way so existing display/grouping code needs no branch. Does double duty for a paragraph-quiz blank too: null means the blank resolved to a `words` row, non-null means a `vocab_phrases` row |
+| `paragraph_id` | uuid (nullable) | Foreign key → `paragraphs.id`; cascades on delete. Added 2026-08-19 (Item I, Phase 3). Non-null identifies which paragraph this target's blank belongs to |
+| `paragraph_span_id` | text (nullable) | Added 2026-08-19 (Item I, Phase 3). The specific `ParagraphSpan.id` (blank) within `paragraph_id` this target represents |
 | `display_order` | integer | Save-time target order after familiarity/character/pronunciation sorting |
-| **Unique constraint** | | `(session_id, character, pronunciation)` |
+| **Unique constraint** | | `(session_id, character, pronunciation, paragraph_span_id)` — extended 2026-08-19 to include `paragraph_span_id` so the same word/phrase can appear as two different blanks in one paragraph without colliding (Postgres treats `NULL` as distinct-from-`NULL`, so every pre-existing non-paragraph target is unaffected) |
 
 **`review_session_progress` table** — paused/in-progress test-session state, per user
 
@@ -779,7 +785,8 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `user_id` | uuid | Foreign key → `users.id` |
 | `family_id` | uuid | Foreign key → `families.id` |
 | `recipe_id` | uuid (nullable) | Foreign key → `shop_recipes.id`; null if source row is later deleted |
-| `action_type` | text | Currently `unlock_recipe` |
+| `action_type` | text | `'unlock_recipe'` or `'purchase_ingredient'` (added 2026-08-23, roadmap item F) |
+| `ingredient_key` | text (nullable) | Foreign key → `shop_ingredient_prices.ingredient_key`; added 2026-08-23. Set for `purchase_ingredient` rows, null for `unlock_recipe` rows |
 | `coins_spent` | integer | Non-negative spend amount |
 | `beginning_balance` | integer | Balance before the shop action |
 | `ending_balance` | integer | Balance after the shop action |
@@ -839,7 +846,20 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `consumed_at` | timestamptz | Server timestamp |
 | **RLS Guarantee** | | Family-scoped read; insert only via `cook_shop_recipe` RPC; no update/delete for non-admins |
 
-A child's spendable count of ingredient X is `count(shop_ingredient_rewards where key = X) − count(shop_ingredient_consumptions where key = X)`, computed client-side (`buildShopIngredientAvailabilityMap` in `src/lib/shop.ts`) — there is no running-balance column.
+**`shop_ingredient_purchases` table** — append-only per-user ledger of ingredient units bought with coins (2026-08-23, roadmap item F, feature spec `2026-03-30-shop-ingredient-shopping.md`). One row per purchased unit, matching `shop_ingredient_rewards`/`shop_ingredient_consumptions`'s existing "one row per unit" convention — feeds `buildShopIngredientAvailabilityMap` as a second reward-like input alongside `shop_ingredient_rewards` (see Recipe Shop Rule 21, Shop Kitchen Rule 14).
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` | uuid | Foreign key → `users.id`; cascades on delete |
+| `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
+| `recipe_id` | uuid | Foreign key → `shop_recipes.id`; cascades on delete — the recipe context the ingredient was bought for |
+| `ingredient_key` | text | Foreign key → `shop_ingredient_prices.ingredient_key` |
+| `coins_spent` | integer | Non-negative; unit price at purchase time |
+| `purchased_at` | timestamptz | Server timestamp |
+| **RLS Guarantee** | | Family-scoped read; insert only via `purchase_shop_ingredient` RPC (caller-scoped insert policy); no update/delete for non-admins |
+
+A child's spendable count of ingredient X is `count(shop_ingredient_rewards where key = X) + count(shop_ingredient_purchases where key = X) − count(shop_ingredient_consumptions where key = X)`, computed client-side (`buildShopIngredientAvailabilityMap` in `src/lib/shop.ts`) — there is no running-balance column.
 
 **`shop_cooked_dishes` table** — one row per dish a child has cooked (Shop Kitchen, 2026-08-23; revised same day once child-driven shelf sorting was replaced with admin-preassigned food types, and again 2026-08-24 to record special-ingredient variants — see the feature spec's Revision sections); not aggregated server-side, the client aggregates by `recipe_id` **and resolved variant icon** for tile counts
 
@@ -993,6 +1013,7 @@ These are the technical behaviors the system upholds. They are the factual basis
    - If no phrases are marked for testing, a placeholder message ("No phrases included for testing") is displayed in place of the phrase-example blocks.
    - Character and meaning remain visible regardless of phrase-test inclusion; phrases are the only conditional element.
    - Parent component (`FlashcardReviewSection`) controls visibility toggle via `showPinyin` state (boolean); when `false`, pinyin spans are removed from DOM entirely (not hidden via CSS).
+5a. **Quiz session completion and coin award are atomic.** The `record_quiz_session` RPC is the only write path that may insert a `quiz_sessions` row; in the same transaction it upserts a zero-balance `wallets` row if none exists yet and increments `wallets.total_coins` by the session's earned coins — a completed session can never exist without its coins being credited, or vice versa.
 6. **Shop recipe unlocks are atomic.** The `unlock_shop_recipe` RPC is the only write path that may create unlock rows, decrement wallets, and append shop spend history.
 6a. **Coin redemptions are atomic.** The `redeem_coins` RPC is the only write path that may decrement wallets and insert redemption rows. It validates coin amount, note, and signature; locks the wallet row with `FOR UPDATE`; checks available balance; decrements; and inserts the record in one transaction boundary. Direct client inserts to `coin_redemptions` are blocked by RLS.
 6b. **Shop Kitchen cooking is atomic and all-or-nothing.** The `cook_shop_recipe` RPC is the only write path that may insert `shop_cooked_dishes`/`shop_ingredient_consumptions` rows; it checks countertop capacity and every required ingredient's availability before writing anything, so a shortfall never partially spends ingredients or half-inserts a dish. `organize_shop_kitchen_countertop` is the only write path that may update `shop_cooked_dishes.location`, and it only ever bulk-moves the caller's own `'countertop'` rows to `'shelf'` — there is no per-dish variant. Direct client writes to either table are blocked by RLS.

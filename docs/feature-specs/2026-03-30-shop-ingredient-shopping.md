@@ -1,14 +1,24 @@
 # Feature Spec — 2026-03-30 — Ingredient Shopping for Kids (Row F)
 
-## Status: Shipped (buy-only slice) — 2026-08-23
+## Status: Shipped and complete — 2026-08-23, closed 2026-08-25
 
 **Update 2026-08-23:** Shipped a narrower slice than this draft describes, on explicit request: the
 Buy action (§1 below) shipped as **bulk purchase** (a quantity stepper — default 1, +/− or type
 directly, buys N units in one tap and spends `cost × quantity` coins) rather than the one-unit-per-tap
 design this draft originally specified — see the superseded note under §1. The ingredient inventory
 page (§3), the recipe-ready visual indicator (§2), and coin-history label resolution beyond a minimal
-fix (§4) were **not** built in this pass — they remain open follow-ups, not abandoned. Everything
-below is preserved as the original design reference; inline notes mark what changed.
+fix (§4) were **not** built in this pass.
+
+**Closed 2026-08-25 — this draft is now outdated; only the shipped buy-only slice is needed.** Now
+that Shop Kitchen (`docs/feature-specs/2026-08-23-kitchen-page.md`, roadmap item J) is live, the
+purpose behind §2 (recipe-ready badge) and §3 (inventory page) — giving the child a way to see what
+they've collected and what's ready to use — is already served by Shop Kitchen's own fridge (every
+available ingredient, pooling purchases with quiz rewards) and its per-recipe cook-readiness display.
+A second, parallel inventory/readiness UI scoped only to *purchased* ingredients would duplicate that
+without adding anything a child actually needs. Per explicit product direction: §2, §3, and purchasing
+special (non-base) ingredients are **dropped, not deferred** — see the updated Acceptance Criteria
+below. Everything else in this document is preserved as the original design reference; inline notes
+mark what changed.
 
 Data model note: `shop_ingredient_purchases` shipped as **one row per unit purchased** (matching
 `shop_ingredient_rewards`/`shop_ingredient_consumptions`'s existing ledger convention), not the
@@ -84,6 +94,11 @@ progress bar against yet.
 
 ### 2. Recipe-ready visual indicator
 
+**Dropped 2026-08-25:** not building. Shop Kitchen's own per-recipe cook-readiness display
+(`computeShopCookReadiness`) already tells the child which unlocked recipes they can cook right now,
+covering the need this section was meant to address. A second, purchase-scoped "ready" badge here
+would be redundant.
+
 - A recipe is considered **ready** when, for every ingredient in `base_ingredients` that has an `ingredientKey`, the child has purchased at least the required quantity for that recipe.
 - Ingredients without an `ingredientKey` are excluded from the readiness calculation (they are informational only).
 - When ready, show a visual badge or glow on:
@@ -93,6 +108,10 @@ progress bar against yet.
 - Readiness is computed client-side from the loaded inventory data; no separate RPC is needed.
 
 ### 3. Ingredient inventory page — `/words/shop/inventory`
+
+**Dropped 2026-08-25:** not building. Shop Kitchen's fridge already shows every ingredient the child
+has available (purchases pooled with quiz rewards, minus consumption) — a separate purchase-only
+inventory page would show a strict subset of the same information the child can already see.
 
 - Child-only route, access-controlled by the existing `RouteGuard` pattern.
 - Add to `RouteGuard` / `permissions.ts` alongside the existing `/words/shop` entry.
@@ -365,7 +384,12 @@ Both English and Chinese strings required. Chinese strings follow the existing `
 - [x] Purchases appear in the coin history modal with ingredient name and recipe name.
 - [x] All coin mutations go through the `purchase_shop_ingredient` RPC — no direct client writes.
 
-**Not built in this pass (open follow-ups):**
+**Dropped 2026-08-25 — not building, superseded by Shop Kitchen (item J):**
+
+These were originally tracked as open follow-ups. Now that Shop Kitchen's fridge and per-recipe
+cook-readiness display already cover "what have I collected" and "what's ready," a second dedicated
+inventory/readiness UI scoped only to purchases would be redundant. Left unchecked as a record of what
+this spec originally proposed, not as pending work:
 
 - [ ] The owned count and progress-toward-required-quantity indicator update immediately in the open modal after a purchase.
 - [ ] A recipe tile and modal show a "ready" indicator when all priced base ingredients are collected in required quantities.
@@ -374,3 +398,4 @@ Both English and Chinese strings required. Chinese strings follow the existing `
 - [ ] The inventory page can be filtered by unlocked recipe.
 - [ ] The inventory page sorts by most-recent purchase by default.
 - [ ] The inventory empty state renders when no purchases exist.
+- [ ] Purchasing special (non-base) ingredients.
