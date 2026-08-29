@@ -194,6 +194,13 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
     iconPath: null,
     aliases: ["red bean filling"],
   },
+  {
+    key: "zongzi-string",
+    label: { en: "Zongzi String", zh: "绑粽子的线" },
+    defaultCostCoins: 2,
+    iconPath: "/ingredients/zongzi-string.png",
+    aliases: ["zongzi string", "kitchen twine", "twine"],
+  },
 ];
 
 const SHOP_INGREDIENT_CATALOG_BY_KEY = new Map(
