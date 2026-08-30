@@ -201,6 +201,13 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
     iconPath: "/ingredients/zongzi-string.png",
     aliases: ["zongzi string", "kitchen twine", "twine"],
   },
+  {
+    key: "pork-filling",
+    label: { en: "Fresh ground pork", zh: "新鲜猪肉馅" },
+    defaultCostCoins: 7,
+    iconPath: "/ingredients/ground-pork.png",
+    aliases: ["fresh ground pork", "ground pork", "pork filling"],
+  },
 ];
 
 const SHOP_INGREDIENT_CATALOG_BY_KEY = new Map(
