@@ -11,11 +11,19 @@ Shop Kitchen feature: a bilingual name, an icon, and the link between the two
 on that specific recipe. The food must already exist — this skill never
 creates a new food.
 
-**This skill only ever touches the dev Supabase project** (`.env.local`).
-It never accepts a `--prod` flag anywhere and never writes to
-`.env.production.local`. Promoting a dev content change to production still
-goes through this repo's existing `export:shop-content-sql` /
-`db:push:prod` flow, same as any other shop content edit.
+**This skill only ever *connects to* the dev Supabase project**
+(`.env.local`). Neither script accepts a `--prod` flag or reads
+`.env.production.local`. On a successful apply, it additionally writes a
+scoped SQL migration file (insert the one ingredient, update the one
+recipe's one slot — nothing else) to `supabase/migrations/`, ready for this
+repo's normal `db:push:prod` flow. Writing that file to disk is not the
+same as running it — actually promoting it to production is always a
+separate, explicit step the user asks for (see "Promoting to production"
+below). Do **not** use this repo's `export:shop-content-sql` script for
+this — it snapshots *every* row in `shop_ingredient_prices` and
+`shop_recipes`, which silently overwrites production with dev's full
+content anywhere the two have diverged, not just the one ingredient being
+added.
 
 ## Hard rules
 
@@ -196,7 +204,10 @@ Only after explicit approval:
 
 2. Re-run the same `apply-ingredient.mjs` command from Phase 6 with `--apply`
    appended. This upserts `shop_ingredient_prices` and updates the one
-   matched recipe row.
+   matched recipe row in **dev**. On success it also writes a scoped
+   migration file to `supabase/migrations/<timestamp>_shop_add_<key>_ingredient.sql`
+   containing the same two statements — this file is written to disk only,
+   never run, so it doesn't violate "this script never touches production."
 
 3. Update the checked-in fallback catalog so it doesn't drift from the DB:
    add or update the entry for this key in `SHOP_INGREDIENT_CATALOG` in
@@ -204,8 +215,39 @@ Only after explicit approval:
    keeping the array's existing key ordering convention.
 
 4. Report back a short summary: PNG added, catalog entry added/updated in
-   `shopIngredients.ts`, and which recipe's which slot now includes this
-   ingredient.
+   `shopIngredients.ts`, which recipe's which slot now includes this
+   ingredient in dev, and the path of the generated migration file.
+
+## Promoting to production
+
+The migration file from Phase 7 step 2 is deliberately **not** applied
+automatically — promoting to production is a separate, explicit action the
+user asks for.
+
+Before suggesting `npm run db:push:prod`, be aware of what that migration
+file actually contains: it appends to whatever dev's ingredient array for
+that slot was *at the time apply-ingredient.mjs ran*, not to production's
+current array. If dev and prod have diverged on that specific recipe
+(check with the user, or run `supabase migration list` to compare — a
+Bash-tool attempt to query prod's tables directly may get blocked by the
+auto-mode safety classifier, which is expected for direct production
+database access; if so, either get the user's explicit permission for that
+one read, ask the user to paste prod's current state for that recipe, or
+proceed on the user's explicit instruction to skip the check), running it
+will **overwrite** production's ingredient list for that recipe with dev's
+list plus the new ingredient — not merge with whatever production actually
+has. The generated file's header comment says explicitly whether this was
+verified (`--prod-verified` was passed) or not.
+
+Once the user has reviewed the file and wants to proceed:
+
+```bash
+npm run db:push:prod:dry
+npm run db:push:prod
+```
+
+Commit the migration file to git either before or after — it's a normal
+checked-in file like any other migration in this repo.
 
 ## Notes on the scripts
 
