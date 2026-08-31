@@ -27,7 +27,7 @@ import {
   type ShopIngredientCatalogEntry,
 } from "./shopIngredients";
 
-export const SHOP_WALL_SIZE = 9;
+export const SHOP_WALL_SIZE = 11;
 export const SHOP_INGREDIENT_QUANTITY_MIN = 1;
 export const SHOP_INGREDIENT_QUANTITY_MAX = 99;
 const SHOP_PLAIN_ICON_TOKEN = "plain";

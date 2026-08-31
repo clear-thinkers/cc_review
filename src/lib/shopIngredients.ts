@@ -83,6 +83,13 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
     aliases: ["sugar sprinkles", "sprinkles"],
   },
   {
+    key: "syrup",
+    label: { en: "Syrup", zh: "糖浆" },
+    defaultCostCoins: 3,
+    iconPath: "/ingredients/syrup.png",
+    aliases: ["syrup"],
+  },
+  {
     key: "black-tea",
     label: { en: "Black Tea", zh: "红茶" },
     defaultCostCoins: 3,
@@ -128,8 +135,15 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
     key: "broth",
     label: { en: "Broth", zh: "高汤" },
     defaultCostCoins: 3,
-    iconPath: null,
+    iconPath: "/ingredients/broth.png",
     aliases: ["broth"],
+  },
+  {
+    key: "tomato",
+    label: { en: "Tomato", zh: "番茄" },
+    defaultCostCoins: 5,
+    iconPath: "/ingredients/tomato.png",
+    aliases: ["tomato", "tomatoes"],
   },
   {
     key: "cooked-rice",
