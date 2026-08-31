@@ -23,7 +23,9 @@
     "db:push": "supabase db push --include-all",
     "db:status": "supabase migration list",
     "db:push:prod": "node scripts/db-push-prod.mjs",
-    "db:push:prod:dry": "node scripts/db-push-prod.mjs --dry-run"
+    "db:push:prod:dry": "node scripts/db-push-prod.mjs --dry-run",
+    "db:sync-dev-from-prod": "node scripts/db-sync-dev-from-prod.mjs",
+    "db:sync-dev-from-prod:dry": "node scripts/db-sync-dev-from-prod.mjs --dry-run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",

@@ -1,6 +1,6 @@
 # Build Conventions — HanziQuest (`cc_review`)
 
-_Last updated: 2026-08-25 (§4.5/§8 corrected — no CI enforcement of EN/ZH parity actually exists; §10 gained `verify:rls`'s npm command and an updated migration-deployment status)_
+_Last updated: 2026-08-30 (§10 gained `scripts/db-sync-dev-from-prod.mjs`)_
 
 For authority hierarchy, hard stops, doc update policy, and fix log policy — see `AI_CONTRACT.md`.
 For where to file new documents — see `0_ARCHITECTURE.md §6`.
@@ -408,3 +408,37 @@ Last confirmed count was 79/81 (the two failures above), from before the Section
 **No flags.** Signs into one shared test family login twice (simulating two devices, each gets its own Auth `session_id`), switches each session to a different profile via a direct `auth_session_profiles` upsert (bypassing the `pin-verify` HTTP route — same precedent as `verify-rls.ts`'s `createTestAuthClient`, since the behavior under test is the hook + table, not PIN-checking logic), and asserts device A's claims are unaffected by device B's later switch across a forced `refreshSession()`.
 
 Creates and cleans up its own ephemeral test family/users/auth account — safe to rerun. Runs against dev only, no `--prod` flag. If the hook isn't registered on the target project (Dashboard → Authentication → Hooks — not applied by `supabase db push`), every assertion fails with claims missing `family_id`/`user_id`, which is itself the useful signal.
+
+---
+
+### `scripts/db-sync-dev-from-prod.mjs`
+
+**npm commands:** `npm run db:sync-dev-from-prod:dry` (dump only, no write) / `npm run db:sync-dev-from-prod` (full replace)
+
+**Purpose:** Replaces dev's `public` and `auth` schema data with a fresh copy of prod's. Dev and prod are separate Supabase projects (`wsmwmlohwymmstevibjn` / `vujptztcqjcxtkqcgkgp`) — there is no "point dev at prod" shortcut, so this does a real dump/truncate/restore.
+
+**When to use:** Dev's data has drifted too far from real-world shape to usefully test against (e.g. before reproducing a prod-only bug, or after dev data has been mangled by ad hoc testing).
+
+**Requires locally installed PostgreSQL 17 client tools** (`pg_dump`/`psql`) — this script shells out to them directly rather than going through `supabase db dump`/`db query`, because the Supabase CLI's own `db dump` requires Docker (to run a version-matched `pg_dump` in a container), which this repo does not otherwise depend on. Install via `winget install PostgreSQL.PostgreSQL.17` (client tools only — server/pgAdmin/stackbuilder can be skipped) if `pg_dump --version` fails; falls back to `C:\Program Files\PostgreSQL\17\bin` if not on `PATH`.
+
+**Env vars required**
+| Var | Where |
+|---|---|
+| `SUPABASE_PROD_DB_URL` | `.env.production.local` — same var `db-push-prod.mjs` uses |
+| `SUPABASE_DEV_DB_URL` | `.env.local` — not present by default; get it from Supabase Dashboard → dev project → Settings → Database → Connection string → URI (Session Pooler). **Copy verbatim** — dev's pooler host/region will not match prod's, so hand-copying prod's URL and swapping only the project ref fails with `tenant/user ... not found`. |
+
+**Flags**
+| Flag | Description |
+|---|---|
+| `--dry-run` | Dumps prod data to a temp file and stops — dev is never touched. Inspect the dump before running for real. |
+
+**Key behaviours**
+- Read-only against prod: only ever runs `pg_dump` there. All writes (`TRUNCATE`, restore) target `SUPABASE_DEV_DB_URL` only. `pg_dump` takes only an `ACCESS SHARE` lock, so it does not block concurrent prod reads/writes — safe to run with live prod traffic.
+- Scoped to `public` + `auth` schemas. `storage` is excluded — copying `storage.objects` metadata without the underlying files would just leave broken references.
+- Excludes `auth.instances`, `auth.schema_migrations`, `auth.audit_log_entries` even from a full replace — the first two are per-project GoTrue identity, not "prod data"; overwriting `auth.instances` in particular risks breaking dev's Auth service since it's keyed to dev's own project instance.
+- Truncates with plain `TRUNCATE ... CASCADE`, not `RESTART IDENTITY` — `RESTART IDENTITY` requires owning the table's sequences, and `auth.*` sequences are owned by `supabase_auth_admin`, not the pooler's `postgres` role. Sequence positions are instead fixed up by the `setval()` calls `pg_dump` already embeds in the data-only dump (needs only `UPDATE` on the sequence, not ownership).
+- Truncate runs as one `DO $$ ... $$` block — if it errors partway through, the whole block rolls back atomically, so a failed run leaves dev's existing data intact rather than half-wiped.
+- Requires typing `REPLACE DEV` at a prompt before touching anything; `--dry-run` skips the prompt entirely since it never writes.
+- **After running:** any browser already logged into dev holds a session/refresh token pointing at the now-replaced `auth.sessions`/`auth.refresh_tokens` rows. Clear that browser's site storage for the dev origin and log in fresh — otherwise the app can hang (stuck "loading") trying to silently refresh a session that no longer resolves.
+
+**Fix log:** none — introduced ad hoc, not from a fix-log incident.
