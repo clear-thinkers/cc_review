@@ -27,9 +27,9 @@ describe("flashcard.ruby", () => {
     expect(tokens.length).toBeGreaterThanOrEqual(10);
   });
 
-  it("returns available tokens when counts still mismatch", () => {
+  it("returns only real tokens when counts still mismatch, never fabricating extras", () => {
     const tokens = getAlignedPinyinTokens("新知", "xīn");
-    expect(tokens.length).toBe(2);
+    expect(tokens.length).toBe(1);
     expect(tokens[0]?.startsWith("x")).toBe(true);
   });
 });

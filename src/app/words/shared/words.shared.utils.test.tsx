@@ -115,6 +115,24 @@ describe("pinyin rendering regression guard", () => {
     expect(className).toContain("flex-wrap");
     expect(className).toContain("max-w-full");
   });
+
+  it("never duplicates the last syllable to pad a short pinyin string (regression)", () => {
+    // 4 Hanzi ("拔河比赛") but only 3 real syllables in the stored pinyin --
+    // must never pad the deficit by repeating "sài", which previously rendered
+    // as "sài sài sài".
+    const rtTexts = collectRtTexts(
+      renderSentenceWithPinyin("拔河比赛", "bá hé bǐ sài sài")
+    );
+    expect(rtTexts.filter((text) => text === "sài")).toHaveLength(0);
+    expect(rtTexts).toEqual(["", "", "", ""]);
+  });
+
+  it("never guesses a nonsense syllable split for compact pinyin that doesn't cleanly segment (regression)", () => {
+    // A malformed compact pinyin string for a 4-character phrase must never
+    // fall back to single-letter/garbage tokens (e.g. "s", "h", "o", "3u").
+    const rtTexts = collectRtTexts(renderPhraseWithPinyin("昂首挺胸", "sho3u"));
+    expect(rtTexts.every((text) => text === "" || /^[a-z]*[aeiouv][a-z]*[1-5]?$/.test(text))).toBe(true);
+  });
 });
 
 describe("applyAdminMeaningEdit", () => {

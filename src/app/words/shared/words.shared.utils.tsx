@@ -459,7 +459,7 @@ function isLikelyPinyinSyllable(syllable: string): boolean {
   }
 
   const normalized = normalizePinyinBase(trimmed).toLowerCase();
-  return /[a-zv]+[1-5]?$/.test(normalized);
+  return /^[a-z]*[aeiouv][a-z]*[1-5]?$/.test(normalized);
 }
 
 function segmentCompactPinyin(compactPinyin: string, syllableCount: number): string[] | null {
@@ -539,20 +539,16 @@ export function alignPinyinPartsForCount(partCount: number, pinyin: string): str
     return tokens;
   }
 
-  if (tokens.length > partCount) {
-    return tokens.slice(0, partCount);
-  }
-
   const compact = normalized.replace(/\s+/g, "");
   const segmented = segmentCompactPinyin(compact, partCount);
   if (segmented && segmented.length === partCount) {
     return segmented;
   }
 
-  if (tokens.length > 0 && tokens.length < partCount) {
-    return [...tokens, ...Array(partCount - tokens.length).fill(tokens[tokens.length - 1] ?? "")];
-  }
-
+  // No exact-count alignment found. Per 0_BUILD_CONVENTIONS.md §7, a token-count
+  // mismatch renders Hanzi without pinyin -- never truncate/pad with a guess,
+  // since that fabricates plausible-looking wrong pinyin (e.g. duplicating the
+  // last syllable, or accepting nonsense fragments as syllables).
   return Array(partCount).fill("");
 }
 
