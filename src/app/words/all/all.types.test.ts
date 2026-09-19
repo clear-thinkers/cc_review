@@ -10,12 +10,13 @@ describe("All Words Types", () => {
     const sortKeys: AllWordsSortKey[] = [
       "hanzi",
       "createdAt",
+      "lastReviewedAt",
       "nextReviewAt",
       "reviewCount",
       "testCount",
       "familiarity",
     ];
-    expect(sortKeys).toHaveLength(6);
+    expect(sortKeys).toHaveLength(7);
   });
 
   it("should allow creating SortedAllWord objects", () => {
@@ -32,6 +33,7 @@ describe("All Words Types", () => {
       reviewCount: 5,
       testCount: 2,
       familiarity: 0.75,
+      lastReviewedAt: null,
     };
     expect(word.word.hanzi).toBe("你");
     expect(word.reviewCount).toBe(5);

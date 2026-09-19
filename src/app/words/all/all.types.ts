@@ -8,6 +8,7 @@ import type { Word } from "@/lib/types";
 export type AllWordsSortKey =
   | "hanzi"
   | "createdAt"
+  | "lastReviewedAt"
   | "nextReviewAt"
   | "reviewCount"
   | "testCount"
@@ -18,6 +19,7 @@ export type SortedAllWord = {
   reviewCount: number;
   testCount: number;
   familiarity: number;
+  lastReviewedAt: number | null;
 };
 
 export type AllWordsSummary = {

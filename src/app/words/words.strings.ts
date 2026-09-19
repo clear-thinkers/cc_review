@@ -1193,6 +1193,7 @@ export const wordsStrings = {
         headers: {
           character: "Character",
           dateAdded: "Date Added",
+          lastReviewDate: "Last Review Date",
           reviewCount: "Review Count",
           testCount: "Test Count",
           familiarity: "Familiarity",
@@ -2520,6 +2521,7 @@ export const wordsStrings = {
         headers: {
           character: "汉字",
           dateAdded: "添加日期",
+          lastReviewDate: "上次复习日期",
           reviewCount: "复习次数",
           testCount: "测试次数",
           familiarity: "熟悉度",

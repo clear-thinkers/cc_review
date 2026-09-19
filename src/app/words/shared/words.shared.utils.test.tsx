@@ -9,6 +9,8 @@ import {
   cloneFillTest,
   filterPausedSessionsForViewer,
   findFlashcardPhrasePinyin,
+  getLastReviewedAt,
+  getMemorizationProbability,
   getPausedParagraphQuizRemainingBlankCount,
   getPausedSessionRemainingCount,
   isVocabPhraseFillTestReady,
@@ -1203,6 +1205,99 @@ describe("filterPausedSessionsForViewer", () => {
   });
 });
 
+describe("getMemorizationProbability", () => {
+  const NOW = 1_700_000_000_000;
+
+  function makeWord(overrides: Partial<Word> = {}): Word {
+    return {
+      id: "word-1",
+      hanzi: "错",
+      createdAt: 1,
+      repetitions: 5,
+      intervalDays: 1,
+      ease: 10,
+      nextReviewAt: NOW,
+      reviewCount: 5,
+      testCount: 0,
+      ...overrides,
+    };
+  }
+
+  it("returns the flat 25% placeholder for a genuinely never-reviewed word", () => {
+    const word = makeWord({ repetitions: 0, reviewCount: 0, nextReviewAt: 0 });
+
+    expect(getMemorizationProbability(word, NOW)).toBe(0.25);
+  });
+
+  it("returns the flat 25% placeholder for a word reset back to baseline", () => {
+    // Reset zeroes reviewCount and nextReviewAt together (AllWordsSection.tsx), so this
+    // mirrors real reset state rather than an unreachable partial combination.
+    const word = makeWord({ repetitions: 0, reviewCount: 0, nextReviewAt: 0, ease: 21 });
+
+    expect(getMemorizationProbability(word, NOW)).toBe(0.25);
+  });
+
+  it("does NOT return the flat placeholder for a word whose most recent grade was 'again'", () => {
+    // calculateNextState resets repetitions to 0 on an "again" grade even though the word has
+    // real scheduling state (reviewCount > 0, nextReviewAt set) -- repetitions alone can't be used
+    // to detect "never reviewed" (see scheduler.ts's calculateNextState and the getReviewCount doc).
+    const justFailed = makeWord({ repetitions: 0, reviewCount: 3, nextReviewAt: NOW });
+
+    const probability = getMemorizationProbability(justFailed, NOW);
+
+    expect(probability).not.toBe(0.25);
+    // Graded very recently relative to its 1-day interval, so retrievability should read high.
+    expect(probability).toBeGreaterThan(0.9);
+  });
+});
+
+describe("getLastReviewedAt", () => {
+  const NOW = 1_700_000_000_000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  function makeWord(overrides: Partial<Word> = {}): Word {
+    return {
+      id: "word-1",
+      hanzi: "错",
+      createdAt: 1,
+      repetitions: 5,
+      intervalDays: 1,
+      ease: 10,
+      nextReviewAt: NOW,
+      reviewCount: 5,
+      testCount: 0,
+      ...overrides,
+    };
+  }
+
+  it("returns null for a genuinely never-reviewed word", () => {
+    const word = makeWord({ repetitions: 0, reviewCount: 0, nextReviewAt: 0 });
+
+    expect(getLastReviewedAt(word)).toBeNull();
+  });
+
+  it("returns null for a word reset back to baseline", () => {
+    const word = makeWord({ repetitions: 0, reviewCount: 0, nextReviewAt: 0, intervalDays: 0, ease: 21 });
+
+    expect(getLastReviewedAt(word)).toBeNull();
+  });
+
+  it("back-derives the exact last-graded timestamp from nextReviewAt minus intervalDays", () => {
+    const gradedAt = NOW - 3 * DAY_MS;
+    const word = makeWord({ nextReviewAt: gradedAt + 5 * DAY_MS, intervalDays: 5 });
+
+    expect(getLastReviewedAt(word)).toBe(gradedAt);
+  });
+
+  it("still resolves a last-reviewed timestamp for a word whose most recent grade was 'again'", () => {
+    // calculateNextState resets repetitions to 0 on an "again" grade even though reviewCount and
+    // nextReviewAt still reflect a real, recent review (see scheduler.ts).
+    const word = makeWord({ repetitions: 0, reviewCount: 3, nextReviewAt: NOW, intervalDays: 1 });
+
+    expect(getLastReviewedAt(word)).toBe(NOW - DAY_MS);
+  });
+});
+
 describe("selectLowestFamiliarityWords", () => {
   const NOW = 1_700_000_000_000;
 
@@ -1215,7 +1310,7 @@ describe("selectLowestFamiliarityWords", () => {
       intervalDays: 1,
       ease: 1,
       nextReviewAt: NOW,
-      reviewCount: 0,
+      reviewCount: 5,
       testCount: 0,
       ...overrides,
     };

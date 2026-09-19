@@ -25,6 +25,7 @@ import type {
 import type { NavItem } from "./shell.types";
 import type { WordsLocaleStrings } from "./words.shared.types";
 import { canAccessRoute } from "@/lib/permissions";
+import { computeRetrievability } from "@/lib/scheduler";
 import type { UserRole } from "@/lib/auth.types";
 import type { FlashcardContentEntry } from "@/lib/supabase-service";
 import type { ReviewSessionProgress } from "@/lib/reviewSessionProgress.types";
@@ -238,34 +239,38 @@ export function getTestCount(word: Word): number {
   return word.testCount ?? 0;
 }
 
+/**
+ * Back-derives the exact timestamp of a word's most recent grading event from its current
+ * scheduling state: calculateNextState always sets nextReviewAt = (grading time) + intervalDays,
+ * so subtracting intervalDays back out recovers that grading time losslessly, date and time. Same
+ * technique scheduler.ts's computeRetrievabilityAtReview uses for the same reason. Returns null when
+ * the word has never actually been reviewed (see getReviewCount's doc for why reviewCount, not
+ * repetitions, is the correct "ever reviewed" signal) or was reset back to baseline.
+ */
+export function getLastReviewedAt(word: Word): number | null {
+  if (!getReviewCount(word) || !word.nextReviewAt) {
+    return null;
+  }
+
+  const intervalDays = Math.max(1, word.intervalDays || 1);
+  return word.nextReviewAt - intervalDays * DAY_MS;
+}
+
 export function getMemorizationProbability(word: Word, now = Date.now()): number {
-  if (!word.repetitions || !word.nextReviewAt) {
+  const lastReviewAt = getLastReviewedAt(word);
+  if (lastReviewAt === null) {
     return 0.25;
   }
 
   const stabilityDays = Math.max(0.5, word.ease || 0.5);
-  const intervalDays = Math.max(1, word.intervalDays || 1);
 
-  // Calculate retention probability as of EOD today (current moment).
-  // This metric refreshes continuously and shows natural memory decay over time using the forgetting curve.
-  //
-  // Example progression for a word graded "hard" on day 0:
-  //   - Day 0 (just reviewed): 99% retention
-  //   - Day 1: ~95% retention (some decay from stability)
-  //   - Day 2 (scheduled review): ~91% retention (scheduler's target)
-  //   - Day 3 (if missed): ~87% retention
-  //   - Day 5 (if really missed): ~78% retention
-  //
-  // This provides meaningful variation users can act on:
-  // - Words approaching their due date show declining retention
-  // - Words past due show significant drops (visual urgency)
-  // - Just-reviewed words start high, giving positive feedback
-  //
-  // The metric is recalculated on each page load/refresh, so variation emerges naturally
-  // as time passes and memory decays according to the forgetting curve.
-  const lastReviewAt = word.nextReviewAt - intervalDays * DAY_MS;
+  // Retention probability as of the current moment, via the scheduler's own power-law forgetting
+  // curve (computeRetrievability) — kept as the single source of truth for this formula rather than
+  // duplicated here, so the displayed familiarity always matches what the scheduler itself targets.
+  // The metric is recalculated on each page load/refresh, so variation emerges naturally as time
+  // passes and memory decays.
   const elapsedDays = Math.max(0, (now - lastReviewAt) / DAY_MS);
-  const probability = Math.exp(-elapsedDays / stabilityDays);
+  const probability = computeRetrievability(elapsedDays, stabilityDays);
 
   // Clamp to [0.01, 0.99] to keep values in a reasonable display range
   return Math.min(0.99, Math.max(0.01, probability));

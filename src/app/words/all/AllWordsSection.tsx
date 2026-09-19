@@ -1371,6 +1371,16 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                   <button
                     type="button"
                     className="inline-flex items-center gap-1"
+                    onClick={() => toggleAllWordsSort("lastReviewedAt")}
+                  >
+                    {str.all.table.headers.lastReviewDate}{" "}
+                    <span aria-hidden>{getSortIndicator("lastReviewedAt")}</span>
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1"
                     onClick={() => toggleAllWordsSort("nextReviewAt")}
                   >
                     {str.all.table.headers.nextReviewDate}{" "}
@@ -1411,7 +1421,7 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
               </tr>
             </thead>
             <tbody>
-              {paginatedWords.map(({ word, reviewCount, testCount, familiarity }) => (
+              {paginatedWords.map(({ word, reviewCount, testCount, familiarity, lastReviewedAt }) => (
                 <tr key={word.id} className="border-b align-top">
                   {!isChild && (
                     <td className="px-3 py-2">
@@ -1425,6 +1435,9 @@ export default function AllWordsSection({ vm }: { vm: WordsWorkspaceVM }) {
                   )}
                   <td className="px-3 py-2">{word.hanzi}</td>
                   <td className="px-3 py-2">{formatDateTime(word.createdAt)}</td>
+                  <td className="px-3 py-2">
+                    {lastReviewedAt !== null ? formatDateTime(lastReviewedAt) : <span className="text-gray-400">—</span>}
+                  </td>
                   <td className="px-3 py-2">{formatDateTime(word.nextReviewAt)}</td>
                   <td className="px-3 py-2">{reviewCount}</td>
                   <td className="px-3 py-2">{testCount}</td>

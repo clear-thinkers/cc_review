@@ -101,11 +101,12 @@ These rules govern the inventory view at `/words/all`:
    - `Total Characters`: `words.length`
    - `Times Reviewed`: sum of `reviewCount` with fallback to `repetitions`
    - `Times Tested`: sum of `testCount`
-   - `Avg Familiarity`: mean of `getMemorizationProbability(word)`
+   - `Avg Familiarity`: mean of `getMemorizationProbability(word)` over reviewed words only (`repetitions > 0`) — never-reviewed words are excluded from both the sum and the count, not folded in at a flat placeholder value
 3. Table sorting is client-side and single-column.
 4. Re-clicking the active sort column toggles direction (`asc`/`desc`).
 5. Sort tie-breaker is `createdAt` ascending for deterministic ordering.
 6. `Next Review Date` shows `Now` when `nextReviewAt` is empty or `0`.
+6a. **Last Review Date** column (sortable, positioned between `Date Added` and `Next Review Date`) shows the timestamp of the word's most recent grading event, back-derived by `getLastReviewedAt()` from `nextReviewAt − intervalDays` (the same technique `getMemorizationProbability` and `scheduler.ts`'s `computeRetrievabilityAtReview` use) — never a stored column. Renders an em dash for a word that's never actually been reviewed or was `Reset` back to baseline; uses `reviewCount`, not `repetitions` alone, to detect that case (an `again` grade resets `repetitions` to 0 without erasing review history — see `getReviewCount`'s doc comment).
 7. `Reset` keeps the same `id` and `hanzi`, resets scheduling counters to baseline values, and updates `createdAt`.
 8. `Delete` removes the row from Supabase immediately (no confirmation dialog). **Updated 2026-08-19**: blocked outright (inline error, no delete attempted) if the character's hanzi is referenced by any active (`completed_at is null`) packaged session's target — character, phrase, mixed, or paragraph-quiz alike — via `getActiveSessionTargetKeys()`. This composes with the existing conditional `window.confirm` for flashcard-content loss (rule stays the same when the character isn't blocked). An unrelated character with no active-session involvement is completely unaffected.
 9. `Reset` and `Delete` action buttons are hidden for child profiles. Only parents and platform admins can reset or delete words.
@@ -584,7 +585,7 @@ The application stores all persistent data in Supabase Postgres. Row Level Secur
 | `meaning` | text (nullable) | Optional translation |
 | `repetitions` | integer | SRS repetition count (default: 0) |
 | `interval_days` | numeric | Current SRS interval in days (default: 0) |
-| `ease` | numeric | Scheduler stability/ease value (default: 21) |
+| `ease` | numeric | Scheduler stability/ease value in days (default: 21); interpreted by `scheduler.ts`'s power-law retrievability model, `R = 1 / (1 + elapsedDays / (4 × ease))` — see `docs/feature-specs/2026-09-19-scheduler-retrievability-power-law.md` |
 | `next_review_at` | bigint | Unix timestamp in milliseconds; 0 means immediately due |
 | `review_count` | integer | Count of flashcard review attempts (default: 0) |
 | `test_count` | integer | Count of fill-test attempts (default: 0) |

@@ -84,6 +84,7 @@ import {
   getErrorMessage,
   getFamiliarity,
   getGradeLabels,
+  getLastReviewedAt,
   getMemorizationProbability,
   getNavItems,
   getReviewCount,
@@ -626,10 +627,13 @@ const gradeLabels = getGradeLabels(str);
     const totalWords = words.length;
     const totalReviewed = words.reduce((sum, word) => sum + getReviewCount(word), 0);
     const totalTested = words.reduce((sum, word) => sum + getTestCount(word), 0);
+    // Never-reviewed words carry no real retention signal (getMemorizationProbability returns a flat
+    // placeholder for them) — excluded here so they don't dilute the average for words actually in rotation.
+    const reviewedWords = words.filter((word) => (word.repetitions ?? 0) > 0);
     const averageFamiliarity =
-      totalWords === 0
+      reviewedWords.length === 0
         ? 0
-        : words.reduce((sum, word) => sum + getMemorizationProbability(word), 0) / totalWords;
+        : reviewedWords.reduce((sum, word) => sum + getMemorizationProbability(word), 0) / reviewedWords.length;
 
     return {
       totalWords,
@@ -647,6 +651,7 @@ const gradeLabels = getGradeLabels(str);
       reviewCount: getReviewCount(word),
       testCount: getTestCount(word),
       familiarity: getMemorizationProbability(word, now),
+      lastReviewedAt: getLastReviewedAt(word),
     }));
 
     prepared.sort((left, right) => {
@@ -657,6 +662,9 @@ const gradeLabels = getGradeLabels(str);
           break;
         case "createdAt":
           comparison = left.word.createdAt - right.word.createdAt;
+          break;
+        case "lastReviewedAt":
+          comparison = (left.lastReviewedAt ?? 0) - (right.lastReviewedAt ?? 0);
           break;
         case "nextReviewAt":
           comparison = (left.word.nextReviewAt || 0) - (right.word.nextReviewAt || 0);
