@@ -2,7 +2,7 @@
 -- Drops the multiple-of-100 constraint and the matching check in redeem_coins.
 
 alter table coin_redemptions
-  drop constraint coin_redemptions_coins_multiple_of_100;
+  drop constraint if exists coin_redemptions_coins_multiple_of_100;
 
 create or replace function redeem_coins(
   p_coins integer,
