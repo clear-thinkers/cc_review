@@ -146,6 +146,27 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
     aliases: ["tomato", "tomatoes"],
   },
   {
+    key: "pork-liver",
+    label: { en: "Pork Liver", zh: "猪肝" },
+    defaultCostCoins: 5,
+    iconPath: "/ingredients/pork-liver.png",
+    aliases: ["pork liver", "liver"],
+  },
+  {
+    key: "soy-sauce",
+    label: { en: "Soy Sauce", zh: "酱油" },
+    defaultCostCoins: 2,
+    iconPath: "/ingredients/soy-sauce.png",
+    aliases: ["soy sauce"],
+  },
+  {
+    key: "vinegar",
+    label: { en: "Vinegar", zh: "醋" },
+    defaultCostCoins: 2,
+    iconPath: "/ingredients/vinegar.png",
+    aliases: ["vinegar"],
+  },
+  {
     key: "cooked-rice",
     label: { en: "Cooked Rice", zh: "米饭" },
     defaultCostCoins: 2,
