@@ -888,8 +888,8 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
     const errors: { coins?: string; note?: string; signature?: string } = {};
     const coinsNum = parseInt(cashOutCoins, 10);
 
-    if (!cashOutCoins || isNaN(coinsNum) || coinsNum <= 0 || coinsNum % 100 !== 0) {
-      errors.coins = str.cashOut.errorNotMultiple;
+    if (!cashOutCoins || isNaN(coinsNum) || coinsNum <= 0) {
+      errors.coins = str.cashOut.errorInvalidAmount;
     } else if (coinsNum > breakdown.available) {
       errors.coins = str.cashOut.errorExceedsBalance;
     }
@@ -1141,7 +1141,7 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
                 <p className="mt-1 text-sm text-gray-600">{str.cashOut.sectionDescription}</p>
               </div>
 
-              {breakdown.available < 100 ? (
+              {breakdown.available < 1 ? (
                 <p className="text-sm text-gray-500">{str.cashOut.disabledNotEnoughCoins}</p>
               ) : (
                 <div className="space-y-3">
@@ -1152,15 +1152,15 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
                     <input
                       id="cashout-coins"
                       type="number"
-                      min={100}
-                      step={100}
+                      min={1}
+                      step={1}
                       max={breakdown.available}
                       value={cashOutCoins}
                       onChange={(e) => setCashOutCoins(e.target.value)}
                       placeholder={str.cashOut.coinsPlaceholder}
                       className="mt-1 w-full max-w-[200px] rounded-md border border-[#d2b15b] bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-300"
                     />
-                    {!isNaN(cashOutCoinsNum) && cashOutCoinsNum > 0 && cashOutCoinsNum % 100 === 0 && cashOutCoinsNum <= breakdown.available ? (
+                    {!isNaN(cashOutCoinsNum) && cashOutCoinsNum > 0 && cashOutCoinsNum <= breakdown.available ? (
                       <p className="mt-1 text-xs text-green-700">
                         = ${(cashOutCoinsNum / 100).toFixed(2)}
                       </p>

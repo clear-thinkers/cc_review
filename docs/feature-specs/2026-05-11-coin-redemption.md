@@ -17,7 +17,7 @@ Kids earn coins through quiz sessions but can only spend them on virtual shop re
 ## Scope
 
 - New "Cash Out" UI section on `/words/shop` (child-accessible, platform-admin-accessible; parent-blocked per existing route rules)
-- Child inputs a coin amount (must be a positive multiple of 100), writes a free-text note, and provides a typed signature (their name)
+- Child inputs a coin amount (any positive whole number), writes a free-text note, and provides a typed signature (their name)
 - Confirmed redemptions are recorded in a new `coin_redemptions` table
 - A new `redeem_coins` Supabase RPC handles all wallet mutations atomically (decrements `wallets.total_coins`, inserts redemption record)
 - Usable coin balance shown in the shop updates to reflect the deduction
@@ -43,9 +43,9 @@ Kids earn coins through quiz sessions but can only spend them on virtual shop re
 - Fixed rate: **100 coins = $1.00**
 - Input is the coin amount (integer), not the dollar amount
 - Dollar value is derived: `dollar_value = coins_redeemed / 100`
-- Minimum redemption: 100 coins ($1.00); the Cash Out UI is disabled when usable balance < 100
+- Minimum redemption: 1 coin ($0.01); the Cash Out UI is disabled when usable balance < 1
 - Maximum redemption: the child's full usable balance; no other per-redemption or per-day cap
-- Coin amount must be a positive multiple of 100; non-multiples are rejected with an inline error
+- Coin amount must be a positive whole number; anything else is rejected with an inline error
 - Coin amount must not exceed the child's current usable balance; over-limit input is rejected
 
 ### Confirmation dialog
@@ -109,7 +109,7 @@ The shop page displays a **four-part coin breakdown** replacing or augmenting an
 | `id` | uuid | Primary key |
 | `user_id` | uuid | FK → `users.id` |
 | `family_id` | uuid | FK → `families.id` (denormalized for RLS) |
-| `coins_redeemed` | integer | Must be a positive multiple of 100 |
+| `coins_redeemed` | integer | Must be a positive integer |
 | `dollar_value` | numeric(10,2) | Derived at write time: `coins_redeemed / 100` |
 | `note` | text | Child-supplied reason; 1–200 characters |
 | `child_signature` | text | Child's typed name/signature |
@@ -125,7 +125,7 @@ The shop page displays a **four-part coin breakdown** replacing or augmenting an
 
 **Atomic behavior (single transaction boundary):**
 1. Ensure wallet row exists for `(user_id, family_id)`; create if absent
-2. Read current `total_coins`; reject if `p_coins` is not a positive multiple of 100 or exceeds current balance
+2. Read current `total_coins`; reject if `p_coins` is not a positive integer or exceeds current balance
 3. Compute `dollar_value = p_coins / 100.0`
 4. Decrement `wallets.total_coins` by `p_coins`
 5. Insert row into `coin_redemptions` with `beginning_balance` (pre-deduction) and `ending_balance` (post-deduction)
@@ -133,7 +133,7 @@ The shop page displays a **four-part coin breakdown** replacing or augmenting an
 
 **Rejection codes (returned to service layer):**
 - `insufficient_coins` — balance < requested amount
-- `invalid_amount` — not a positive multiple of 100
+- `invalid_amount` — not a positive integer
 - `invalid_note` — empty or over 200 characters
 - `invalid_signature` — empty
 
@@ -150,7 +150,7 @@ The shop page displays a **four-part coin breakdown** replacing or augmenting an
 | Signature is blank | Rejected with inline error before RPC call |
 | Amount = 0 | Rejected client-side and by RPC |
 | Child has never earned any coins (balance = 0) | Cash Out UI section is shown but disabled; balance breakdown shows all zeros |
-| Balance is positive but below 100 | Cash Out UI section is shown but disabled; breakdown still renders normally |
+| Balance is zero | Cash Out UI section is shown but disabled; breakdown still renders normally |
 
 ---
 
@@ -180,7 +180,7 @@ The shop page displays a **four-part coin breakdown** replacing or augmenting an
 
 ## Acceptance criteria
 
-- [ ] Child on `/words/shop` can initiate a redemption for a valid multiple-of-100 coin amount
+- [ ] Child on `/words/shop` can initiate a redemption for any valid whole coin amount
 - [ ] Confirmation dialog shows coins, dollar value, note, and signature before committing
 - [ ] Committed redemption decrements `wallets.total_coins` via `redeem_coins` RPC
 - [ ] `coin_redemptions` row is inserted with correct fields, including `beginning_balance` and `ending_balance`
@@ -189,7 +189,7 @@ The shop page displays a **four-part coin breakdown** replacing or augmenting an
 - [ ] Invalid inputs (non-multiples, over-balance, empty note/signature) are rejected with bilingual errors
 - [ ] Shop page displays four-part breakdown: Total Earned, Spent on Recipes, Redeemed, Available — all sourced from correct tables
 - [ ] `Total Earned − Spent on Recipes − Redeemed = Available` invariant holds
-- [ ] Cash Out UI is disabled when usable balance < 100
+- [ ] Cash Out UI is disabled when usable balance < 1
 - [ ] All UI copy is bilingual (English + Simplified Chinese) sourced from `words.strings.ts`
 - [ ] `verify-rls.ts` confirms new table is family-scoped and insert-only for non-admins
 
@@ -199,7 +199,7 @@ The shop page displays a **four-part coin breakdown** replacing or augmenting an
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Minimum balance threshold | 100 coins — the feature is available as long as usable balance ≥ 100; no higher threshold |
+| 1 | Minimum balance threshold | 1 coin — available as long as usable balance ≥ 1 (changed from 100 by 20260929000000 migration) |
 | 2 | Per-redemption or daily cap | None — maximum is the full usable balance |
 | 3 | Parent visibility of redemption history | Out of scope — parents cannot view child redemption history |
 | 4 | Balance breakdown display on shop page | Yes — show Total Earned / Spent on Recipes / Redeemed / Available |
