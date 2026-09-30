@@ -17,6 +17,8 @@ export type ShopVariantIconRule = {
   iconPath: string;
   /** Optional display name for this exact variant (e.g. "黑糖奶茶"), shown instead of the recipe's own title when this rule is the one matched. Absent/blank means fall back to the recipe's title, same as before this field existed. */
   titleI18n?: ShopLocalizedValue<string>;
+  /** Base-ingredient keys NOT required when this exact variant is cooked (e.g. a savory variant that skips this recipe's usual egg). Absent/empty means no exception -- every one of the recipe's base_ingredients is still required, same as before this field existed. Only takes effect when this rule is the one matched (see resolveShopRecipeVariant's subset-match-prefer-most-specific algorithm) -- it is never a blanket waiver on the recipe itself. */
+  waivedBaseIngredientKeys?: string[];
 };
 
 /** Which appliance a recipe is cooked on. `null` means not cookable (Shop Kitchen). */

@@ -793,7 +793,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       return;
     }
 
-    const readiness = computeShopCookReadiness(selectedRecipe, availabilityByKey);
+    const readiness = computeShopCookReadiness(selectedRecipe, availabilityByKey, selectedSpecialIngredientKeys);
     if (!readiness.isReady) {
       const names = readiness.missingIngredientKeys
         .map((key) => resolveShopIngredientLabel(ingredientRecordsByKey.get(key), locale, key))

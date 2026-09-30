@@ -27,7 +27,7 @@ import {
   type ShopIngredientCatalogEntry,
 } from "./shopIngredients";
 
-export const SHOP_WALL_SIZE = 11;
+export const SHOP_WALL_SIZE = 12;
 export const SHOP_INGREDIENT_QUANTITY_MIN = 1;
 export const SHOP_INGREDIENT_QUANTITY_MAX = 99;
 const SHOP_PLAIN_ICON_TOKEN = "plain";
@@ -64,10 +64,13 @@ export function normalizeShopVariantIconRules(raw: unknown): ShopVariantIconRule
       return result;
     }
 
+    const waivedBaseIngredientKeys = normalizeShopVariantMatchKeys(source?.waivedBaseIngredientKeys);
+
     result.push({
       iconPath,
       match: normalizeShopVariantMatchKeys(source?.match),
       titleI18n: normalizeShopLocalizedStringValue(source?.titleI18n, ""),
+      ...(waivedBaseIngredientKeys.length > 0 ? { waivedBaseIngredientKeys } : {}),
     });
     return result;
   }, []);
@@ -687,16 +690,36 @@ export function buildShopIngredientAvailabilityMap(
  * computeRecipeReadiness, which is about purchase completion, not spendable
  * availability. Ingredient rows with no resolvable ingredientKey are skipped,
  * same skip-invalid-silently precedent as reward_random_ingredients.
+ *
+ * `activeSpecialIngredientKeys` (default none) lets a caller who already
+ * knows which special ingredients the player intends to cook with ask
+ * "ready for THIS specific variant" rather than "ready for the recipe's
+ * plain form" -- if those keys resolve to a variant_icon_rules entry with
+ * `waivedBaseIngredientKeys` (see resolveShopRecipeVariant, the same
+ * subset-match-prefer-most-specific algorithm read-time icon/title
+ * resolution uses), those base ingredients are excluded from the
+ * requirement here, matching cook_shop_recipe's own server-side enforcement
+ * so the UI can never show "ready" for a cook the RPC would then reject, or
+ * vice versa. `recipe.variantIconRules` is optional (defaults to none) so
+ * existing callers that only have `baseIngredients` in hand keep working
+ * unchanged -- no active keys can ever match zero rules, so the readiness
+ * they get is identical to before this parameter existed.
  */
 export function computeShopCookReadiness(
-  recipe: Pick<ShopRecipe, "baseIngredients">,
-  availabilityByKey: ReadonlyMap<string, number>
+  recipe: Pick<ShopRecipe, "baseIngredients"> & Partial<Pick<ShopRecipe, "variantIconRules">>,
+  availabilityByKey: ReadonlyMap<string, number>,
+  activeSpecialIngredientKeys: string[] = []
 ): ShopCookReadiness {
+  const matchedRule = resolveShopRecipeVariant(recipe.variantIconRules ?? [], activeSpecialIngredientKeys);
+  const waivedKeys = new Set(
+    (matchedRule?.waivedBaseIngredientKeys ?? []).map((key) => canonicalizeShopIngredientKey(key))
+  );
+
   const requiredByKey = new Map<string, number>();
 
   for (const ingredient of recipe.baseIngredients) {
     const key = canonicalizeShopIngredientKey(ingredient.ingredientKey);
-    if (!key) continue;
+    if (!key || waivedKeys.has(key)) continue;
     requiredByKey.set(key, (requiredByKey.get(key) ?? 0) + ingredient.quantity);
   }
 

@@ -64,7 +64,8 @@ export function deleteShopRewardIconRule(
 export function createShopRewardIconRule(
   variantIconRules: ShopVariantIconRule[],
   iconPath: string,
-  matchInput: string
+  matchInput: string,
+  waivedBaseIngredientKeysInput = ""
 ): ShopVariantIconRule[] {
   const normalizedIconPath = normalizeShopRewardIconPath(iconPath);
   if (!normalizedIconPath.startsWith("/rewards/") || !normalizedIconPath.endsWith(".png")) {
@@ -80,11 +81,14 @@ export function createShopRewardIconRule(
     throw new Error("A reward icon rule with the same match already exists for this recipe.");
   }
 
+  const waivedBaseIngredientKeys = normalizeShopRewardMatchInput(waivedBaseIngredientKeysInput);
+
   return [
     ...variantIconRules,
     {
       match: normalizedMatch,
       iconPath: normalizedIconPath,
+      ...(waivedBaseIngredientKeys.length > 0 ? { waivedBaseIngredientKeys } : {}),
     },
   ];
 }

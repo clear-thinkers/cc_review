@@ -1,6 +1,6 @@
 ---
 name: add-food-variation
-description: Add a named special-ingredient variant to an existing Shop Kitchen food (recipe) - e.g. turning Zongzi cooked with pork into "肉粽 Pork Zongzi" with its own icon. Drafts the bilingual variant title and a reward-icon prompt, lets the user drop in the finished PNG, then previews and applies the variant_icon_rules change to dev. Use when the user asks to add a variation/variant of a food/recipe/dish in this game's shop/kitchen feature, distinct from adding a plain ingredient.
+description: Add a named special-ingredient variant to an existing Shop Kitchen food (recipe) - e.g. turning Zongzi cooked with pork into "肉粽 Pork Zongzi" with its own icon, optionally waiving one of the recipe's own base ingredients for that variant (e.g. a savory variant that skips the usual egg). Drafts the bilingual variant title and a reward-icon prompt, lets the user drop in the finished PNG, then previews and applies the variant_icon_rules change to dev. Use when the user asks to add a variation/variant of a food/recipe/dish in this game's shop/kitchen feature, distinct from adding a plain ingredient.
 tools: Bash, Read, Edit, Write, Glob, Grep, Skill
 ---
 
@@ -39,6 +39,20 @@ add-ingredient).
 
 ## Hard rules
 
+- A variant can optionally **waive** one or more of the recipe's own
+  `base_ingredients` — e.g. a savory variant that doesn't need the recipe's
+  usual egg. This is never inferred or assumed: only set it when the user
+  explicitly says a specific base ingredient shouldn't be required for this
+  variant. Every waived key must already be one of the recipe's actual
+  `base_ingredients` (`apply-variant.ts` validates and rejects otherwise) —
+  never invent an exception against an ingredient that isn't part of the
+  recipe. This is enforced both client-side
+  (`computeShopCookReadiness` in `src/lib/shop.ts`) and server-side
+  (`cook_shop_recipe`, see
+  `supabase/migrations/20260930185823_shop_kitchen_variant_waived_base_ingredients.sql`)
+  by matching this exact variant rule against the player's chosen special
+  ingredients — a waiver only ever applies when this rule is the one that
+  matched, never as a blanket change to the recipe itself.
 - The food must resolve to **exactly one** existing recipe. Zero or multiple
   matches is a stop, not a guess — list the candidates and ask.
 - Every ingredient key in the variant's match combination must already
@@ -113,6 +127,12 @@ Draft `titleI18n.en` / `titleI18n.zh` — the bilingual name this exact
 combination should display (e.g. "Pork Zongzi" / "肉粽"). Show it to the
 user for approval/edits before moving on.
 
+Ask whether this variant should waive any of the recipe's own
+`base_ingredients` (never infer this — only act on it if the user says so
+explicitly, e.g. "egg isn't needed for this one"). If so, note which
+key(s); Phase 5's preview will validate each one is actually a base
+ingredient of this recipe before writing anything.
+
 Read
 [references/reward-art-style.md](references/reward-art-style.md) — it
 documents the *actual* observed style of this game's existing reward icons
@@ -178,8 +198,9 @@ Also sanity-check dimensions (roughly square, ~1024x1024 is the observed
 norm — flag anything wildly off, but don't block on it).
 
 Show the user everything gathered so far: recipe, match ingredients,
-`titleI18n.en`/`.zh`, and the staged PNG. Offer to edit any field or
-regenerate the prompt before proceeding. Do not proceed until approved.
+`titleI18n.en`/`.zh`, any waived base ingredient(s), and the staged PNG.
+Offer to edit any field or regenerate the prompt before proceeding. Do not
+proceed until approved.
 
 Then run the preview (dry run, no `--apply`):
 
@@ -188,8 +209,14 @@ npx tsx .claude/skills/add-food-variation/scripts/apply-variant.ts \
   --recipe-slug <slug> \
   --match <comma-separated-ingredient-keys> \
   --title-en "<titleI18n.en>" --title-zh "<titleI18n.zh>" \
-  --icon-file <bare-filename>.png
+  --icon-file <bare-filename>.png \
+  --waive-base-ingredients <comma-separated-base-ingredient-keys>
 ```
+
+Omit `--waive-base-ingredients` entirely when this variant doesn't waive
+anything (the common case). When present, the script fails loudly if any
+key isn't actually one of the recipe's `base_ingredients` — this is a
+scoped, validated exception, never a free-form override.
 
 `--icon-file` takes a **bare filename** (e.g. `zongzi_pork.png`), not a path
 — the script prefixes `/rewards/` internally, for the same Git-Bash/MSYS
@@ -258,6 +285,14 @@ batch as this variant's migration — a variant rule referencing a
 special-ingredient key that doesn't exist in prod yet is a latent bug
 waiting for that ingredient's migration to land.
 
+If this variant used `--waive-base-ingredients`, production also needs
+`supabase/migrations/20260930185823_shop_kitchen_variant_waived_base_ingredients.sql`
+(the `cook_shop_recipe` function that actually enforces waivers) applied
+*before or in the same batch as* this variant's own migration — without it,
+prod would store the rule's `waivedBaseIngredientKeys` but the RPC would
+still require that base ingredient at cook time, silently diverging from
+what the client shows as "ready."
+
 ## Notes on the scripts
 
 - `find-recipe.mjs` is a plain Node script (no build step) — run with
@@ -267,7 +302,9 @@ waiting for that ingredient's migration to land.
   normalization, duplicate-check, icon-path validation — the same functions
   Shop Admin's own "add reward icon rule" UI action calls) rather than
   reimplementing that logic, so it can never drift from actual app
-  behavior — run with `npx tsx`.
+  behavior — run with `npx tsx`. It also validates `--waive-base-ingredients`
+  against the recipe's real `base_ingredients` (fetched fresh, same request
+  as everything else) before ever calling `createShopRewardIconRule`.
 - Both scripts load `.env.local` only. If it's missing, they fall back to
   `process.env` and warn — they never read `.env.production.local`.
 - `normalize-reward-icon.mjs` touches only the one image file it's pointed

@@ -243,6 +243,27 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
     iconPath: "/ingredients/ground-pork.png",
     aliases: ["fresh ground pork", "ground pork", "pork filling"],
   },
+  {
+    key: "scallions",
+    label: { en: "Scallions", zh: "葱" },
+    defaultCostCoins: 1,
+    iconPath: "/ingredients/scallions.png",
+    aliases: ["scallions", "scallion", "green onion", "green onions"],
+  },
+  {
+    key: "tofu",
+    label: { en: "Tofu", zh: "豆腐" },
+    defaultCostCoins: 3,
+    iconPath: "/ingredients/tofu.png",
+    aliases: ["tofu"],
+  },
+  {
+    key: "peppercorn",
+    label: { en: "Peppercorn", zh: "花椒" },
+    defaultCostCoins: 2,
+    iconPath: "/ingredients/peppercorn.png",
+    aliases: ["peppercorn", "sichuan peppercorn"],
+  },
 ];
 
 const SHOP_INGREDIENT_CATALOG_BY_KEY = new Map(

@@ -762,6 +762,42 @@ describe("computeShopCookReadiness", () => {
       missingIngredientKeys: [],
     });
   });
+
+  it("ignores variantIconRules and waivers when no active special ingredients are passed", () => {
+    const recipeWithVariants = {
+      ...recipe,
+      variantIconRules: [{ match: ["tofu"], iconPath: "/rewards/x.png", waivedBaseIngredientKeys: ["egg"] }],
+    };
+    const availability = new Map([["milk", 2], ["egg", 0]]);
+    expect(computeShopCookReadiness(recipeWithVariants, availability)).toEqual({
+      isReady: false,
+      missingIngredientKeys: ["egg"],
+    });
+  });
+
+  it("excludes a matched variant's waived base ingredients from the requirement", () => {
+    const recipeWithVariants = {
+      ...recipe,
+      variantIconRules: [{ match: ["tofu"], iconPath: "/rewards/x.png", waivedBaseIngredientKeys: ["egg"] }],
+    };
+    const availability = new Map([["milk", 2], ["egg", 0]]);
+    expect(computeShopCookReadiness(recipeWithVariants, availability, ["tofu"])).toEqual({
+      isReady: true,
+      missingIngredientKeys: [],
+    });
+  });
+
+  it("does not waive base ingredients for a special-ingredient selection that doesn't match any rule", () => {
+    const recipeWithVariants = {
+      ...recipe,
+      variantIconRules: [{ match: ["tofu"], iconPath: "/rewards/x.png", waivedBaseIngredientKeys: ["egg"] }],
+    };
+    const availability = new Map([["milk", 2], ["egg", 0]]);
+    expect(computeShopCookReadiness(recipeWithVariants, availability, ["shrimp"])).toEqual({
+      isReady: false,
+      missingIngredientKeys: ["egg"],
+    });
+  });
 });
 
 describe("normalizeCookShopRecipeResult", () => {

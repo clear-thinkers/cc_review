@@ -42,10 +42,21 @@
  * the "/rewards/" prefix is added internally, for the same Git-Bash/MSYS
  * leading-slash path-rewriting reason documented in the add-ingredient
  * skill's apply-ingredient.mjs.
+ *
+ * --waive-base-ingredients (optional) takes a comma-separated list of this
+ * recipe's OWN base_ingredients keys that are NOT required (or consumed)
+ * when this exact variant is cooked -- e.g. a savory variant that doesn't
+ * need the recipe's usual egg. Every key must already appear in the
+ * recipe's base_ingredients (checked below) -- this script never invents an
+ * exception against an ingredient that isn't actually part of the recipe.
+ * Enforced both client-side (computeShopCookReadiness) and server-side
+ * (cook_shop_recipe) by matching this exact rule against the player's
+ * chosen special ingredients -- see
+ * supabase/migrations/20260930185823_shop_kitchen_variant_waived_base_ingredients.sql.
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { canonicalizeShopIngredientKey } from "../../../../src/lib/shopIngredients";
 import { createShopRewardIconRule, normalizeShopRewardMatchInput } from "../../../../src/lib/shopRewardIconAudit";
@@ -109,6 +120,38 @@ function migrationTimestamp(date = new Date()): string {
   );
 }
 
+// migrationTimestamp() only has 1-second resolution, so two invocations of
+// an apply-*.ts/mjs script in the same wall-clock second produce the same
+// version prefix -- Supabase's schema_migrations table keys on that leading
+// numeric prefix alone (not the full filename), so two files with DIFFERENT
+// suffixes but the SAME timestamp still collide as a duplicate primary key
+// when pushed, failing the whole push partway through. This bit prod for
+// real once (a peppercorn-ingredient and a pork-filling-ingredient
+// migration, different filenames, same timestamp). An existsSync check on
+// the exact candidate filename would miss this entirely, since the suffix is
+// what's usually unique -- this has to check every existing file's
+// timestamp PREFIX, not the full path. Rather than relying on sub-second
+// precision (Supabase's migration versioning convention is
+// second-resolution, and departing from that risks other tooling
+// assumptions), just probe forward one second at a time until a truly
+// unused version prefix is found.
+function isMigrationVersionTaken(timestamp: string): boolean {
+  const dir = path.join("supabase", "migrations");
+  if (!existsSync(dir)) return false;
+  return readdirSync(dir).some((name) => name.startsWith(`${timestamp}_`));
+}
+
+function uniqueMigrationFilePath(suffix: string): string {
+  let date = new Date();
+  for (;;) {
+    const timestamp = migrationTimestamp(date);
+    if (!isMigrationVersionTaken(timestamp)) {
+      return path.join("supabase", "migrations", `${timestamp}_${suffix}`);
+    }
+    date = new Date(date.getTime() + 1000);
+  }
+}
+
 function writeProdMigrationFile({
   recipeSlug,
   matchSignature,
@@ -120,8 +163,9 @@ function writeProdMigrationFile({
   updateSql: string;
   prodStateVerified: boolean;
 }): string {
-  const fileName = `${migrationTimestamp()}_shop_add_${recipeSlug}_${matchSignature.replaceAll(/[^a-z0-9]+/gi, "_")}_variant.sql`;
-  const filePath = path.join("supabase", "migrations", fileName);
+  const filePath = uniqueMigrationFilePath(
+    `shop_add_${recipeSlug}_${matchSignature.replaceAll(/[^a-z0-9]+/gi, "_")}_variant.sql`
+  );
 
   const caveat = prodStateVerified
     ? `-- Verified against production's current variant_icon_rules for slug = '${recipeSlug}' before writing this file.`
@@ -169,6 +213,7 @@ async function main() {
   const titleEn = args["title-en"] as string | undefined;
   const titleZh = args["title-zh"] as string | undefined;
   const iconFile = args["icon-file"] as string | undefined;
+  const waiveBaseIngredientsRaw = args["waive-base-ingredients"] as string | undefined;
 
   const missing: string[] = [];
   if (!recipeSlug) missing.push("--recipe-slug");
@@ -205,7 +250,7 @@ async function main() {
 
   const { data: recipeRow, error: recipeError } = await supabase
     .from("shop_recipes")
-    .select("id,slug,special_ingredient_slots_i18n,variant_icon_rules")
+    .select("id,slug,base_ingredients,special_ingredient_slots_i18n,variant_icon_rules")
     .eq("slug", recipeSlug)
     .maybeSingle();
 
@@ -226,11 +271,43 @@ async function main() {
     );
   }
 
+  const waiveBaseIngredientKeys = waiveBaseIngredientsRaw
+    ? Array.from(
+        new Set(
+          waiveBaseIngredientsRaw
+            .split(",")
+            .map((key) => canonicalizeShopIngredientKey(key.trim()))
+            .filter(Boolean)
+        )
+      )
+    : [];
+  if (waiveBaseIngredientKeys.length > 0) {
+    const recipeBaseKeys = new Set(
+      ((recipeRow.base_ingredients ?? []) as Array<{ ingredientKey?: string }>).map((row) =>
+        canonicalizeShopIngredientKey(row.ingredientKey ?? "")
+      )
+    );
+    const notBaseIngredients = waiveBaseIngredientKeys.filter((key) => !recipeBaseKeys.has(key));
+    if (notBaseIngredients.length > 0) {
+      throw new Error(
+        `--waive-base-ingredients [${notBaseIngredients.join(", ")}] are not base ingredients of recipe ` +
+          `"${recipeSlug}" (its base_ingredients are: [${[...recipeBaseKeys].join(", ")}]). ` +
+          `This script never waives a key that isn't actually part of the recipe.`
+      );
+    }
+  }
+  const waiveBaseIngredientsSignature = waiveBaseIngredientKeys.slice().sort().join(",");
+
   const currentRules = (recipeRow.variant_icon_rules ?? []) as ShopVariantIconRule[];
 
   // createShopRewardIconRule throws if a rule with this exact match already
   // exists -- same duplicate check Shop Admin's own UI enforces.
-  const nextRulesWithoutTitle = createShopRewardIconRule(currentRules, `/rewards/${iconFile}`, matchSignature);
+  const nextRulesWithoutTitle = createShopRewardIconRule(
+    currentRules,
+    `/rewards/${iconFile}`,
+    matchSignature,
+    waiveBaseIngredientsSignature
+  );
   const nextRules: ShopVariantIconRule[] = nextRulesWithoutTitle.map((rule, index) =>
     index === nextRulesWithoutTitle.length - 1 ? { ...rule, titleI18n: { en: titleEn!, zh: titleZh! } } : rule
   );
@@ -241,7 +318,13 @@ set
   updated_at = now()
 where slug = ${escapeSqlLiteral(recipeSlug!)};`;
 
-  console.log(`-- Preview: shop_recipes.variant_icon_rules (slug = ${recipeSlug}, match = [${matchSignature}])`);
+  console.log(
+    `-- Preview: shop_recipes.variant_icon_rules (slug = ${recipeSlug}, match = [${matchSignature}]` +
+      (waiveBaseIngredientKeys.length > 0
+        ? `, waivedBaseIngredientKeys = [${waiveBaseIngredientsSignature}]`
+        : "") +
+      ")"
+  );
   console.log(updateSql);
 
   if (!args.apply) {
