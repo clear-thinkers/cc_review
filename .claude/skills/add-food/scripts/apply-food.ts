@@ -75,7 +75,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { canonicalizeShopIngredientKey, getShopIngredientCatalogEntry } from "../../../../src/lib/shopIngredients";
 import { createShopRewardIconRule } from "../../../../src/lib/shopRewardIconAudit";
@@ -183,6 +183,38 @@ function migrationTimestamp(date = new Date()): string {
   );
 }
 
+// migrationTimestamp() only has 1-second resolution, so two invocations of
+// an apply-*.ts/mjs script in the same wall-clock second produce the same
+// version prefix -- Supabase's schema_migrations table keys on that leading
+// numeric prefix alone (not the full filename), so two files with DIFFERENT
+// suffixes but the SAME timestamp still collide as a duplicate primary key
+// when pushed, failing the whole push partway through. This bit prod for
+// real once (a peppercorn-ingredient and a pork-filling-ingredient
+// migration, different filenames, same timestamp). An existsSync check on
+// the exact candidate filename would miss this entirely, since the suffix is
+// what's usually unique -- this has to check every existing file's
+// timestamp PREFIX, not the full path. Rather than relying on sub-second
+// precision (Supabase's migration versioning convention is
+// second-resolution, and departing from that risks other tooling
+// assumptions), just probe forward one second at a time until a truly
+// unused version prefix is found.
+function isMigrationVersionTaken(timestamp: string): boolean {
+  const dir = path.join("supabase", "migrations");
+  if (!existsSync(dir)) return false;
+  return readdirSync(dir).some((name) => name.startsWith(`${timestamp}_`));
+}
+
+function uniqueMigrationFilePath(suffix: string): string {
+  let date = new Date();
+  for (;;) {
+    const timestamp = migrationTimestamp(date);
+    if (!isMigrationVersionTaken(timestamp)) {
+      return path.join("supabase", "migrations", `${timestamp}_${suffix}`);
+    }
+    date = new Date(date.getTime() + 1000);
+  }
+}
+
 function writeProdMigrationFile({
   slug,
   ingredientUpsertSqls,
@@ -194,8 +226,7 @@ function writeProdMigrationFile({
   insertSql: string;
   prodStateVerified: boolean;
 }): string {
-  const fileName = `${migrationTimestamp()}_shop_add_${slug.replaceAll("-", "_")}_food.sql`;
-  const filePath = path.join("supabase", "migrations", fileName);
+  const filePath = uniqueMigrationFilePath(`shop_add_${slug.replaceAll("-", "_")}_food.sql`);
 
   const caveat = prodStateVerified
     ? `-- Verified production has no existing row for slug = '${slug}' before writing this file.`

@@ -1,6 +1,6 @@
 ---
 name: add-food
-description: Add a brand-new food (a new shop_recipes row) to Shop Kitchen - e.g. introducing Pancake as a food type that doesn't exist yet. Requires the plain reward icon (and any launch-day variant icon) to already be placed in public/rewards/ before this skill is invoked; it aborts rather than draft art itself. Drafts the bilingual title/intro, resolves base/special ingredients against the existing catalog, then previews and applies the new shop_recipes row to dev. Use when the user asks to add a new food/recipe/dish TYPE to this game's shop/kitchen feature, distinct from adding an ingredient or a variant to an existing food.
+description: Add a brand-new food (a new shop_recipes row) to Shop Kitchen - e.g. introducing Pancake as a food type that doesn't exist yet. Requires the plain reward icon (and any launch-day variant icon) to already be placed in public/rewards/ or public/rewards/_staging/ before this skill is invoked; it fixes format/transparency/placement of whatever the user placed, but never drafts or generates art itself, and aborts if no source image exists anywhere. Drafts the bilingual title/intro, resolves base/special ingredients against the existing catalog, then previews and applies the new shop_recipes row to dev. Use when the user asks to add a new food/recipe/dish TYPE to this game's shop/kitchen feature, distinct from adding an ingredient or a variant to an existing food.
 tools: Bash, Read, Edit, Write, Glob, Grep, Skill
 ---
 
@@ -30,13 +30,18 @@ shop-content skills).
 ## Hard rules
 
 - **The user places every reward icon this food needs on disk BEFORE this
-  skill is invoked at all.** This skill never drafts an art prompt and never
-  waits for one to be generated — that's deliberately different from
-  add-ingredient/add-food-variation. Phase 1 checks for the plain icon
-  (`public/rewards/<slug>_plain.png`) and, if this food launches with a
-  named variant, that variant's icon too. **If either expected file is
-  missing, stop immediately and tell the user exactly which path is
-  missing — do not proceed, do not offer to draft a prompt instead.**
+  skill is invoked at all** — either already at the exact final path
+  (`public/rewards/<slug>_plain.png`) or as any plausible source file under
+  `public/rewards/_staging/` (any filename, any common raster format —
+  users routinely drop a JPEG with spaces in the name). This skill never
+  drafts an art prompt and never waits for one to be generated — that's
+  deliberately different from add-ingredient/add-food-variation. But it
+  DOES fix what's already been placed: converting format and moving/renaming
+  a staged file into its exact required path is this skill's own job
+  (`place-icon.mjs`, see Phase 1), not something to hand back to the user.
+  **Only if no source image exists anywhere — neither the final path nor
+  `_staging/` — does this skill stop**, and then it tells the user exactly
+  which paths it checked. Do not offer to draft a prompt as a fallback.
 - The food must resolve to **no existing match**. If `find-recipe.mjs`
   returns a hit on the intended name/slug, this is not a new food — stop and
   tell the user (point them at add-ingredient/add-food-variation if they
@@ -45,13 +50,17 @@ shop-content skills).
   shared `shop_ingredient_prices` catalog (checked via `find-ingredient.ts`,
   same as add-ingredient's Phase 2 lookup). If one genuinely doesn't, this
   skill *can* create its catalog row as part of the same apply — but only
-  under the same art precondition as the food's own reward icon: **the
-  user places the finished ingredient icon PNG under `public/ingredients/`
-  BEFORE this skill runs, and this skill checks for it and aborts if
-  missing.** It never drafts an ingredient-icon prompt either — that's
-  add-ingredient's job when a recipe already exists to attach it to; here,
-  the food doesn't exist yet, so this skill folds the catalog-row creation
-  into its own single apply instead of delegating.
+  under the same art precondition as the food's own reward icon: **the user
+  places a source icon under `public/ingredients/` or
+  `public/ingredients/_staging/` BEFORE this skill runs.** Same
+  placement/format-fixing rule as the reward icon above applies here too —
+  this skill converts and moves a staged source into
+  `public/ingredients/<key>.png` itself (`place-icon.mjs`, see Phase 4); it
+  only aborts if no source image exists anywhere. It never drafts an
+  ingredient-icon prompt either — that's add-ingredient's job when a recipe
+  already exists to attach it to; here, the food doesn't exist yet, so this
+  skill folds the catalog-row creation into its own single apply instead of
+  delegating.
 - `costCoins` for any new ingredient is **always asked of the user
   explicitly**, same as every other numeric field below — never inferred.
 - `unlockCostCoins`, each ingredient's quantity, and whether the food is
@@ -103,7 +112,7 @@ node .claude/skills/add-food/scripts/find-recipe.mjs "<food name as given>"
 
 Ask whether this food launches with a named special-ingredient variant right
 away (it can also get one later via add-food-variation — this is only about
-what ships on day one). Then check the required file(s) exist:
+what ships on day one). Then locate the required file(s):
 
 ```bash
 ls -la "public/rewards/<slug>_plain.png"
@@ -111,12 +120,39 @@ ls -la "public/rewards/<slug>_plain.png"
 ls -la "public/rewards/<match-signature>.png"   # whatever filename the user placed
 ```
 
-**If the plain icon file is missing, stop here and abort** — tell the user
-the exact expected path and that they need to place the finished PNG there
-before this skill can continue. Same for a named launch variant's icon if
-one was requested. Do not offer to draft an art prompt as a fallback.
+- **Already at the exact final path** → continue to Phase 2.
+- **Not there, but a plausible source image exists under
+  `public/rewards/_staging/`** (any filename, any common raster format —
+  users routinely drop a JPEG, or give it a name with spaces like
+  `"fried egg over rice.jpeg"`) → this skill fixes placement and format
+  itself, it does not abort just because the exact final filename doesn't
+  exist yet:
+
+  ```bash
+  node .claude/skills/add-food/scripts/place-icon.mjs \
+    "public/rewards/_staging/<whatever the user named it>" \
+    "public/rewards/<slug>_plain.png"
+  ```
+
+  This re-encodes the source as a genuine PNG at the exact required path
+  regardless of its original format. It does **not** fix transparency —
+  that's still Phase 2's job, run it next; don't skip Phase 2 just because
+  this step succeeded. If more than one file in `_staging/` plausibly
+  matches this food, ask the user which one before running this. Same
+  command/pattern for a named launch variant's icon.
+- **No source image can be found at all** (neither path) → stop here and
+  abort. Tell the user the exact expected path and the staging path this
+  skill also checked, and that they need to place a source image before
+  this skill can continue. Do not offer to draft an art prompt as a
+  fallback — this skill fixes and places art the user already made, it
+  never generates art itself.
 
 ## Phase 2 — Normalize and validate the placed icon(s)
+
+By this point every icon this food needs is a real PNG at its exact final
+path — either it started there, or Phase 1's `place-icon.mjs` step just put
+it there. This phase is strictly about deriving correct transparency; it
+doesn't touch format or location again.
 
 **Assume every icon the user places needs background cleaning and a real
 PNG re-encode — always run this, don't eyeball it first.** AI image tools
@@ -189,18 +225,30 @@ npx tsx .claude/skills/add-food/scripts/find-ingredient.ts "<ingredient name as 
 - **Found** → use its existing `key` as-is.
 - **Not found** → this is a genuinely new ingredient. Ask the user (never
   infer): `costCoins`, quantity, and which slot (`base`/`special`). Draft
-  `label.en`/`label.zh` and show for approval. Then check its icon is
-  already placed:
+  `label.en`/`label.zh` and show for approval. Then locate its icon:
 
   ```bash
   ls -la "public/ingredients/<key>.png"
   ```
 
-  **If missing, stop and abort** — same hard gate as the food's own reward
-  icon in Phase 1, and for the same reason: this skill never drafts an
-  ingredient-icon prompt. If present, run the same normalize-and-validate
-  step Phase 2 uses for reward icons — assume it needs cleaning too, don't
-  eyeball it first:
+  - **Already there** → continue to the normalize step below.
+  - **Not there, but a plausible source exists under
+    `public/ingredients/_staging/`** (any filename/format) → fix placement
+    and format yourself, same as Phase 1's reward icon:
+
+    ```bash
+    node .claude/skills/add-food/scripts/place-icon.mjs \
+      "public/ingredients/_staging/<whatever the user named it>" \
+      "public/ingredients/<key>.png"
+    ```
+  - **No source anywhere** → stop and abort — same hard gate as the food's
+    own reward icon in Phase 1, and for the same reason: this skill never
+    drafts an ingredient-icon prompt, it only fixes and places art the user
+    already made.
+
+  Once the file is at `public/ingredients/<key>.png`, run the same
+  normalize-and-validate step Phase 2 uses for reward icons — assume it
+  needs cleaning too, don't eyeball it first:
 
   ```bash
   node .claude/skills/add-food/scripts/normalize-reward-icon.mjs "public/ingredients/<key>.png"
@@ -338,3 +386,10 @@ reward icon PNG(s) too, since they're referenced by path from the DB row.
   used identically for reward icons (`public/rewards/`) and new-ingredient
   icons (`public/ingredients/`) since the underlying defect class and fix
   are the same for both asset families.
+- `place-icon.mjs` converts and moves ONE user-placed source image (any
+  filename/format) into its exact required final path as a real PNG —
+  no database/env access at all. It's a plain Node script (`node`), used
+  identically for reward icons and ingredient icons. It only fixes format
+  and location; it never touches transparency, and it refuses to overwrite
+  an existing destination file unless `--overwrite` is passed. Always run
+  `normalize-reward-icon.mjs` on its output next.
