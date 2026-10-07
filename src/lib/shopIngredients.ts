@@ -264,6 +264,20 @@ const SHOP_INGREDIENT_CATALOG: ShopIngredientCatalogEntry[] = [
     iconPath: "/ingredients/peppercorn.png",
     aliases: ["peppercorn", "sichuan peppercorn"],
   },
+  {
+    key: "chicken-thigh",
+    label: { en: "Chicken Thigh", zh: "鸡腿肉" },
+    defaultCostCoins: 7,
+    iconPath: "/ingredients/chicken-thigh.png",
+    aliases: ["chicken thigh"],
+  },
+  {
+    key: "basil-leaves",
+    label: { en: "Basil Leaves", zh: "九层塔" },
+    defaultCostCoins: 2,
+    iconPath: "/ingredients/basil-leaves.png",
+    aliases: ["basil leaves", "basil"],
+  },
 ];
 
 const SHOP_INGREDIENT_CATALOG_BY_KEY = new Map(

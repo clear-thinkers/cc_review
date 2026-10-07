@@ -63,10 +63,13 @@ shop-content skills).
   delegating.
 - `costCoins` for any new ingredient is **always asked of the user
   explicitly**, same as every other numeric field below — never inferred.
-- `unlockCostCoins`, each ingredient's quantity, and whether the food is
-  cookable (`cookMethod`/`foodType`) are **always asked of the user
-  explicitly** — never defaulted or inferred, matching add-ingredient's
-  existing convention for the same fields.
+- Each ingredient's quantity and whether the food is cookable
+  (`cookMethod`/`foodType`) are **always asked of the user explicitly** —
+  never defaulted or inferred, matching add-ingredient's existing
+  convention for the same fields.
+- `unlockCostCoins` **defaults to 25** — use it without asking unless the
+  user gives a different number. Show it in the Phase 5 review so they can
+  still override it there.
 - At least one base ingredient is required (Shop Admin Rule 6 — a recipe
   with zero base ingredients is invalid).
 - The Recipe Wall (`/words/shop`) is a **fixed-size grid** of exactly
@@ -75,7 +78,9 @@ shop-content skills).
   recipe at a `display_order` beyond `SHOP_WALL_SIZE` for exactly this
   reason (a real bug caught the hard way: the first food ever created by
   this skill landed at `display_order 10` on a `SHOP_WALL_SIZE = 9` wall
-  and was invisible despite `is_active = true`). See Phase 1.
+  and was invisible despite `is_active = true`). **When the wall is full,
+  bump `SHOP_WALL_SIZE` — this is a standing instruction from the user, do
+  not ask.** See Phase 1.
 - If `cookMethod` is set, `foodType` is required (Shop Admin Rule 10 — the
   shelf has no "unsorted" fallback tab). If the food isn't cookable yet,
   both stay unset — it's still unlockable/inspectable in the Recipe Shop,
@@ -105,10 +110,13 @@ node .claude/skills/add-food/scripts/find-recipe.mjs "<food name as given>"
   renders exactly that many fixed slots (`Recipe Shop Rules` in
   `0_ARCHITECTURE.md`), so if `maxDisplayOrder` already equals or exceeds
   it, the wall is full: an active new recipe would insert successfully but
-  never actually render. Tell the user this up front and ask whether to (a)
-  bump `SHOP_WALL_SIZE` by one as part of this change (the normal path —
-  the wall is meant to grow as foods are added), or (b) land the food
-  `isActive: false` on purpose instead. Don't silently pick either.
+  never actually render. In that case **bump `SHOP_WALL_SIZE` to
+  `maxDisplayOrder + 1` right away, without asking** — the user has given
+  a standing instruction that the wall always grows to fit a new food. Do
+  the edit before Phase 5 (the apply script's dry run enforces the same
+  limit), and mention the bump in the Phase 5 review and the final
+  summary. Only land a food `isActive: false` if the user explicitly asks
+  for that.
 
 Ask whether this food launches with a named special-ingredient variant right
 away (it can also get one later via add-food-variation — this is only about
@@ -268,9 +276,10 @@ npx tsx .claude/skills/add-food/scripts/find-ingredient.ts "<ingredient name as 
   `--base-ingredients`/`--special-ingredients` with the same quantity; the
   script rejects a mismatch rather than guessing which one is right.
 
-Also ask (never infer): `unlockCostCoins`, and whether the food is cookable
-in Shop Kitchen (`cookMethod`: `stove`/`oven`/none; if set, `foodType`:
+Also ask (never infer) whether the food is cookable in Shop Kitchen
+(`cookMethod`: `stove`/`oven`/none; if set, `foodType`:
 `drinks`/`hotmeal`/`desserts` — required together per the Hard rules).
+`unlockCostCoins` is 25 unless the user said otherwise — don't ask.
 
 ## Phase 5 — Review checkpoint and DB-write preview
 
@@ -328,9 +337,9 @@ entry for each new key to `SHOP_INGREDIENT_CATALOG` in
 matching the array's existing entry shape — same step add-ingredient's own
 Phase 7 already does for the ingredients it creates.
 
-If Phase 1 determined `SHOP_WALL_SIZE` needed to grow, make that one-line
-edit to [../../../src/lib/shop.ts](../../../src/lib/shop.ts) now (or confirm
-it was already done before this phase). This is a normal app-code change,
+If Phase 1 determined `SHOP_WALL_SIZE` needed to grow, confirm that one-line
+edit to [../../../src/lib/shop.ts](../../../src/lib/shop.ts) was made back
+in Phase 1 (make it now if not). This is a normal app-code change,
 not a DB migration — it ships via this repo's regular deploy, not
 `db:push:prod`, so don't conflate the two in the summary below.
 
