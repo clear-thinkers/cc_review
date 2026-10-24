@@ -201,3 +201,7 @@ The Scope section above already called this out as the expected next step: *"Sco
 - A mixed (character + phrase) packaged session is covered the same way as a character-only or phrase-only one — the reward call keys off "is this a packaged session," not target composition.
 
 **Unchanged:** the RPC (`reward_random_ingredients`), the `shop_ingredient_rewards` table, RLS, idempotency behavior, the empty-pool/failure-never-blocks-completion guarantee, and every acceptance criterion above — all still hold, now exercised from a second call site.
+
+## Addendum — 2026-10-24: superseded for win sessions by Mystery Foods
+
+Both call sites now call `rewardSessionIngredients` (`reward_session_ingredients`) instead of `rewardRandomIngredients`. A **non-win** session still receives exactly the random reward described in this spec (`reward_random_ingredients` is unchanged, apart from now excluding mystery ingredients from its pool). A **win** session instead receives mystery ingredients and **not** this random reward. See `docs/feature-specs/2026-10-24-mystery-foods.md` and `0_ARCHITECTURE.md` Fill-Test Review Rule 40. No acceptance criterion above is invalidated for non-win sessions.

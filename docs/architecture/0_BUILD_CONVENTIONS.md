@@ -1,6 +1,6 @@
 # Build Conventions — HanziQuest (`cc_review`)
 
-_Last updated: 2026-08-30 (§10 gained `scripts/db-sync-dev-from-prod.mjs`)_
+_Last updated: 2026-10-24 (§10 gained `scripts/verify-mystery-foods.ts`; `verify-rls.ts` known state refreshed)_
 
 For authority hierarchy, hard stops, doc update policy, and fix log policy — see `AI_CONTRACT.md`.
 For where to file new documents — see `0_ARCHITECTURE.md §6`.
@@ -387,11 +387,25 @@ npm run generate:coin-compensation-sql -- \
 
 Runs against dev only — no `--prod` flag. Never point this at prod without first auditing the test sections for destructive writes.
 
-**Known state (2026-08-23):** Two standing failures, neither introduced by the most recent run:
+**Known state — refreshed 2026-10-24:** the last full run was **80 passed, 1 failed**. The single failure is Section 6's `vocab_phrase_lesson_tags setup skipped — no shared textbook found for lesson_tags FK` (same standing Section 6 failure class below, though the message now reads differently from the older "missing `grade` column" text; it concerns textbooks/lesson tags and is unrelated to the shop). **Section 10 (Shop Kitchen) now passes**, closing the "likely-fixed-but-unverified" note; Sections 9 and 11 also pass. Historical record (2026-08-23) of the two earlier standing failures:
 - Section 6 (`vocab_phrases`/`vocab_phrase_lesson_tags`) — `vocab_phrase_lesson_tags setup: service role INSERT lesson_tag failed: Could not find the 'grade' column of 'lesson_tags' in the schema cache`. Pre-existing since it first appeared, not yet fixed.
 - Section 10 (Shop Kitchen, `shop_ingredient_consumptions`) — `shop_ingredient_consumptions no direct insert: child JWT INSERT SUCCEEDED — cook_shop_recipe is not the only writer!`. Surfaced 2026-08-23 when this script was first run live against dev after the original Shop Kitchen migration shipped. Contradicted `0_ARCHITECTURE.md`'s Shop Kitchen Rules (neither `shop_cooked_dishes` nor `shop_ingredient_consumptions` should have a direct client write policy at all) — a stray insert policy, copied from `shop_ingredient_rewards`' own pattern, was present on `shop_ingredient_consumptions`. **Fixed same day** in `supabase/migrations/20260823020000_shop_kitchen_countertop_redesign.sql` (drops the policy outright) — **confirmed deployed to dev** (`npm run db:status` shows `20260823020000` in both Local and Remote columns), but the script itself has not been re-run since to confirm this failure actually cleared. Treat Section 10 as likely-fixed-but-unverified until someone reruns it.
 
-Last confirmed count was 79/81 (the two failures above), from before the Section 10 fix deployed — re-run the script to get a current count rather than assuming 79/81 or 81/81.
+Count history: 79/81 (2026-08-23, before the Section 10 fix deployed) → 80/81 (2026-10-24). Re-run the script for a current count rather than assuming either.
+
+---
+
+### `scripts/verify-mystery-foods.ts`
+
+**npm command:** `npm run verify:mystery-foods`
+
+**Purpose:** Verifies Mystery Foods (roadmap items L/M/N) against a live Supabase **dev** project, as a real child JWT: the win rule (character, phrase, zero-grade, and paragraph-quiz sessions), `reward_session_ingredients`' priority/top-up/stockpile behavior and idempotency, the auto-unlock (free, no wallet or coin-history row, permanent), that mystery ingredients cannot be bought and never enter the random pool, that normal recipe unlock/purchase are unchanged, one-set-per-cook consumption, and the real `crystal-dumpling` seed data. Its TypeScript counterpart is `src/lib/mysteryFood.ts`; this script confirms the SQL agrees with it.
+
+**When to use:** After any change to `reward_session_ingredients`, `unlock_shop_recipe`, `purchase_shop_ingredient`, `reward_random_ingredients`, or the mystery seed rows.
+
+**Env vars required:** same three as `verify-rls.ts`. Dev only, no `--prod` flag.
+
+**Key behaviours:** creates throwaway families/children and temporary mystery foods/ingredients (keys prefixed `zz-test-`), and **briefly sets the real `crystal-dumpling` recipe inactive** during its first phase so ordering scenarios are deterministic. Everything is restored/removed in a `finally` block; if the process is killed hard, re-run it (or set `shop_recipes.is_active = true` for slug `crystal-dumpling`). Last run: 48/48 on 2026-10-24, zero leftover rows.
 
 ---
 
