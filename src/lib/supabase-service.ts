@@ -26,7 +26,8 @@ import type {
   RedeemCoinsResult,
   CoinBreakdown,
   RewardedIngredient,
-  SessionIngredientReward,
+  ClaimSessionOfferResult,
+  SessionRewardOffer,
   ShopIngredientLedgerEntry,
   ShopCookedDish,
   CookShopRecipeResult,
@@ -1497,24 +1498,8 @@ function toRewardedIngredient(row: SupabaseRewardedIngredientRow): RewardedIngre
   };
 }
 
-/**
- * Rewards up to 3 (server-decided, see reward_random_ingredients) random,
- * distinct ingredients pooled across every recipe the caller has unlocked,
- * for finishing a paragraph-quiz session (paragraph-quiz-ingredient-reward,
- * 2026-08-22). Returns an empty array when nothing is unlocked, the pool is
- * empty, or this quiz_session_id was already rewarded -- never an error for
- * those cases. Callers must not treat an empty result as a failure.
- */
-export async function rewardRandomIngredients(quizSessionId: string): Promise<RewardedIngredient[]> {
-  const { data, error } = await supabase.rpc("reward_random_ingredients", {
-    p_quiz_session_id: quizSessionId,
-  });
-  if (error) throw new Error(`rewardRandomIngredients: ${error.message}`);
-  return ((data ?? []) as SupabaseRewardedIngredientRow[]).map(toRewardedIngredient);
-}
-
-/** One ingredient as returned inside reward_session_ingredients' jsonb result (already camelCase, unlike reward_random_ingredients' table rows). */
-interface SessionIngredientRewardJsonRow {
+/** One ingredient as returned inside the reward RPCs' jsonb results (already camelCase, unlike table rows). */
+interface RewardIngredientJsonRow {
   ingredientKey?: unknown;
   labelI18n?: unknown;
   iconPath?: unknown;
@@ -1522,7 +1507,7 @@ interface SessionIngredientRewardJsonRow {
   isMystery?: unknown;
 }
 
-function toSessionRewardedIngredient(row: SessionIngredientRewardJsonRow): RewardedIngredient | null {
+function toSessionRewardedIngredient(row: RewardIngredientJsonRow): RewardedIngredient | null {
   if (typeof row.ingredientKey !== "string" || !row.ingredientKey.trim()) {
     return null;
   }
@@ -1538,36 +1523,116 @@ function toSessionRewardedIngredient(row: SessionIngredientRewardJsonRow): Rewar
   return { ...base, quantity, isMystery: row.isMystery === true };
 }
 
+function toRewardedIngredientList(raw: unknown): RewardedIngredient[] {
+  const rows = Array.isArray(raw) ? (raw as RewardIngredientJsonRow[]) : [];
+  return rows
+    .map(toSessionRewardedIngredient)
+    .filter((row): row is RewardedIngredient => row !== null);
+}
+
+/** Parses one offer jsonb (from reward_session_ingredients / list_pending_ingredient_offers). */
+function parseSessionRewardOffer(raw: unknown): { offer: SessionRewardOffer; claimed: boolean } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const source = raw as {
+    hasOffer?: unknown;
+    quizSessionId?: unknown;
+    isWin?: unknown;
+    testedCount?: unknown;
+    picksAllowed?: unknown;
+    claimed?: unknown;
+    offers?: unknown;
+  };
+  if (source.hasOffer !== true || typeof source.quizSessionId !== "string") return null;
+
+  const offers = toRewardedIngredientList(source.offers);
+  const picksAllowed =
+    typeof source.picksAllowed === "number" && Number.isFinite(source.picksAllowed)
+      ? Math.max(0, Math.floor(source.picksAllowed))
+      : 0;
+  if (offers.length === 0 || picksAllowed === 0) return null;
+
+  return {
+    claimed: source.claimed === true,
+    offer: {
+      quizSessionId: source.quizSessionId,
+      isWin: source.isWin === true,
+      testedCount:
+        typeof source.testedCount === "number" && Number.isFinite(source.testedCount)
+          ? source.testedCount
+          : 0,
+      picksAllowed: Math.min(picksAllowed, offers.length),
+      offers,
+    },
+  };
+}
+
 /**
- * The single reward call for a completed PACKAGED session (roadmap items L/M/N,
- * 2026-10-24). The server decides win vs. non-win from the saved quiz session and
- * returns either mystery ingredients (win, full per-food quantity each) or the
- * regular random reward, plus any mystery foods this reward auto-unlocked. Like
- * rewardRandomIngredients, an empty `ingredients` array is never an error (nothing
- * to give, or this quiz_session_id was already rewarded) -- callers must not treat
- * it as a failure, and a thrown error must never block session completion.
+ * Asks the server to create (or return) the reward OFFER for a finished packaged
+ * session (roadmap item P). Returns null when there is nothing to choose: the session
+ * tested fewer than 10 items, nothing is rewardable, it isn't the caller's, or the offer
+ * was already claimed. Null is never an error -- callers just skip the reward panel.
+ * A thrown error (RPC failure) must still never block finishing the session.
  */
-export async function rewardSessionIngredients(quizSessionId: string): Promise<SessionIngredientReward> {
+export async function requestSessionRewardOffer(quizSessionId: string): Promise<SessionRewardOffer | null> {
   const { data, error } = await supabase.rpc("reward_session_ingredients", {
     p_quiz_session_id: quizSessionId,
   });
-  if (error) throw new Error(`rewardSessionIngredients: ${error.message}`);
+  if (error) throw new Error(`requestSessionRewardOffer: ${error.message}`);
+  const parsed = parseSessionRewardOffer(data);
+  return parsed && !parsed.claimed ? parsed.offer : null;
+}
+
+/**
+ * Claims the child's pick from a stored offer. The server checks the pick against the
+ * offer it stored itself -- exactly `picksAllowed` distinct offered ingredients -- and
+ * runs the mystery-food auto-unlock. Never throws for a refused claim; returns the code.
+ */
+export async function claimSessionRewardOffer(
+  quizSessionId: string,
+  ingredientKeys: string[]
+): Promise<ClaimSessionOfferResult> {
+  const { data, error } = await supabase.rpc("claim_session_ingredient_offer", {
+    p_quiz_session_id: quizSessionId,
+    p_ingredient_keys: ingredientKeys,
+  });
+  if (error) throw new Error(`claimSessionRewardOffer: ${error.message}`);
 
   const raw = (data && typeof data === "object" ? data : {}) as {
+    success?: unknown;
+    code?: unknown;
     isWin?: unknown;
     ingredients?: unknown;
     unlockedRecipeIds?: unknown;
   };
-  const rows = Array.isArray(raw.ingredients) ? (raw.ingredients as SessionIngredientRewardJsonRow[]) : [];
+  if (raw.success === true) {
+    return {
+      success: true,
+      isWin: raw.isWin === true,
+      ingredients: toRewardedIngredientList(raw.ingredients),
+      unlockedRecipeIds: Array.isArray(raw.unlockedRecipeIds)
+        ? raw.unlockedRecipeIds.filter((id): id is string => typeof id === "string")
+        : [],
+    };
+  }
+  const code = raw.code;
   return {
-    isWin: raw.isWin === true,
-    ingredients: rows
-      .map(toSessionRewardedIngredient)
-      .filter((row): row is RewardedIngredient => row !== null),
-    unlockedRecipeIds: Array.isArray(raw.unlockedRecipeIds)
-      ? raw.unlockedRecipeIds.filter((id): id is string => typeof id === "string")
-      : [],
+    success: false,
+    code:
+      code === "forbidden" || code === "no_offer" || code === "already_claimed" || code === "invalid_selection"
+        ? code
+        : "unknown",
   };
+}
+
+/** The caller's unclaimed offers, oldest first -- a child who left before picking finds them on Due Review. */
+export async function listPendingRewardOffers(): Promise<SessionRewardOffer[]> {
+  const { data, error } = await supabase.rpc("list_pending_ingredient_offers");
+  if (error) throw new Error(`listPendingRewardOffers: ${error.message}`);
+  const rows = Array.isArray(data) ? data : [];
+  return rows
+    .map(parseSessionRewardOffer)
+    .filter((row): row is { offer: SessionRewardOffer; claimed: boolean } => row !== null && !row.claimed)
+    .map((row) => row.offer);
 }
 
 // ─── Shop Kitchen (feature spec 2026-08-23-kitchen-page.md) ────────────────

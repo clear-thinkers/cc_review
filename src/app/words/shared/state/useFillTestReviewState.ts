@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { BundledFillTestResult } from "@/lib/fillTest";
-import type { SessionIngredientReward } from "@/lib/shop.types";
+import type { SessionRewardOffer } from "@/lib/shop.types";
 import type {
   QuizHistoryItem,
   QuizSelectionMode,
@@ -24,7 +24,7 @@ export function useFillTestReviewState() {
   const [quizDropSentenceIndex, setQuizDropSentenceIndex] = useState<number | null>(null);
   const [quizSessionStartTime, setQuizSessionStartTime] = useState<number | null>(null);
   const [completedReviewTestSessionName, setCompletedReviewTestSessionName] = useState<string | null>(null);
-  const [quizRewardedIngredients, setQuizRewardedIngredients] = useState<SessionIngredientReward | null>(null);
+  const [quizRewardOffer, setQuizRewardOffer] = useState<SessionRewardOffer | null>(null);
 
   return {
     quizSelectionMode,
@@ -57,7 +57,7 @@ export function useFillTestReviewState() {
     setQuizSessionStartTime,
     completedReviewTestSessionName,
     setCompletedReviewTestSessionName,
-    quizRewardedIngredients,
-    setQuizRewardedIngredients,
+    quizRewardOffer,
+    setQuizRewardOffer,
   };
 }

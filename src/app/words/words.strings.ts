@@ -205,7 +205,14 @@ export const wordsStrings = {
         reviewSelected: "Review Selected",
         testSelected: "Test Selected",
         addSelectedToSession: "Add Selected to Session",
-        quickAdd25: "Quick Add 25",
+        quickAdd10: "Quick Add 10",
+        quickAdd20: "Quick Add 20",
+        quickAdd30: "Quick Add 30",
+        rewardTierHint:
+          "Rewards: test 10+ items to pick 1 reward, 20+ to pick 2, 30+ to pick all 3. A perfect run (nothing missed) offers mystery ingredients!",
+        defaultSessionName: "My practice {time}",
+        quickAddNotEnough: "You need at least {count} due characters for this.",
+        sessionNameTaken: "That name is already used by another session. Please choose a different name.",
       },
     },
 
@@ -397,6 +404,18 @@ export const wordsStrings = {
       unlockedEyebrow: "Mystery food unlocked!",
       unlockedHeadline: "{title} is ready to cook!",
       unlockedSubtext: "Head to Shop Kitchen to make it.",
+      // Pick-your-reward step (size-tiered picks, roadmap item P).
+      pickEyebrow: "Choose your reward!",
+      pickHeadline: "Pick {picks} of {total}",
+      pickSubtext: "Tap the ones you want, then press Claim.",
+      pickCounter: "{selected}/{picks} picked",
+      claimButton: "Claim",
+      claimingButton: "Claiming...",
+      skipButton: "Decide later",
+      claimError: "Could not claim your reward. Please try again.",
+      claimAlready: "This reward was already claimed.",
+      pendingTitle: "You have a reward waiting!",
+      pendingOpen: "Choose reward",
     },
 
     // ============= QUIZ RESULTS PAGE =============
@@ -1589,7 +1608,14 @@ export const wordsStrings = {
         reviewSelected: "复习所选",
         testSelected: "测试所选",
         addSelectedToSession: "将所选加入测验",
-        quickAdd25: "快速添加25个",
+        quickAdd10: "快速添加10个",
+        quickAdd20: "快速添加20个",
+        quickAdd30: "快速添加30个",
+        rewardTierHint:
+          "奖励：测试 10 个以上可选 1 个奖励，20 个以上选 2 个，30 个以上 3 个全选。全部答对还会获得神秘食材！",
+        defaultSessionName: "我的练习 {time}",
+        quickAddNotEnough: "至少需要 {count} 个到期的字才能使用。",
+        sessionNameTaken: "这个名字已被其他测验使用，请换一个名字。",
       },
     },
 
@@ -1778,6 +1804,18 @@ export const wordsStrings = {
       unlockedEyebrow: "神秘美食已解锁！",
       unlockedHeadline: "{title} 可以烹饪啦！",
       unlockedSubtext: "快去食谱厨房做做看吧！",
+      // 挑选奖励步骤（按测试数量分档，路线图事项 P）。
+      pickEyebrow: "挑选你的奖励！",
+      pickHeadline: "从 {total} 个中选 {picks} 个",
+      pickSubtext: "点选你想要的，然后按“领取”。",
+      pickCounter: "已选 {selected}/{picks}",
+      claimButton: "领取",
+      claimingButton: "领取中……",
+      skipButton: "稍后再选",
+      claimError: "领取失败，请再试一次。",
+      claimAlready: "这份奖励已经领取过了。",
+      pendingTitle: "你有一份奖励等着领取！",
+      pendingOpen: "去挑选奖励",
     },
 
     // ============= 测验结果页面 =============

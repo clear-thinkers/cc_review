@@ -14,10 +14,16 @@ import {
   selectLowestFamiliarityWords,
 } from "../shared/words.shared.utils";
 import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
+import {
+  QUICK_ADD_SIZES,
+  buildDefaultChildSessionName,
+  canDeleteReviewTestSession,
+  isQuickAddAvailable,
+  resolveSessionNameTarget,
+} from "./dueReviewPackaging";
+import PendingRewardOfferBanner from "./PendingRewardOfferBanner";
 import type { ReviewTestSessionTargetDraft } from "./review.types";
 import { sortReviewTestSessionTargets } from "./reviewSession.utils";
-
-const QUICK_ADD_CHARACTER_COUNT = 25;
 
 function getReviewTestSessionStatusMessage(
   status: string | null,
@@ -88,7 +94,11 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
   const session = useSession();
   const locale = useLocale();
   const allEditorStr = taggingStrings[locale].allEditor;
-  const canManageSessions = canAccessRoute("/words/admin", session?.role, session?.isPlatformAdmin ?? false);
+  const isChildViewer = session?.role === "child" && !(session?.isPlatformAdmin ?? false);
+  // Parents and the platform admin always could package sessions; a child now can too
+  // (roadmap item P) -- but only ever extends / deletes the sessions they created.
+  const canManageSessions =
+    canAccessRoute("/words/admin", session?.role, session?.isPlatformAdmin ?? false) || isChildViewer;
 
   const [selectedDueWordIds, setSelectedDueWordIds] = useState<string[]>([]);
   const [sessionFormOpen, setSessionFormOpen] = useState(false);
@@ -123,17 +133,23 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
     openFillTestReview(selectedDueWordIds);
   }
 
-  // Auto-selects the QUICK_ADD_CHARACTER_COUNT currently-due characters with
-  // the lowest familiarity, then hands off to the SAME selected-characters
-  // form/submit flow as "Add Selected to Session" (handleAddSelectedToSession)
-  // below -- so it inherits that flow's target resolution, create-or-append
-  // logic, and name-input requirement rather than duplicating any of it.
-  function handleQuickAdd25(): void {
-    const lowestFamiliarityIds = selectLowestFamiliarityWords(dueWords, QUICK_ADD_CHARACTER_COUNT).map(
-      (word) => word.id
-    );
+  // A child's suggested name is always a fresh one -- never a parent's session name, which
+  // would otherwise be offered as the convenient default and (for a parent) append to it.
+  function suggestSessionName(): string {
+    return isChildViewer
+      ? buildDefaultChildSessionName(str.due.batchActions.defaultSessionName, new Date())
+      : (reviewTestSessions[0]?.name ?? "");
+  }
+
+  // Auto-selects the `count` currently-due characters with the lowest familiarity (10 / 20 /
+  // 30 -- one per reward tier), then hands off to the SAME selected-characters form/submit
+  // flow as "Add Selected to Session" (handleAddSelectedToSession) below -- so it inherits
+  // that flow's target resolution, create-or-append logic, and name-input requirement
+  // rather than duplicating any of it.
+  function handleQuickAdd(count: number): void {
+    const lowestFamiliarityIds = selectLowestFamiliarityWords(dueWords, count).map((word) => word.id);
     setSelectedDueWordIds(lowestFamiliarityIds);
-    setSessionNameInput(reviewTestSessions[0]?.name ?? "");
+    setSessionNameInput(suggestSessionName());
     setSessionFormOpen(true);
   }
 
@@ -158,9 +174,18 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
     const orderedTargets = sortReviewTestSessionTargets(drafts, words);
     setCreatingSession(true);
     try {
-      const existingSession = reviewTestSessions.find((item) => item.name === trimmedName) ?? null;
-      if (existingSession) {
-        const addedCount = await appendTargetsToReviewTestSession(existingSession.id, orderedTargets);
+      const nameTarget = resolveSessionNameTarget({
+        name: trimmedName,
+        sessions: reviewTestSessions,
+        viewerUserId: session?.userId ?? null,
+        viewerIsChild: isChildViewer,
+      });
+      if (nameTarget.kind === "name_taken") {
+        setBatchActionNotice(str.due.batchActions.sessionNameTaken);
+        return;
+      }
+      if (nameTarget.kind === "append") {
+        const addedCount = await appendTargetsToReviewTestSession(nameTarget.sessionId, orderedTargets);
         setBatchActionNotice(
           addedCount > 0
             ? str.admin.messages.reviewTestSessionAppendSuccess
@@ -362,6 +387,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
       {reviewTestSessionNotice ? (
         <p className="text-sm text-blue-700">{reviewTestSessionNotice}</p>
       ) : null}
+      {canAccessFillTest ? <PendingRewardOfferBanner strings={str.ingredientReward} /> : null}
 
       <div className="space-y-2 rounded-md border p-3">
         <h3 className="font-medium">{str.due.reviewTestSessions.title}</h3>
@@ -441,19 +467,38 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
                             : str.due.reviewTestSessions.delete}
                         </button>
                       ) : canAccessFillTest ? (
-                        <button
-                          type="button"
-                          className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-caution disabled:opacity-50"
-                          disabled={row.quizReadyCount === 0 || Boolean(row.runtime?.errorCode)}
-                          title={
-                            row.quizReadyCount === 0
-                              ? str.due.reviewTestSessions.disabledNoQuizReady
-                              : undefined
-                          }
-                          onClick={() => openReviewTestSession(row.session.id)}
-                        >
-                          {str.due.reviewTestSessions.start}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-caution disabled:opacity-50"
+                            disabled={row.quizReadyCount === 0 || Boolean(row.runtime?.errorCode)}
+                            title={
+                              row.quizReadyCount === 0
+                                ? str.due.reviewTestSessions.disabledNoQuizReady
+                                : undefined
+                            }
+                            onClick={() => openReviewTestSession(row.session.id)}
+                          >
+                            {str.due.reviewTestSessions.start}
+                          </button>
+                          {canDeleteReviewTestSession({
+                            viewerRole: session?.role,
+                            viewerIsPlatformAdmin: session?.isPlatformAdmin ?? false,
+                            viewerUserId: session?.userId,
+                            createdByUserId: row.session.createdByUserId,
+                          }) ? (
+                            <button
+                              type="button"
+                              className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-destructive disabled:opacity-50"
+                              disabled={deletingReviewTestSessionId === row.session.id}
+                              onClick={() => void handleDeleteSession(row.session.id, row.session.name)}
+                            >
+                              {deletingReviewTestSessionId === row.session.id
+                                ? str.due.reviewTestSessions.deleting
+                                : str.due.reviewTestSessions.delete}
+                            </button>
+                          ) : null}
+                        </div>
                       ) : (
                         <span className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-neutral">
                           {str.due.reviewTestSessions.childOnly}
@@ -568,6 +613,9 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
       ) : (
         <>
         {batchActionNotice ? <p className="text-sm text-blue-700">{batchActionNotice}</p> : null}
+        {canManageSessions ? (
+          <p className="text-xs text-gray-600">{str.due.batchActions.rewardTierHint}</p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm text-gray-600">
             {allEditorStr.selectedCount.replace("{count}", String(selectedDueWordIds.length))}
@@ -597,24 +645,39 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
               disabled={selectedDueWordIds.length === 0 || adminLoading}
               title={adminLoading ? str.admin.loading : undefined}
               onClick={() => {
-                setSessionNameInput(reviewTestSessions[0]?.name ?? "");
+                setSessionNameInput(suggestSessionName());
                 setSessionFormOpen((open) => !open);
               }}
             >
               {str.due.batchActions.addSelectedToSession}
             </button>
           )}
-          {canManageSessions && (
-            <button
-              type="button"
-              className="rounded border-2 px-3 py-1.5 text-xs font-medium leading-none btn-secondary disabled:opacity-50"
-              disabled={dueWords.length === 0 || adminLoading}
-              title={adminLoading ? str.admin.loading : undefined}
-              onClick={handleQuickAdd25}
-            >
-              {str.due.batchActions.quickAdd25}
-            </button>
-          )}
+          {canManageSessions &&
+            QUICK_ADD_SIZES.map((size) => {
+              const available = isQuickAddAvailable(size, dueWords.length);
+              return (
+                <button
+                  key={`quick-add-${size}`}
+                  type="button"
+                  className="rounded border-2 px-3 py-1.5 text-xs font-medium leading-none btn-secondary disabled:opacity-50"
+                  disabled={!available || adminLoading}
+                  title={
+                    adminLoading
+                      ? str.admin.loading
+                      : !available
+                        ? str.due.batchActions.quickAddNotEnough.replace("{count}", String(size))
+                        : undefined
+                  }
+                  onClick={() => handleQuickAdd(size)}
+                >
+                  {size === 10
+                    ? str.due.batchActions.quickAdd10
+                    : size === 20
+                      ? str.due.batchActions.quickAdd20
+                      : str.due.batchActions.quickAdd30}
+                </button>
+              );
+            })}
           {canManageSessions && sessionFormOpen && (
             <form className="flex flex-wrap items-center gap-2" onSubmit={handleAddSelectedToSession}>
               <input

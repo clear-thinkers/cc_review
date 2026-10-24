@@ -80,14 +80,40 @@ export type RewardedIngredient = {
   isMystery?: boolean;
 };
 
-/** Result of reward_session_ingredients -- the single reward call for a completed packaged session. */
+/**
+ * The reward a finished packaged session OFFERS (roadmap item P): up to 3 candidate
+ * ingredients, of which the child picks `picksAllowed` (1 / 2 / 3 by Tested Count).
+ * Created server-side by reward_session_ingredients; nothing is granted until the
+ * child claims it.
+ */
+export type SessionRewardOffer = {
+  quizSessionId: string;
+  /** Server-determined win (Failed Count 0; paragraph quiz: zero bounces): the offers are mystery ingredients. */
+  isWin: boolean;
+  /** The session's Tested Count (distinct tested items), which sets the number of picks. */
+  testedCount: number;
+  picksAllowed: number;
+  offers: RewardedIngredient[];
+};
+
+/** What a claim granted. */
 export type SessionIngredientReward = {
-  /** Server-determined win (Failed Count 0; paragraph quiz: zero bounces). */
   isWin: boolean;
   ingredients: RewardedIngredient[];
-  /** Mystery foods this reward just completed and auto-unlocked. */
+  /** Mystery foods this claim just completed and auto-unlocked. */
   unlockedRecipeIds: string[];
 };
+
+export type ClaimSessionOfferErrorCode =
+  | "forbidden"
+  | "no_offer"
+  | "already_claimed"
+  | "invalid_selection"
+  | "unknown";
+
+export type ClaimSessionOfferResult =
+  | ({ success: true } & SessionIngredientReward)
+  | { success: false; code: ClaimSessionOfferErrorCode };
 
 export type ShopTransactionAction = "unlock_recipe" | "purchase_ingredient";
 

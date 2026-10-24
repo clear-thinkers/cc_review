@@ -8,6 +8,7 @@ import { CoinAnimation } from "./coins.animation";
 import { playCelebrationSound } from "../../shared/coins.sound";
 import { findFlashcardPhrasePinyin, renderPhraseWithPinyin } from "../../shared/words.shared.utils";
 import IngredientRewardPanel from "../IngredientRewardPanel";
+import { claimSessionRewardOffer } from "@/lib/supabase-service";
 
 type QuizCelebrationWindow = Window & {
   __quizEasyGradeEvent?: number;
@@ -44,7 +45,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
     quizSubmitting,
     unansweredCount,
     moveQuizForward,
-    quizRewardedIngredients,
+    quizRewardOffer,
     continueQuizAfterIngredientReward,
     quizSummary,
     quizSessionCoins,
@@ -118,12 +119,13 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
   // words.shared.state.ts. Shows in place of the normal quiz UI until the
   // child clicks Continue, matching ParagraphQuizReviewSection.tsx's own
   // reward-panel precedent.
-  if (quizRewardedIngredients) {
+  if (quizRewardOffer) {
     return (
       <section className="space-y-3 rounded-lg border p-4">
         <h2 className="font-medium">{str.fillTest.pageTitle}</h2>
         <IngredientRewardPanel
-          reward={quizRewardedIngredients}
+          offer={quizRewardOffer}
+          onClaim={(keys) => claimSessionRewardOffer(quizRewardOffer.quizSessionId, keys)}
           strings={str.ingredientReward}
           onContinue={continueQuizAfterIngredientReward}
         />

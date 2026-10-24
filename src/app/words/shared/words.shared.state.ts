@@ -41,7 +41,7 @@ import {
   listParagraphs,
   listAllParagraphTestModes,
   getActiveSessionTargetKeys,
-  rewardSessionIngredients,
+  requestSessionRewardOffer,
 } from "@/lib/supabase-service";
 import { gradeBundledFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -293,8 +293,8 @@ export function useWordsWorkspaceState({ page, str }: { page: WordsSectionPage; 
     setQuizSessionStartTime,
     completedReviewTestSessionName,
     setCompletedReviewTestSessionName,
-    quizRewardedIngredients,
-    setQuizRewardedIngredients,
+    quizRewardOffer,
+    setQuizRewardOffer,
   } = fillTestState;
 
   const {
@@ -4258,7 +4258,7 @@ const gradeLabels = getGradeLabels(str);
   async function continueQuizAfterIngredientReward() {
     const completedReviewTestSession =
       requestedReviewTestSessionId && activeReviewTestSession ? activeReviewTestSession : null;
-    setQuizRewardedIngredients(null);
+    setQuizRewardOffer(null);
     setQuizSubmitting(true);
     try {
       await finalizeQuizCompletion(completedReviewTestSession);
@@ -4352,10 +4352,10 @@ const gradeLabels = getGradeLabels(str);
         // this feature existed.
         if (completedReviewTestSession && quizSessionId) {
           try {
-            const reward = await rewardSessionIngredients(quizSessionId);
-            if (reward.ingredients.length > 0) {
-              setQuizRewardedIngredients(reward);
-              return; // defer finalizeQuizCompletion until Continue is clicked
+            const offer = await requestSessionRewardOffer(quizSessionId);
+            if (offer) {
+              setQuizRewardOffer(offer);
+              return; // defer finalizeQuizCompletion until the child claims (or skips) and continues
             }
           } catch (error) {
             console.error("Failed to reward ingredients for packaged fill-test session:", error);
@@ -4495,7 +4495,7 @@ const gradeLabels = getGradeLabels(str);
     quizSubmitting,
     unansweredCount,
     moveQuizForward,
-    quizRewardedIngredients,
+    quizRewardOffer,
     continueQuizAfterIngredientReward,
     quizSummary,
     quizSessionCoins,

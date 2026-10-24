@@ -17,9 +17,11 @@ vi.mock("./supabaseClient", () => ({
 }));
 
 import {
+  claimSessionRewardOffer,
+  listPendingRewardOffers,
   listShopIngredientPrices,
   listShopRecipes,
-  rewardSessionIngredients,
+  requestSessionRewardOffer,
 } from "./supabase-service";
 
 function mockSession(userId = "user-1", familyId = "family-1") {
@@ -33,116 +35,194 @@ function mockSession(userId = "user-1", familyId = "family-1") {
   });
 }
 
-describe("rewardSessionIngredients", () => {
+const offerPayload = (overrides: Record<string, unknown> = {}) => ({
+  hasOffer: true,
+  quizSessionId: "quiz-1",
+  isWin: true,
+  testedCount: 22,
+  picksAllowed: 2,
+  claimed: false,
+  offers: [
+    {
+      ingredientKey: "wild-tiger-prawn",
+      labelI18n: { en: "Wild Tiger Prawn", zh: "野生虎头虾" },
+      iconPath: "/ingredients/wild-tiger-prawn.png",
+      quantity: 2,
+      isMystery: true,
+    },
+    { ingredientKey: "gilded-sesame-oil", labelI18n: null, iconPath: null, quantity: 1, isMystery: true },
+    { ingredientKey: "spring-bamboo-shoot", labelI18n: null, iconPath: null, quantity: 1, isMystery: true },
+  ],
+  ...overrides,
+});
+
+describe("requestSessionRewardOffer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSession();
   });
 
   it("calls reward_session_ingredients with only the quiz session id", async () => {
-    rpcMock.mockResolvedValue({ data: { isWin: false, ingredients: [], unlockedRecipeIds: [] }, error: null });
+    rpcMock.mockResolvedValue({ data: { hasOffer: false }, error: null });
 
-    await rewardSessionIngredients("session-123");
+    await requestSessionRewardOffer("quiz-1");
 
-    expect(rpcMock).toHaveBeenCalledWith("reward_session_ingredients", {
-      p_quiz_session_id: "session-123",
+    expect(rpcMock).toHaveBeenCalledWith("reward_session_ingredients", { p_quiz_session_id: "quiz-1" });
+  });
+
+  it("maps an offer: picks, tested count, win flag, and each ingredient's quantity / mystery flag", async () => {
+    rpcMock.mockResolvedValue({ data: offerPayload(), error: null });
+
+    const offer = await requestSessionRewardOffer("quiz-1");
+
+    expect(offer).toEqual({
+      quizSessionId: "quiz-1",
+      isWin: true,
+      testedCount: 22,
+      picksAllowed: 2,
+      offers: [
+        {
+          ingredientKey: "wild-tiger-prawn",
+          labelI18n: { en: "Wild Tiger Prawn", zh: "野生虎头虾" },
+          iconPath: "/ingredients/wild-tiger-prawn.png",
+          quantity: 2,
+          isMystery: true,
+        },
+        { ingredientKey: "gilded-sesame-oil", quantity: 1, isMystery: true },
+        { ingredientKey: "spring-bamboo-shoot", quantity: 1, isMystery: true },
+      ],
     });
   });
 
-  it("maps a win result: quantities, mystery flags, and unlocked recipe ids", async () => {
-    rpcMock.mockResolvedValue({
-      data: {
-        isWin: true,
-        ingredients: [
-          {
-            ingredientKey: "wild-tiger-prawn",
-            labelI18n: { en: "Wild Tiger Prawn", zh: "野生虎头虾" },
-            iconPath: "/ingredients/wild-tiger-prawn.png",
-            quantity: 2,
-            isMystery: true,
-          },
-          { ingredientKey: "gilded-sesame-oil", labelI18n: null, iconPath: null, quantity: 1, isMystery: true },
-        ],
-        unlockedRecipeIds: ["recipe-1"],
-      },
-      error: null,
-    });
-
-    const result = await rewardSessionIngredients("session-123");
-
-    expect(result.isWin).toBe(true);
-    expect(result.unlockedRecipeIds).toEqual(["recipe-1"]);
-    expect(result.ingredients).toEqual([
-      {
-        ingredientKey: "wild-tiger-prawn",
-        labelI18n: { en: "Wild Tiger Prawn", zh: "野生虎头虾" },
-        iconPath: "/ingredients/wild-tiger-prawn.png",
-        quantity: 2,
-        isMystery: true,
-      },
-      { ingredientKey: "gilded-sesame-oil", quantity: 1, isMystery: true },
-    ]);
+  it("returns null when there is nothing to choose (no offer, e.g. under 10 tested)", async () => {
+    rpcMock.mockResolvedValue({ data: { hasOffer: false, testedCount: 6 }, error: null });
+    expect(await requestSessionRewardOffer("quiz-1")).toBeNull();
   });
 
-  it("maps a non-win random reward as quantity 1, not mystery", async () => {
-    rpcMock.mockResolvedValue({
-      data: {
-        isWin: false,
-        ingredients: [
-          {
-            ingredientKey: "milk",
-            labelI18n: { en: "Milk", zh: "牛奶" },
-            iconPath: "/ingredients/milk_base.png",
-            quantity: 1,
-            isMystery: false,
-          },
-        ],
-        unlockedRecipeIds: [],
-      },
-      error: null,
-    });
-
-    const result = await rewardSessionIngredients("session-9");
-
-    expect(result.isWin).toBe(false);
-    expect(result.ingredients[0]).toMatchObject({ ingredientKey: "milk", quantity: 1, isMystery: false });
-    expect(result.unlockedRecipeIds).toEqual([]);
+  it("returns null when the offer was already claimed", async () => {
+    rpcMock.mockResolvedValue({ data: offerPayload({ claimed: true }), error: null });
+    expect(await requestSessionRewardOffer("quiz-1")).toBeNull();
   });
 
-  it("treats a malformed or empty payload as an empty reward, never an error", async () => {
+  it("returns null for a null / malformed payload instead of throwing", async () => {
     rpcMock.mockResolvedValue({ data: null, error: null });
-    expect(await rewardSessionIngredients("s")).toEqual({ isWin: false, ingredients: [], unlockedRecipeIds: [] });
-
-    rpcMock.mockResolvedValue({ data: { ingredients: "nope", unlockedRecipeIds: [1, "ok"] }, error: null });
-    expect(await rewardSessionIngredients("s")).toEqual({ isWin: false, ingredients: [], unlockedRecipeIds: ["ok"] });
+    expect(await requestSessionRewardOffer("quiz-1")).toBeNull();
+    rpcMock.mockResolvedValue({ data: { hasOffer: true, quizSessionId: "q", offers: "nope", picksAllowed: 1 }, error: null });
+    expect(await requestSessionRewardOffer("quiz-1")).toBeNull();
   });
 
-  it("drops rows with no usable key and defaults a bad quantity to 1", async () => {
+  it("caps picks at the number of offers and drops rows with no key", async () => {
     rpcMock.mockResolvedValue({
-      data: {
-        isWin: true,
-        ingredients: [
+      data: offerPayload({
+        picksAllowed: 3,
+        offers: [
           { ingredientKey: "", quantity: 2 },
-          { ingredientKey: "a", quantity: -3, isMystery: true },
-          { ingredientKey: "b", quantity: 2.9, isMystery: true },
+          { ingredientKey: "milk", quantity: -3, isMystery: false },
         ],
-        unlockedRecipeIds: [],
-      },
+      }),
       error: null,
     });
 
-    const result = await rewardSessionIngredients("s");
+    const offer = await requestSessionRewardOffer("quiz-1");
 
-    expect(result.ingredients.map((row) => [row.ingredientKey, row.quantity])).toEqual([
-      ["a", 1],
-      ["b", 2],
-    ]);
+    expect(offer?.offers.map((row) => [row.ingredientKey, row.quantity])).toEqual([["milk", 1]]);
+    expect(offer?.picksAllowed).toBe(1);
   });
 
   it("throws on an RPC error so callers can log it and still finish the session", async () => {
     rpcMock.mockResolvedValue({ data: null, error: { message: "boom" } });
+    await expect(requestSessionRewardOffer("quiz-1")).rejects.toThrow("requestSessionRewardOffer: boom");
+  });
+});
 
-    await expect(rewardSessionIngredients("session-1")).rejects.toThrow("rewardSessionIngredients: boom");
+describe("claimSessionRewardOffer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSession();
+  });
+
+  it("sends the session id and the chosen keys", async () => {
+    rpcMock.mockResolvedValue({ data: { success: false, code: "no_offer" }, error: null });
+
+    await claimSessionRewardOffer("quiz-1", ["a", "b"]);
+
+    expect(rpcMock).toHaveBeenCalledWith("claim_session_ingredient_offer", {
+      p_quiz_session_id: "quiz-1",
+      p_ingredient_keys: ["a", "b"],
+    });
+  });
+
+  it("maps a successful claim: granted ingredients and unlocked recipes", async () => {
+    rpcMock.mockResolvedValue({
+      data: {
+        success: true,
+        code: "claimed",
+        isWin: true,
+        ingredients: [{ ingredientKey: "wild-tiger-prawn", labelI18n: null, iconPath: null, quantity: 2, isMystery: true }],
+        unlockedRecipeIds: ["recipe-1", 7],
+      },
+      error: null,
+    });
+
+    const result = await claimSessionRewardOffer("quiz-1", ["wild-tiger-prawn"]);
+
+    expect(result).toEqual({
+      success: true,
+      isWin: true,
+      ingredients: [{ ingredientKey: "wild-tiger-prawn", quantity: 2, isMystery: true }],
+      unlockedRecipeIds: ["recipe-1"],
+    });
+  });
+
+  it.each(["forbidden", "no_offer", "already_claimed", "invalid_selection"] as const)(
+    "passes through the %s refusal code",
+    async (code) => {
+      rpcMock.mockResolvedValue({ data: { success: false, code }, error: null });
+      expect(await claimSessionRewardOffer("quiz-1", ["a"])).toEqual({ success: false, code });
+    }
+  );
+
+  it("maps an unexpected refusal to 'unknown' rather than throwing", async () => {
+    rpcMock.mockResolvedValue({ data: { success: false, code: "weird" }, error: null });
+    expect(await claimSessionRewardOffer("quiz-1", ["a"])).toEqual({ success: false, code: "unknown" });
+    rpcMock.mockResolvedValue({ data: null, error: null });
+    expect(await claimSessionRewardOffer("quiz-1", ["a"])).toEqual({ success: false, code: "unknown" });
+  });
+
+  it("throws on an RPC transport error", async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: "boom" } });
+    await expect(claimSessionRewardOffer("quiz-1", ["a"])).rejects.toThrow("claimSessionRewardOffer: boom");
+  });
+});
+
+describe("listPendingRewardOffers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSession();
+  });
+
+  it("maps each pending offer and ignores anything malformed or already claimed", async () => {
+    rpcMock.mockResolvedValue({
+      data: [
+        offerPayload({ quizSessionId: "quiz-a" }),
+        offerPayload({ quizSessionId: "quiz-b", claimed: true }),
+        { hasOffer: false },
+        null,
+      ],
+      error: null,
+    });
+
+    const pending = await listPendingRewardOffers();
+
+    expect(rpcMock).toHaveBeenCalledWith("list_pending_ingredient_offers");
+    expect(pending.map((offer) => offer.quizSessionId)).toEqual(["quiz-a"]);
+  });
+
+  it("returns an empty list for no data, and throws on an RPC error", async () => {
+    rpcMock.mockResolvedValue({ data: null, error: null });
+    expect(await listPendingRewardOffers()).toEqual([]);
+    rpcMock.mockResolvedValue({ data: null, error: { message: "boom" } });
+    await expect(listPendingRewardOffers()).rejects.toThrow("listPendingRewardOffers: boom");
   });
 });
 
