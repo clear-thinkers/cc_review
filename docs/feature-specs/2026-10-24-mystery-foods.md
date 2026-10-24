@@ -16,6 +16,8 @@ Covers roadmap items **L** (Mystery Foods), **M** (win session + mystery-ingredi
 
 Build progress is tracked in `docs/feature-specs/2026-10-24-mystery-foods-build-plan.md` (staged checklist with a handoff block).
 
+> **Superseded in part by item P (2026-10-24):** mystery ingredients are now *offered* and claimed by the child's pick (1 / 2 / 3 by Tested Count) instead of being granted automatically, and the auto-unlock runs at claim time. See `2026-10-24-child-packaged-sessions-and-reward-picks.md`. The win rule, priority order and quantities below are unchanged.
+
 ## Problem
 
 A completed packaged session pays out up to 3 random ingredients from recipes the child already unlocked, no matter how well they did. There is no reason to aim for a clean session, and nothing long-term to work toward. We want a reward tier for clean ("win") sessions that builds toward a special food the child cannot get any other way.

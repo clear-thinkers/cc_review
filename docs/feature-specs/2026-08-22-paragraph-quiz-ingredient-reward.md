@@ -205,3 +205,8 @@ The Scope section above already called this out as the expected next step: *"Sco
 ## Addendum — 2026-10-24: superseded for win sessions by Mystery Foods
 
 Both call sites now call `rewardSessionIngredients` (`reward_session_ingredients`) instead of `rewardRandomIngredients`. A **non-win** session still receives exactly the random reward described in this spec (`reward_random_ingredients` is unchanged, apart from now excluding mystery ingredients from its pool). A **win** session instead receives mystery ingredients and **not** this random reward. See `docs/feature-specs/2026-10-24-mystery-foods.md` and `0_ARCHITECTURE.md` Fill-Test Review Rule 40. No acceptance criterion above is invalidated for non-win sessions.
+
+## Addendum — 2026-10-24 (item P): reward is now offer → claim, sized by Tested Count
+
+The reward is no longer granted automatically. Finishing a packaged session creates a stored **offer** of up to 3 candidates (`shop_ingredient_reward_offers`); the child picks 1 / 2 / 3 of them by the session's Tested Count (< 10 → no reward, 10–19 → 1, 20–29 → 2, ≥ 30 → 3) and `claim_session_ingredient_offer` grants the pick. The "up to 3 random distinct ingredients pooled from unlocked recipes" pool described above is unchanged and still defines a *non-win* offer. `reward_random_ingredients` is no longer callable by clients. See `docs/feature-specs/2026-10-24-child-packaged-sessions-and-reward-picks.md`.
+
