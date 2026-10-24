@@ -4,7 +4,7 @@ Roadmap item **O**. Separate from the Mystery Foods build (`2026-10-24-mystery-f
 
 ## Status
 
-**Ready to build (2026-10-24).** Art delivered, lines written, decisions confirmed. Runtime behavior below is agreed. No code, schema, or route is touched until the owner approves the behavior sections and the art exists.
+**Shipped 2026-10-24 — manual in-browser QA passed on dev.** Art delivered and processed, lines written, behavior agreed and built. No code, schema, or route is touched until the owner approves the behavior sections and the art exists.
 
 ## Problem
 
@@ -50,12 +50,12 @@ Concept chosen by the artists/owner: a plump **grey tabby cat chef** (tall white
 | `c5.jpeg` | `hungry` | big eyes, drool, paws on belly |
 | `chef_cook.jpeg` | — | 2752×1536 scene of the cat cooking soup on a stool in a rustic kitchen; **not requested, not in any pose list, and a different art style from the game's isometric kitchen** — no planned use |
 
-To do before use: convert the five poses to real-transparency PNGs at `public/kitchen/chef_<pose>.png` (same transparency normalization as the `add-food` skill). `c2`/`c3` were re-exported smaller (~1330×1330) than `c1`/`c4`/`c5` (2048×2048) — normalize all five to one canvas size and a shared feet baseline during processing. `lineup.jpeg` was deleted.
+**Done 2026-10-24:** processed into `public/kitchen/chef_<pose>.png` — real transparency, normalized to one canvas with an identical hat column (x=512), hat top (y=80) and feet line (y=930), then downscaled to **512×512** (the chef displays at ~150 px, and all five poses preload; ~150 KB each instead of ~550 KB). Originally to do: convert the five poses to real-transparency PNGs at `public/kitchen/chef_<pose>.png` (same transparency normalization as the `add-food` skill). `c2`/`c3` were re-exported smaller (~1330×1330) than `c1`/`c4`/`c5` (2048×2048) — normalize all five to one canvas size and a shared feet baseline during processing. `lineup.jpeg` was deleted.
 
 ## Proposed behavior (for discussion)
 
-- Chef sits as an overlay on the kitchen page (position TBD against the isometric scene — the open floor at bottom-left is the likely spot), clickable.
-- Four triggers: **unlock** (a mystery food just auto-unlocked — shown on the next kitchen visit if it happened during a quiz), **start cooking** (recipe picked), **cook success** (celebration burst), **idle tap** (child taps the chef while at least one dish is served). Each plays its pose + bubble for a few seconds, then returns to `idle`.
+- Chef sits as an overlay on the kitchen page, **standing on the middle rung of the ladder** (owner request 2026-10-24; the ladder is part of all three existing scene illustrations at the same spot, so no new kitchen image is needed), clickable.
+- Four triggers: **unlock** (a mystery food just auto-unlocked — shown on the next kitchen visit if it happened during a quiz), **start cooking** (as built: played when the child returns to the scene with a recipe chosen, because picking happens inside full-screen modals), **cook success** (celebration burst), **idle tap** (child taps the chef while at least one dish is served). Each plays its pose + bubble for a few seconds, then returns to `idle`.
 - Lines per recipe: if a recipe has its own lines, use them; otherwise a small generic set. Storage: a localized `chef_lines_i18n` jsonb on `shop_recipes` (needs a migration and `AI_CONTRACT.md §2` authorization) **or** a static strings entry in `words.strings.ts` keyed by recipe slug (no migration). Recommend the strings file for v1.
 - Respect `prefers-reduced-motion`; never block cooking, never required to dismiss.
 

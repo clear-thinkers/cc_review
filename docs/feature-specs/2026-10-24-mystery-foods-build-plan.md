@@ -5,9 +5,9 @@ Staged development checklist so no step is missed between sessions. **This file 
 ## Handoff — current state (update at the end of every session)
 
 - **Last updated:** 2026-10-24.
-- **Current stage:** Mystery Foods (Part 1) **complete and shipped**: dev + prod migration done, live QA passed, committed and pushed to `main` 2026-10-24. Only the Stage 11 prod smoke check remains for the owner to confirm. Part 2 (Chef, item O) is next whenever the owner wants it.
-- **Next action:** (owner) confirm the prod smoke check — the crystal-dumpling tile and ingredient art load on prod, which requires the app deploy that includes the new `public/` PNGs. (Claude) Part 2: Chef, starting at Stage C0.
-- **Blockers / notes:** none.
+- **Current stage:** Part 1 (Mystery Foods) and Part 2 (Chef) are both **complete, QA'd, committed and pushed to `main`** (2026-10-24).
+- **Next action:** none pending from this plan, except the owner's prod smoke check (the deployed site loads the dumplings tile, the new ingredient icons and the chef art — all `public/` PNGs must be in the deploy).
+- **Blockers / notes:** none. Chef art ships as 512×512 PNGs in `public/kitchen/`; source JPEGs stay local (gitignored staging).
 
 ## Standing authorizations (do not re-ask; cite this)
 
@@ -169,29 +169,33 @@ Throwaway test family/child; clean up afterwards. **Implemented as a re-runnable
 UI-only; no migration; no authorization boundary. Do after Part 1 (the unlock line needs the mystery unlock) unless the owner reorders.
 
 ### Stage C0 — Pre-flight
-- [ ] Re-read the chef spec; baseline `tsc`/`npm test`/`check:encoding` green
+- [x] Re-read the chef spec; baseline `tsc`/`npm test`/`check:encoding` green
 
 ### Stage C1 — Art processing
 Sources in `public/rewards/staging/`: `c1`–`c5`.jpeg (`c2`/`c3` are ~1330², the others 2048²).
-- [ ] `c1`→`public/kitchen/chef_idle.png`, `c2`→`chef_amazed.png`, `c3`→`chef_careful.png`, `c4`→`chef_celebrate.png`, `c5`→`chef_hungry.png`
-- [ ] Real transparency on all five; all normalized to one canvas size with a shared feet baseline
-- [ ] Visual check at ~160 px tall (is `chef_careful` too stern at that size? if so, flag to the owner)
-- [ ] `chef_cook.jpeg` left untouched (no planned use)
+- [x] `c1`→`public/kitchen/chef_idle.png`, `c2`→`chef_amazed.png`, `c3`→`chef_careful.png`, `c4`→`chef_celebrate.png`, `c5`→`chef_hungry.png`
+- [x] Real transparency on all five; all normalized to one canvas size with a shared feet baseline
+- [x] Visual check at ~160 px tall (is `chef_careful` too stern at that size? if so, flag to the owner)
+- [x] `chef_cook.jpeg` left untouched (no planned use)
 
 ### Stage C2 — Strings + helpers
-- [ ] `words.strings.ts` (or `kitchen.strings.ts`, whichever the kitchen already uses): `kitchenChef` section with generic lines (all triggers, 3 variants) + `crystal-dumpling` lines, EN + ZH, parity test
-- [ ] Pure helper: pick line by trigger/recipe/locale with recipe override, generic fallback, never repeat last line; unit tests incl. cooldown logic
-- [ ] Chef name available for `aria-label`: "Chef Shrewy" / 鼩仔
+- [x] `words.strings.ts` (or `kitchen.strings.ts`, whichever the kitchen already uses): `kitchenChef` section with generic lines (all triggers, 3 variants) + `crystal-dumpling` lines, EN + ZH, parity test
+- [x] Pure helper: pick line by trigger/recipe/locale with recipe override, generic fallback, never repeat last line; unit tests incl. cooldown logic
+- [x] Chef name available for `aria-label`: "Chef Shrewy" / 鼩仔
 
 ### Stage C3 — Component
-- [ ] Chef overlay + speech bubble on `KitchenSection.tsx`; pose swaps per trigger, returns to `idle` after a few seconds
-- [ ] Four triggers wired: unlock (next-visit, local "seen" flag), start cooking, cook success, idle tap (served vs. empty kitchen variants)
-- [ ] Tap cooldown; `prefers-reduced-motion` respected; bubble wraps for long recipe lines
-- [ ] Never covers fridge/recipe book/stove/oven/shelf hotspots; collapsible on small screens
-- [ ] Tests at the helper/subcomponent seam
+- [x] Chef overlay + speech bubble on `KitchenSection.tsx`; pose swaps per trigger, returns to `idle` after a few seconds
+- [x] Four triggers wired: unlock (next-visit, local "seen" flag), start cooking, cook success, idle tap (served vs. empty kitchen variants)
+- [x] Tap cooldown; `prefers-reduced-motion` respected; bubble wraps for long recipe lines
+- [x] Never covers fridge/recipe book/stove/oven/shelf hotspots; collapsible on small screens
+- [x] Tests at the helper/subcomponent seam
 
 ### Stage C4 — Verification + docs
-- [ ] `tsc`, `eslint`, `npm test`, `check:encoding` green
-- [ ] `0_ARCHITECTURE.md` Shop Kitchen rules + `0_PRODUCT_ROADMAP.md` item O + chef spec status updated
-- [ ] Live QA: all four triggers in EN and ZH, phone + desktop widths, hotspots still clickable
-- [ ] Docs Check block in the session summary
+- [x] `tsc`, `eslint`, `npm test`, `check:encoding` green
+- [x] `0_ARCHITECTURE.md` Shop Kitchen rules + `0_PRODUCT_ROADMAP.md` item O + chef spec status updated
+- [x] Live QA: all four triggers in EN and ZH, phone + desktop widths, hotspots still clickable — owner reported manual QA passed on dev (2026-10-24), including the ladder placement
+- [x] Docs Check block in the session summary
+- **Built 2026-10-24.** Files (all in `src/app/words/shop/kitchen/`): `kitchenChef.types.ts` (+ test), `kitchenChef.strings.ts`, `kitchenChef.utils.ts` (pure: `pickChefLine`, `findUnseenMysteryUnlocks`, seen-flag parse/serialize, `canChefRespondToTap`), `kitchenChef.test.ts`, `useKitchenChef.ts` (pose/line state, 5 s timer, tap cooldown), `KitchenChef.tsx` (overlay + bubble + hide button); `KitchenSection.tsx` wired (unlock announcement after load, `start` on returning to the scene with a recipe chosen, `success` after a cook, tap). Art: `public/kitchen/chef_{idle,amazed,careful,celebrate,hungry}.png` (512×512).
+- Decisions made while building: (1) **`start` plays when the recipe book / special-ingredients picker closes with a recipe chosen**, not at pick time — both are full-screen modals, so a line at pick time would play unseen behind the overlay; (2) `tapServed` pools generic lines with each served recipe's own tap lines (so the generic lines never disappear once a mystery dish is served); (3) the chef is hidden/shown with a × button (state not persisted); (4) the ingredient-style "collapse on small screens" is that same button, default shown; (5) **placement (owner request 2026-10-24): the chef stands on the ladder** — `left 22.5% / top 31% / width 14%` of the scene box, feet on the middle rung; checked by compositing onto all three scene images; his click target is a body-sized button so the fridge/stove hotspots beside the ladder keep their clicks; the bubble opens upward, left-aligned to him.
+- Tests: **1030 pass** (+28: 4 types, 24 strings/helpers). `tsc` clean; `check:encoding` passes; `next build` succeeds; eslint clean on all touched/new files (only the same 7 pre-existing errors elsewhere).
+- **Owner QA passed (2026-10-24).** Checklist that was used: all four triggers in EN and ZH; the bubble fits at phone width and never blocks a hotspot; the chef doesn't cover the shelf/stove/oven clicks; `careful` doesn't look stern at ~150 px; the × button works.
