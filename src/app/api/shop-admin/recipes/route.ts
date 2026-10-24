@@ -20,6 +20,7 @@ import {
   normalizeShopLocalizedTitle,
   normalizeShopCookMethod,
   normalizeShopFoodType,
+  normalizeShopTeaserI18n,
 } from "@/lib/shop";
 import { getServerSupabaseClient, supabase } from "@/lib/supabaseClient";
 
@@ -40,11 +41,14 @@ interface SupabaseShopRecipeRow {
   special_ingredient_slots_i18n?: unknown;
   cook_method?: string | null;
   food_type?: string | null;
+  is_mystery?: boolean | null;
+  teaser_i18n?: unknown;
 }
 
 interface SupabaseShopIngredientLabelRow {
   ingredient_key: string;
   label_i18n?: unknown;
+  is_mystery?: boolean | null;
 }
 
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
@@ -77,6 +81,8 @@ function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
     variantIconRules: normalizeShopVariantIconRules(row.variant_icon_rules),
     cookMethod: normalizeShopCookMethod(row.cook_method),
     foodType: normalizeShopFoodType(row.food_type),
+    isMystery: row.is_mystery === true,
+    teaserI18n: normalizeShopTeaserI18n(row.teaser_i18n),
   };
 }
 
@@ -209,9 +215,31 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     variantIconRules: body.variantIconRules,
     cookMethod: body.cookMethod,
     foodType: body.foodType,
+    isMystery: body.isMystery,
+    teaserI18n: body.teaserI18n,
   });
 
-  const validationErrors = validateShopRecipeAdminDraft(normalizedDraft);
+  // The catalog is loaded up front: the mystery-ingredient set drives validation
+  // (a mystery food may use only mystery ingredients, and vice versa), and the
+  // labels drive the ingredient-row merge below.
+  const { data: ingredientLabelRows, error: ingredientLabelError } = await auth.adminClient
+    .from("shop_ingredient_prices")
+    .select("ingredient_key, label_i18n, is_mystery");
+
+  if (ingredientLabelError) {
+    return NextResponse.json(
+      { error: "Could not load shared ingredient labels." },
+      { status: 500 }
+    );
+  }
+
+  const mysteryIngredientKeys = new Set(
+    ((ingredientLabelRows ?? []) as SupabaseShopIngredientLabelRow[])
+      .filter((row) => row.is_mystery === true)
+      .map((row) => canonicalizeShopIngredientKey(row.ingredient_key))
+  );
+
+  const validationErrors = validateShopRecipeAdminDraft(normalizedDraft, mysteryIngredientKeys);
   if (validationErrors.length > 0) {
     return NextResponse.json(
       { error: validationErrors[0], validationErrors },
@@ -237,16 +265,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   const existingRecipe = toShopRecipe(existingRow as SupabaseShopRecipeRow);
-  const { data: ingredientLabelRows, error: ingredientLabelError } = await auth.adminClient
-    .from("shop_ingredient_prices")
-    .select("ingredient_key, label_i18n");
-
-  if (ingredientLabelError) {
-    return NextResponse.json(
-      { error: "Could not load shared ingredient labels." },
-      { status: 500 }
-    );
-  }
 
   const ingredientLabelByKey = new Map(
     ((ingredientLabelRows ?? []) as SupabaseShopIngredientLabelRow[])
@@ -303,6 +321,14 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       variant_icon_rules: mergedVariantIconRules,
       cook_method: normalizedDraft.cookMethod,
       food_type: normalizedDraft.foodType,
+      is_mystery: normalizedDraft.isMystery,
+      // Blank teaser (both locales) stores null so the shop falls back to its generic teaser.
+      teaser_i18n:
+        normalizedDraft.teaserI18n.en || normalizedDraft.teaserI18n.zh
+          ? normalizedDraft.teaserI18n
+          : null,
+      // A mystery food always unlocks free (DB constraint shop_recipes_mystery_unlocks_free).
+      ...(normalizedDraft.isMystery ? { unlock_cost_coins: 0 } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", normalizedDraft.recipeId)

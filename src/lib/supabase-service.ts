@@ -26,6 +26,7 @@ import type {
   RedeemCoinsResult,
   CoinBreakdown,
   RewardedIngredient,
+  SessionIngredientReward,
   ShopIngredientLedgerEntry,
   ShopCookedDish,
   CookShopRecipeResult,
@@ -46,6 +47,7 @@ import {
   normalizeShopLocalizedTitle,
   normalizeShopCookMethod,
   normalizeShopFoodType,
+  normalizeShopTeaserI18n,
   normalizeShopSpecialIngredientKeys,
   normalizeCookShopRecipeResult,
   normalizeOrganizeKitchenCountertopResult,
@@ -349,6 +351,8 @@ interface SupabaseShopRecipeRow {
   special_ingredient_slots_i18n?: unknown;
   cook_method?: string | null;
   food_type?: string | null;
+  is_mystery?: boolean | null;
+  teaser_i18n?: unknown;
 }
 
 interface SupabaseShopRecipeUnlockRow {
@@ -376,6 +380,7 @@ interface SupabaseShopIngredientPriceRow {
   updated_at: string;
   label_i18n?: unknown;
   icon_path?: string | null;
+  is_mystery?: boolean | null;
 }
 
 function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
@@ -408,6 +413,8 @@ function toShopRecipe(row: SupabaseShopRecipeRow): ShopRecipe {
     variantIconRules: normalizeShopVariantIconRules(row.variant_icon_rules),
     cookMethod: normalizeShopCookMethod(row.cook_method),
     foodType: normalizeShopFoodType(row.food_type),
+    isMystery: row.is_mystery === true,
+    teaserI18n: normalizeShopTeaserI18n(row.teaser_i18n),
   };
 }
 
@@ -439,6 +446,7 @@ function toShopIngredientPrice(row: SupabaseShopIngredientPriceRow): ShopIngredi
     ingredientKey: canonicalizeShopIngredientKey(row.ingredient_key),
     costCoins: row.cost_coins,
     updatedAt: new Date(row.updated_at).getTime(),
+    isMystery: row.is_mystery === true,
     ...(typeof row.icon_path === "string"
       ? { iconPath: row.icon_path.trim() || null }
       : {}),
@@ -1503,6 +1511,63 @@ export async function rewardRandomIngredients(quizSessionId: string): Promise<Re
   });
   if (error) throw new Error(`rewardRandomIngredients: ${error.message}`);
   return ((data ?? []) as SupabaseRewardedIngredientRow[]).map(toRewardedIngredient);
+}
+
+/** One ingredient as returned inside reward_session_ingredients' jsonb result (already camelCase, unlike reward_random_ingredients' table rows). */
+interface SessionIngredientRewardJsonRow {
+  ingredientKey?: unknown;
+  labelI18n?: unknown;
+  iconPath?: unknown;
+  quantity?: unknown;
+  isMystery?: unknown;
+}
+
+function toSessionRewardedIngredient(row: SessionIngredientRewardJsonRow): RewardedIngredient | null {
+  if (typeof row.ingredientKey !== "string" || !row.ingredientKey.trim()) {
+    return null;
+  }
+  const base = toRewardedIngredient({
+    ingredient_key: row.ingredientKey,
+    label_i18n: row.labelI18n,
+    icon_path: typeof row.iconPath === "string" ? row.iconPath : null,
+  });
+  const quantity =
+    typeof row.quantity === "number" && Number.isFinite(row.quantity) && row.quantity > 0
+      ? Math.floor(row.quantity)
+      : 1;
+  return { ...base, quantity, isMystery: row.isMystery === true };
+}
+
+/**
+ * The single reward call for a completed PACKAGED session (roadmap items L/M/N,
+ * 2026-10-24). The server decides win vs. non-win from the saved quiz session and
+ * returns either mystery ingredients (win, full per-food quantity each) or the
+ * regular random reward, plus any mystery foods this reward auto-unlocked. Like
+ * rewardRandomIngredients, an empty `ingredients` array is never an error (nothing
+ * to give, or this quiz_session_id was already rewarded) -- callers must not treat
+ * it as a failure, and a thrown error must never block session completion.
+ */
+export async function rewardSessionIngredients(quizSessionId: string): Promise<SessionIngredientReward> {
+  const { data, error } = await supabase.rpc("reward_session_ingredients", {
+    p_quiz_session_id: quizSessionId,
+  });
+  if (error) throw new Error(`rewardSessionIngredients: ${error.message}`);
+
+  const raw = (data && typeof data === "object" ? data : {}) as {
+    isWin?: unknown;
+    ingredients?: unknown;
+    unlockedRecipeIds?: unknown;
+  };
+  const rows = Array.isArray(raw.ingredients) ? (raw.ingredients as SessionIngredientRewardJsonRow[]) : [];
+  return {
+    isWin: raw.isWin === true,
+    ingredients: rows
+      .map(toSessionRewardedIngredient)
+      .filter((row): row is RewardedIngredient => row !== null),
+    unlockedRecipeIds: Array.isArray(raw.unlockedRecipeIds)
+      ? raw.unlockedRecipeIds.filter((id): id is string => typeof id === "string")
+      : [],
+  };
 }
 
 // ─── Shop Kitchen (feature spec 2026-08-23-kitchen-page.md) ────────────────

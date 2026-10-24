@@ -27,6 +27,8 @@ function makeRecipe(overrides: Partial<ShopRecipe>): ShopRecipe {
     variantIconRules: [],
     cookMethod: null,
     foodType: null,
+    isMystery: false,
+    teaserI18n: null,
     ...overrides,
   };
 }

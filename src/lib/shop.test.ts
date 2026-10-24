@@ -15,6 +15,8 @@ import {
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedSpecialIngredients,
   normalizeShopSpecialIngredientList,
+  normalizeShopTeaserI18n,
+  SHOP_WALL_SIZE,
   normalizeShopVariantIconRules,
   normalizeUnlockShopRecipeResult,
   normalizeRedeemCoinsResult,
@@ -218,7 +220,7 @@ describe("resolveShopIngredientCost", () => {
           name: "Milk",
           quantity: 1,
         },
-        buildShopIngredientPriceMap([{ ingredientKey: "milk", costCoins: 9, updatedAt: 0 }])
+        buildShopIngredientPriceMap([{ ingredientKey: "milk", costCoins: 9, updatedAt: 0, isMystery: false }])
       )
     ).toBe(9);
   });
@@ -360,6 +362,31 @@ describe("normalizeShopLocalizedIngredients", () => {
   });
 });
 
+describe("normalizeShopTeaserI18n", () => {
+  it("returns trimmed EN/ZH copy", () => {
+    expect(normalizeShopTeaserI18n({ en: " A secret. ", zh: " 秘密。 " })).toEqual({ en: "A secret.", zh: "秘密。" });
+  });
+
+  it("fills a blank locale from the other one", () => {
+    expect(normalizeShopTeaserI18n({ en: "Only EN", zh: "  " })).toEqual({ en: "Only EN", zh: "Only EN" });
+    expect(normalizeShopTeaserI18n({ en: "", zh: "只有中文" })).toEqual({ en: "只有中文", zh: "只有中文" });
+  });
+
+  it("returns null for missing, non-object, or all-blank input", () => {
+    expect(normalizeShopTeaserI18n(undefined)).toBeNull();
+    expect(normalizeShopTeaserI18n(null)).toBeNull();
+    expect(normalizeShopTeaserI18n("text")).toBeNull();
+    expect(normalizeShopTeaserI18n({ en: " ", zh: "" })).toBeNull();
+    expect(normalizeShopTeaserI18n({ en: 3, zh: {} })).toBeNull();
+  });
+});
+
+describe("SHOP_WALL_SIZE", () => {
+  it("has room for every launch recipe plus the Crystal Dumplings mystery food (14)", () => {
+    expect(SHOP_WALL_SIZE).toBe(14);
+  });
+});
+
 describe("normalizeUnlockShopRecipeResult", () => {
   it("normalizes a successful rpc payload", () => {
     expect(
@@ -376,6 +403,24 @@ describe("normalizeUnlockShopRecipeResult", () => {
       recipeId: "recipe-1",
       remainingCoins: 75,
       coinsSpent: 25,
+    });
+  });
+
+  it("passes through the mystery_not_ready failure code", () => {
+    expect(
+      normalizeUnlockShopRecipeResult({
+        success: false,
+        code: "mystery_not_ready",
+        recipeId: "recipe-m",
+        remainingCoins: 10,
+        coinsSpent: 0,
+      })
+    ).toEqual({
+      success: false,
+      code: "mystery_not_ready",
+      recipeId: "recipe-m",
+      remainingCoins: 10,
+      coinsSpent: 0,
     });
   });
 
@@ -499,6 +544,8 @@ describe("getShopRecipeContentForLocale", () => {
           variantIconRules: [{ match: [], iconPath: "/rewards/bubble-tea_plain.png" }],
           cookMethod: null,
           foodType: null,
+          isMystery: false,
+          teaserI18n: null,
         },
         "zh"
       )
@@ -533,6 +580,8 @@ describe("getShopRecipeContentForLocale", () => {
           variantIconRules: [{ match: [], iconPath: "/rewards/cake_plain.png" }],
           cookMethod: null,
           foodType: null,
+          isMystery: false,
+          teaserI18n: null,
         },
         "zh"
       )
@@ -667,6 +716,7 @@ describe("resolveShopIngredientLabel", () => {
     ingredientKey: "milk",
     costCoins: 5,
     updatedAt: 0,
+    isMystery: false,
     labelI18n: { en: "Fresh Milk", zh: "鲜奶" },
     iconPath: null,
   };

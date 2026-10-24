@@ -26,6 +26,8 @@ export type ShopAdminIngredientCatalogItem = {
   iconPath: string | null;
   costCoins: number;
   usage: ShopAdminIngredientUsage;
+  /** Mystery ingredient (roadmap item L): price is always 0 and it is never for sale. */
+  isMystery: boolean;
 };
 
 export type ShopAdminIngredientPricesResponse = {
@@ -486,6 +488,7 @@ export function buildShopAdminIngredientCatalogItems(
         defaultCostCoins: seededEntry?.defaultCostCoins ?? 0,
         iconPath: resolveIngredientIconOverride(key, seededEntry?.iconPath ?? null, prices),
         costCoins: priceEntry?.costCoins ?? seededEntry?.defaultCostCoins ?? 0,
+        isMystery: priceEntry?.isMystery ?? false,
         usage: recipeReference?.usage ?? {
           usedInBase: false,
           usedInSpecial: false,

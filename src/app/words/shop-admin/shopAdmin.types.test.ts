@@ -73,6 +73,8 @@ const recipeFixture: ShopRecipe = {
   ],
   cookMethod: null,
   foodType: null,
+  isMystery: false,
+  teaserI18n: null,
 };
 
 describe("shopAdmin.types", () => {
@@ -403,6 +405,7 @@ describe("shopAdmin.types", () => {
         iconPath: "/ingredients/brown-sugar.png",
         costCoins: 5,
         usage: { usedInBase: false, usedInSpecial: true },
+        isMystery: false,
       },
     ]);
     const right = [
@@ -427,6 +430,7 @@ describe("shopAdmin.types", () => {
         iconPath: "/ingredients/brown-sugar.png",
         costCoins: 5,
         usage: { usedInBase: false, usedInSpecial: true },
+        isMystery: false,
       },
     ]);
   });

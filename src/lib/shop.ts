@@ -27,10 +27,27 @@ import {
   type ShopIngredientCatalogEntry,
 } from "./shopIngredients";
 
-export const SHOP_WALL_SIZE = 13;
+export const SHOP_WALL_SIZE = 14;
 export const SHOP_INGREDIENT_QUANTITY_MIN = 1;
 export const SHOP_INGREDIENT_QUANTITY_MAX = 99;
 const SHOP_PLAIN_ICON_TOKEN = "plain";
+
+/**
+ * Mystery-food teaser copy (shop_recipes.teaser_i18n). Null when absent or when
+ * both locales are blank, so callers can fall back to a generic teaser.
+ */
+export function normalizeShopTeaserI18n(raw: unknown): ShopLocalizedValue<string> | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const source = raw as { en?: unknown; zh?: unknown };
+  const en = typeof source.en === "string" ? source.en.trim() : "";
+  const zh = typeof source.zh === "string" ? source.zh.trim() : "";
+  if (!en && !zh) {
+    return null;
+  }
+  return { en: en || zh, zh: zh || en };
+}
 
 export function normalizeShopVariantMatchKeys(raw: unknown): string[] {
   if (!Array.isArray(raw)) {
@@ -578,6 +595,7 @@ export function normalizeUnlockShopRecipeResult(raw: unknown): UnlockShopRecipeR
     code === "insufficient_coins" ||
     code === "plain_icon_missing" ||
     code === "recipe_not_available" ||
+    code === "mystery_not_ready" ||
     code === "forbidden"
       ? code
       : "unknown";

@@ -123,7 +123,7 @@ export default function FillTestReviewSection({ vm }: { vm: WordsWorkspaceVM }) 
       <section className="space-y-3 rounded-lg border p-4">
         <h2 className="font-medium">{str.fillTest.pageTitle}</h2>
         <IngredientRewardPanel
-          ingredients={quizRewardedIngredients}
+          reward={quizRewardedIngredients}
           strings={str.ingredientReward}
           onContinue={continueQuizAfterIngredientReward}
         />

@@ -29,10 +29,11 @@ describe("buildShopAdminIngredientCatalogItems", () => {
           ingredientKey: "milk",
           costCoins: 9,
           updatedAt: 0,
+          isMystery: false,
           labelI18n: { en: "Fresh Milk", zh: "\u9c9c\u5976" },
           iconPath: "/ingredients/fresh-milk.png",
         },
-        { ingredientKey: "brown-sugar", costCoins: 5, updatedAt: 0 },
+        { ingredientKey: "brown-sugar", costCoins: 5, updatedAt: 0, isMystery: false },
       ],
       recipes
     );

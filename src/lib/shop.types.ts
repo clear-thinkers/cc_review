@@ -46,6 +46,10 @@ export type ShopRecipe = {
   variantIconRules: ShopVariantIconRule[];
   cookMethod: ShopCookMethod | null;
   foodType: ShopFoodType | null;
+  /** Mystery food (roadmap item L): free, auto-unlocks once the child holds every ingredient, which can only come from win-session rewards. */
+  isMystery: boolean;
+  /** Shown on the locked mystery tile instead of the food's name; null for non-mystery foods (or a mystery food with none set). */
+  teaserI18n: ShopLocalizedValue<string> | null;
 };
 
 export type ShopRecipeUnlock = {
@@ -61,13 +65,28 @@ export type ShopIngredientPrice = {
   updatedAt: number;
   labelI18n?: ShopLocalizedValue<string>;
   iconPath?: string | null;
+  /** Mystery ingredient (roadmap item L): never buyable, never in the random-reward pool. */
+  isMystery: boolean;
 };
 
-/** One ingredient rewarded by reward_random_ingredients (paragraph-quiz ingredient reward, 2026-08-22). */
+/** One ingredient rewarded by reward_session_ingredients (paragraph-quiz ingredient reward, 2026-08-22; mystery fields added 2026-10-24). */
 export type RewardedIngredient = {
   ingredientKey: string;
   labelI18n?: ShopLocalizedValue<string>;
   iconPath?: string | null;
+  /** Units granted. Always 1 for the random reward; the full per-food quantity for a mystery ingredient. */
+  quantity?: number;
+  /** True for a mystery ingredient (win-session reward); absent/false for the regular random reward. */
+  isMystery?: boolean;
+};
+
+/** Result of reward_session_ingredients -- the single reward call for a completed packaged session. */
+export type SessionIngredientReward = {
+  /** Server-determined win (Failed Count 0; paragraph quiz: zero bounces). */
+  isWin: boolean;
+  ingredients: RewardedIngredient[];
+  /** Mystery foods this reward just completed and auto-unlocked. */
+  unlockedRecipeIds: string[];
 };
 
 export type ShopTransactionAction = "unlock_recipe" | "purchase_ingredient";
@@ -130,6 +149,7 @@ export type UnlockShopRecipeErrorCode =
   | "insufficient_coins"
   | "plain_icon_missing"
   | "recipe_not_available"
+  | "mystery_not_ready"
   | "forbidden"
   | "unknown";
 

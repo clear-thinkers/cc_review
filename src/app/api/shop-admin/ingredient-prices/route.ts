@@ -24,6 +24,7 @@ type ShopIngredientPriceRow = {
   cost_coins: number;
   label_i18n?: unknown;
   icon_path?: string | null;
+  is_mystery?: boolean | null;
 };
 
 type ShopRecipeSpecialIngredientRow = {
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }: { data: ShopIngredientPriceRow[] | null; error: { message?: string } | null } =
     await auth.adminClient
     .from("shop_ingredient_prices")
-    .select("ingredient_key, cost_coins, label_i18n, icon_path")
+    .select("ingredient_key, cost_coins, label_i18n, icon_path, is_mystery")
     .order("ingredient_key", { ascending: true });
 
   if (isMissingIconPathColumnError(priceError)) {
@@ -189,6 +190,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ingredientKey: canonicalizeShopIngredientKey(row.ingredient_key),
         costCoins: row.cost_coins,
         updatedAt: Date.now(),
+        isMystery: row.is_mystery === true,
         iconPath:
           typeof row.icon_path === "string" ? row.icon_path.trim() || null : null,
         labelI18n:
@@ -264,6 +266,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           typeof source.iconPath === "string"
             ? source.iconPath.trim() || null
             : null,
+        isMystery: source.isMystery === true,
       };
     })
     .filter((ingredient) => ingredient.ingredientKey);
@@ -278,11 +281,24 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  const invalidMysteryIngredient = normalizedIngredients.find(
+    (ingredient) => ingredient.isMystery && ingredient.costCoins !== 0
+  );
+  if (invalidMysteryIngredient) {
+    return NextResponse.json(
+      {
+        error: `Ingredient ${invalidMysteryIngredient.ingredientKey} is a mystery ingredient, so its price must be 0.`,
+      },
+      { status: 400 }
+    );
+  }
+
   const upsertRows = normalizedIngredients.map((ingredient) => ({
     ingredient_key: ingredient.ingredientKey,
     cost_coins: ingredient.costCoins,
     label_i18n: ingredient.labelI18n,
     icon_path: ingredient.iconPath,
+    is_mystery: ingredient.isMystery,
     updated_at: new Date().toISOString(),
   }));
 

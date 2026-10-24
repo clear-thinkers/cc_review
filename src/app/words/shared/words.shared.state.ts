@@ -41,7 +41,7 @@ import {
   listParagraphs,
   listAllParagraphTestModes,
   getActiveSessionTargetKeys,
-  rewardRandomIngredients,
+  rewardSessionIngredients,
 } from "@/lib/supabase-service";
 import { gradeBundledFillTest, type Placement } from "@/lib/fillTest";
 import {
@@ -4352,9 +4352,9 @@ const gradeLabels = getGradeLabels(str);
         // this feature existed.
         if (completedReviewTestSession && quizSessionId) {
           try {
-            const rewards = await rewardRandomIngredients(quizSessionId);
-            if (rewards.length > 0) {
-              setQuizRewardedIngredients(rewards);
+            const reward = await rewardSessionIngredients(quizSessionId);
+            if (reward.ingredients.length > 0) {
+              setQuizRewardedIngredients(reward);
               return; // defer finalizeQuizCompletion until Continue is clicked
             }
           } catch (error) {

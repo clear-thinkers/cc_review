@@ -19,6 +19,7 @@ export const kitchenStrings = {
     fridgeCloseButton: "Close",
     fridgeEmpty: "Nothing here yet — finish a paragraph quiz to earn ingredients!",
     ingredientCountSuffix: "kinds",
+    fridgeMysteryBadge: "Mystery",
 
     // Section: Recipe Book
     bookLabel: "Recipe Book",
@@ -98,6 +99,7 @@ export const kitchenStrings = {
     fridgeCloseButton: "关闭",
     fridgeEmpty: "这里还没有食材——完成一次段落测验来获得食材吧!",
     ingredientCountSuffix: "种",
+    fridgeMysteryBadge: "神秘",
 
     // Section: Recipe Book
     bookLabel: "食谱书",

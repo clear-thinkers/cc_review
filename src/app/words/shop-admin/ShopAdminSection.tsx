@@ -40,7 +40,7 @@ import {
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type NoticeState = { kind: "success" | "error"; message: string } | null;
-type IngredientUsageFilter = "all" | "base" | "special" | "unused";
+type IngredientUsageFilter = "all" | "base" | "special" | "unused" | "mystery";
 
 const PANEL =
   "rounded-[1.5rem] border bg-[var(--shop-admin-panel-bg)] p-5 md:p-6 [border-color:var(--shop-admin-panel-border)]";
@@ -118,6 +118,9 @@ function matchesIngredientUsageFilter(
   if (filter === "special") {
     return ingredient.usage.usedInSpecial;
   }
+  if (filter === "mystery") {
+    return ingredient.isMystery;
+  }
   return !ingredient.usage.usedInBase && !ingredient.usage.usedInSpecial;
 }
 
@@ -162,9 +165,19 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     () => (selectedRecipe ? getShopRecipeContentForLocale(selectedRecipe, locale) : null),
     [selectedRecipe, locale]
   );
+  const mysteryIngredientKeys = useMemo(
+    () =>
+      new Set(
+        ingredientCatalogDraft
+          .filter((ingredient) => ingredient.isMystery)
+          .map((ingredient) => ingredient.key.trim().toLowerCase())
+          .filter(Boolean)
+      ),
+    [ingredientCatalogDraft]
+  );
   const recipeValidationErrors = useMemo(
-    () => (draft ? validateShopRecipeAdminDraft(draft) : []),
-    [draft]
+    () => (draft ? validateShopRecipeAdminDraft(draft, mysteryIngredientKeys) : []),
+    [draft, mysteryIngredientKeys]
   );
   const ingredientValidationErrors = useMemo(
     () => validateShopAdminIngredientDrafts(ingredientCatalogDraft),
@@ -334,6 +347,17 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
 
   function updateFoodType(value: ShopFoodType | null): void {
     updateDraft((current) => ({ ...current, foodType: value }));
+  }
+
+  function updateIsMystery(value: boolean): void {
+    updateDraft((current) => ({ ...current, isMystery: value }));
+  }
+
+  function updateTeaser(targetLocale: ShopLocale, value: string): void {
+    updateDraft((current) => ({
+      ...current,
+      teaserI18n: { ...current.teaserI18n, [targetLocale]: value },
+    }));
   }
 
   function updateIngredientName(
@@ -605,6 +629,15 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
     }));
   }
 
+  function updateManagedIngredientMystery(draftId: string, value: boolean): void {
+    updateIngredientDraft(draftId, (current) => ({
+      ...current,
+      isMystery: value,
+      // A mystery ingredient is never for sale, so its price is pinned to 0.
+      costCoins: value ? 0 : current.costCoins,
+    }));
+  }
+
   function updateManagedIngredientPrice(draftId: string, rawValue: string): void {
     const parsedValue = Number.parseInt(rawValue, 10);
     updateIngredientDraft(draftId, (current) => ({
@@ -798,6 +831,7 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
               ["base", strings.ingredientPricing.filterBase],
               ["special", strings.ingredientPricing.filterSpecial],
               ["unused", strings.ingredientPricing.filterUnused],
+              ["mystery", strings.ingredientPricing.filterMystery],
             ] as const
           ).map(([filterValue, filterLabel]) => {
             const isActive = ingredientUsageFilter === filterValue;
@@ -869,6 +903,11 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap gap-2">
+                      {ingredient.isMystery ? (
+                        <span className="rounded-full bg-purple-600 px-2.5 py-1 text-[11px] font-semibold text-white">
+                          {strings.ingredientPricing.mysteryBadge}
+                        </span>
+                      ) : null}
                       {ingredient.usage.usedInBase ? (
                         <span className="rounded-full bg-[var(--shop-admin-success-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--shop-admin-success-text)]">
                           {strings.ingredientPricing.baseBadge}
@@ -943,11 +982,31 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                     min={0}
                     step={1}
                     value={ingredient.costCoins}
+                    disabled={ingredient.isMystery}
                     onChange={(event) =>
                       updateManagedIngredientPrice(ingredient.draftId, event.target.value)
                     }
-                    className={INPUT}
+                    className={ingredient.isMystery ? READONLY : INPUT}
                   />
+                </label>
+
+                <label className="mt-4 flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={ingredient.isMystery}
+                    onChange={(event) =>
+                      updateManagedIngredientMystery(ingredient.draftId, event.target.checked)
+                    }
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="text-sm font-semibold text-[var(--shop-admin-text-dark)]">
+                      {strings.ingredientPricing.mysteryToggle}
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-5 text-[var(--shop-admin-support-text)]">
+                      {strings.ingredientPricing.mysteryHelper}
+                    </span>
+                  </span>
                 </label>
 
                 <div className="mt-4 border-t pt-4 [border-color:var(--shop-admin-divider)]">
@@ -1186,6 +1245,39 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
                       {strings.fields.foodTypeHelper}
                     </p>
                   </label>
+                  <label className="flex items-start gap-2 xl:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={draft.isMystery}
+                      onChange={(event) => updateIsMystery(event.target.checked)}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="text-sm font-semibold text-[var(--shop-admin-text-dark)]">
+                        {strings.fields.isMystery}
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-5 text-[var(--shop-admin-support-text)]">
+                        {strings.fields.isMysteryHelper}
+                      </span>
+                    </span>
+                  </label>
+                  {draft.isMystery ? (
+                    <label className="block xl:col-span-2">
+                      <span className={LABEL}>
+                        {locale === "en" ? strings.fields.teaserEnglish : strings.fields.teaserChinese}
+                      </span>
+                      <textarea
+                        value={draft.teaserI18n[locale]}
+                        onChange={(event) => updateTeaser(locale, event.target.value)}
+                        className={INPUT}
+                        rows={2}
+                        maxLength={140}
+                      />
+                      <p className="mt-1 text-xs leading-5 text-[var(--shop-admin-support-text)]">
+                        {strings.fields.teaserHelper}
+                      </p>
+                    </label>
+                  ) : null}
                 </div>
               </div>
 

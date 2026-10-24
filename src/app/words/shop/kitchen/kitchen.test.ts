@@ -44,6 +44,8 @@ function recipe(overrides: Partial<ShopRecipe>): ShopRecipe {
     variantIconRules: [],
     cookMethod: "stove",
     foodType: "drinks",
+    isMystery: false,
+    teaserI18n: null,
     ...overrides,
   };
 }

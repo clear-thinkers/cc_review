@@ -19,7 +19,10 @@ import type { WordsWorkspaceVM } from "../shared/WordsWorkspaceVM";
 import {
   getCoinBreakdown,
   listCoinRedemptions,
+  listShopIngredientConsumptions,
   listShopIngredientPrices,
+  listShopIngredientPurchases,
+  listShopIngredientRewards,
   listShopRecipeUnlocks,
   listShopRecipes,
   listShopTransactions,
@@ -27,7 +30,11 @@ import {
   redeemCoins,
   unlockShopRecipe,
 } from "@/lib/supabase-service";
+import { getMysteryFoodProgress } from "@/lib/mysteryFood";
+import { requirementsFromShopIngredients } from "@/lib/mysteryFoodUi";
+import { MysteryFoodTile, MysteryRecipeModal } from "./MysteryFoodTile";
 import {
+  buildShopIngredientAvailabilityMap,
   buildShopIngredientPriceMap,
   buildShopIngredientRecordMap,
   SHOP_INGREDIENT_QUANTITY_MAX,
@@ -64,6 +71,8 @@ function buildUnlockNotice(
       return strings.recipeNotOpenYet;
     case "recipe_not_available":
       return strings.recipeUnavailable;
+    case "mystery_not_ready":
+      return strings.mystery.lockedHint;
     case "forbidden":
       return strings.childOnly;
     default:
@@ -210,6 +219,11 @@ function RecipeModal({
     ? ingredientPriceByKey.get(selectedIngredientCatalogEntry.key) ??
       selectedIngredientCatalogEntry.defaultCostCoins
     : null;
+  // Mystery ingredients are never for sale (roadmap item L): no price, no Buy.
+  const selectedIngredientIsMystery = Boolean(
+    selectedIngredientCatalogEntry &&
+      ingredientRecordsByKey.get(selectedIngredientCatalogEntry.key)?.isMystery
+  );
   const buyQuantity = parseShopIngredientQuantity(buyQuantityInput);
   const isBuying = Boolean(
     selectedIngredientCatalogEntry && buyingIngredientKey === selectedIngredientCatalogEntry.key
@@ -379,7 +393,9 @@ function RecipeModal({
                     <div className="mt-1 text-lg font-semibold text-[#8b6f2f]">{formatIngredientAmount(selectedIngredient)}</div>
                   </div>
 
-                  {selectedIngredientCatalogEntry && selectedIngredientCostPerUnit !== null ? (
+                  {selectedIngredientIsMystery ? (
+                    <p className="text-sm text-gray-500">{strings.mystery.ingredientNotForSale}</p>
+                  ) : selectedIngredientCatalogEntry && selectedIngredientCostPerUnit !== null ? (
                     <div className="space-y-3 rounded-xl border border-[#eadfbe] bg-white px-4 py-3">
                       <div className="text-sm font-semibold text-[#8b6f2f]">
                         {formatWithToken(strings.modal.ingredientCost, "{coins}", String(selectedIngredientCostPerUnit))}
@@ -650,6 +666,9 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
     available: 0,
   });
   const [unlocks, setUnlocks] = useState<ShopRecipeUnlock[]>([]);
+  const [ingredientAvailability, setIngredientAvailability] = useState<ReadonlyMap<string, number>>(
+    () => new Map()
+  );
   const [transactions, setTransactions] = useState<ShopTransaction[]>([]);
   const [redemptions, setRedemptions] = useState<CoinRedemption[]>([]);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -693,6 +712,9 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
           unlockRows,
           transactionRows,
           redemptionRows,
+          rewardLedger,
+          purchaseLedger,
+          consumptionLedger,
         ] = await Promise.all([
           getCoinBreakdown(childTarget?.userId),
           listShopIngredientPrices(),
@@ -700,6 +722,9 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
           listShopRecipeUnlocks(childTarget?.userId),
           listShopTransactions(childTarget?.userId),
           listCoinRedemptions(childTarget?.userId),
+          listShopIngredientRewards(childTarget?.userId),
+          listShopIngredientPurchases(childTarget?.userId),
+          listShopIngredientConsumptions(childTarget?.userId),
         ]);
 
         if (isCancelled) return;
@@ -710,6 +735,9 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
         setUnlocks(unlockRows);
         setTransactions(transactionRows);
         setRedemptions(redemptionRows);
+        setIngredientAvailability(
+          buildShopIngredientAvailabilityMap([...rewardLedger, ...purchaseLedger], consumptionLedger)
+        );
         setLoadState("ready");
       } catch (error) {
         console.error("Failed to load shop:", error);
@@ -1080,7 +1108,14 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
                           <img src={iconPath} alt={localizedRecipe.title} className="relative z-[1] h-28 w-28 object-contain drop-shadow-[0_10px_18px_rgba(113,78,28,0.18)] sm:h-32 sm:w-32" />
                         ) : null}
                       </div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-[#8d7a55]">{str.unlocked}</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-[#8d7a55]">
+                        {str.unlocked}
+                        {recipe.isMystery ? (
+                          <span className="ml-2 rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
+                            {str.mystery.unlockedBadge}
+                          </span>
+                        ) : null}
+                      </p>
                       <p className="text-xl leading-tight font-semibold text-[#203529]">{localizedRecipe.title}</p>
                       <p className="text-sm leading-6 text-[#6f8266]">{localizedRecipe.intro}</p>
                       <button
@@ -1091,6 +1126,23 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
                         {str.showIngredients}
                       </button>
                     </article>
+                  );
+                }
+
+                if (recipe.isMystery) {
+                  return (
+                    <MysteryFoodTile
+                      key={recipe.id}
+                      recipe={recipe}
+                      iconPath={iconPath}
+                      progress={getMysteryFoodProgress(
+                        { ingredients: requirementsFromShopIngredients(recipe.baseIngredients) },
+                        ingredientAvailability
+                      )}
+                      locale={locale}
+                      strings={str}
+                      onOpen={() => setSelectedRecipe(recipe)}
+                    />
                   );
                 }
 
@@ -1253,7 +1305,22 @@ export default function ShopSection({ vm }: { vm: WordsWorkspaceVM }) {
         </div>
       )}
 
-      {selectedRecipe ? (
+      {selectedRecipe && selectedRecipe.isMystery && !unlockedRecipeIds.has(selectedRecipe.id) ? (
+        <MysteryRecipeModal
+          recipe={selectedRecipe}
+          ingredientRecordsByKey={ingredientRecordsByKey}
+          availability={ingredientAvailability}
+          progress={getMysteryFoodProgress(
+            { ingredients: requirementsFromShopIngredients(selectedRecipe.baseIngredients) },
+            ingredientAvailability
+          )}
+          locale={locale}
+          strings={str}
+          onClose={() => setSelectedRecipe(null)}
+        />
+      ) : null}
+
+      {selectedRecipe && !(selectedRecipe.isMystery && !unlockedRecipeIds.has(selectedRecipe.id)) ? (
         <RecipeModal
           recipe={selectedRecipe}
           ingredientRecordsByKey={ingredientRecordsByKey}

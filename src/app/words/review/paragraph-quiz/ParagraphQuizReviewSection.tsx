@@ -6,7 +6,7 @@ import type { ParagraphQuizBlank } from "@/lib/paragraphQuizBuilder";
 import { deriveParagraphBlankTier, resolveParagraphQuizBlanks } from "@/lib/paragraphQuizBuilder";
 import { calculateSessionCoins } from "@/lib/coins";
 import type { QuizSession } from "@/lib/quiz.types";
-import type { RewardedIngredient } from "@/lib/shop.types";
+import type { SessionIngredientReward } from "@/lib/shop.types";
 import {
   completeReviewTestSession,
   gradeVocabPhrase,
@@ -14,7 +14,7 @@ import {
   loadReviewSessionProgress,
   nudgeWordFamiliarity,
   recordQuizSession,
-  rewardRandomIngredients,
+  rewardSessionIngredients,
   saveReviewSessionProgress,
 } from "@/lib/supabase-service";
 import { extractUniqueHanzi, resolveParagraphQuizResume } from "../../shared/words.shared.utils";
@@ -64,7 +64,7 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [revealOpenSpanId, setRevealOpenSpanId] = useState<string | null>(null);
-  const [rewardedIngredients, setRewardedIngredients] = useState<RewardedIngredient[] | null>(null);
+  const [rewardedIngredients, setRewardedIngredients] = useState<SessionIngredientReward | null>(null);
   const loadedSessionIdRef = useRef<string | null>(null);
 
   const blanksBySpanId = useMemo((): Map<string, ParagraphQuizBlank> => {
@@ -184,9 +184,9 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
     // through to completeSessionAndReturn exactly as before this feature.
     if (quizSessionId) {
       try {
-        const rewards = await rewardRandomIngredients(quizSessionId);
-        if (rewards.length > 0) {
-          setRewardedIngredients(rewards);
+        const reward = await rewardSessionIngredients(quizSessionId);
+        if (reward.ingredients.length > 0) {
+          setRewardedIngredients(reward);
           return;
         }
       } catch (error) {
@@ -330,7 +330,7 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
       <section className="space-y-3 rounded-lg border p-4">
         <h2 className="font-medium">{pqStr.pageLabel.replace("{name}", activeReviewTestSession?.name ?? "")}</h2>
         <IngredientRewardPanel
-          ingredients={rewardedIngredients}
+          reward={rewardedIngredients}
           strings={str.ingredientReward}
           onContinue={handleRewardContinue}
         />

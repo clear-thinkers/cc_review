@@ -25,6 +25,7 @@ export const SHOP_RECIPE_TITLE_MAX = 80;
 export const SHOP_RECIPE_INTRO_MAX = 240;
 export const SHOP_RECIPE_INGREDIENT_NAME_MAX = 60;
 export const SHOP_ADMIN_INGREDIENT_PRICE_MAX = 999;
+export const SHOP_RECIPE_TEASER_MAX = 140;
 export const SHOP_ADMIN_INGREDIENT_SAVE_ERROR_CODES = {
   missingIconPathColumn: "missing_icon_path_column",
 } as const;
@@ -48,6 +49,10 @@ export type ShopRecipeAdminDraft = {
   cookMethod: ShopCookMethod | null;
   /** Which shelf tab a cooked dish is organized under. Required whenever cookMethod is set -- see validateShopRecipeAdminDraft. */
   foodType: ShopFoodType | null;
+  /** Mystery food (roadmap item L): free, auto-unlocks once every ingredient is held, ingredients limited to mystery ingredients. */
+  isMystery: boolean;
+  /** Shown on the locked mystery tile in place of the food's name. Blank is allowed (the shop falls back to a generic teaser). */
+  teaserI18n: ShopLocalizedValue<string>;
 };
 
 export type ShopAdminVariantIngredientOption = {
@@ -68,6 +73,7 @@ export type ShopAdminIngredientDraft = {
   costCoins: number;
   usage: ShopAdminIngredientUsage;
   isPersisted: boolean;
+  isMystery: boolean;
 };
 
 type ShopIngredientLabelLookup = ReadonlyMap<string, ShopLocalizedValue<string>>;
@@ -90,6 +96,7 @@ export function buildShopAdminIngredientDrafts(
     costCoins: item.costCoins,
     usage: { ...item.usage },
     isPersisted: true,
+    isMystery: item.isMystery,
   }));
 }
 
@@ -106,6 +113,7 @@ export function createEmptyShopAdminIngredientDraft(draftId: string): ShopAdminI
       usedInSpecial: false,
     },
     isPersisted: false,
+    isMystery: false,
   };
 }
 
@@ -142,6 +150,7 @@ export function normalizeShopAdminIngredientDraft(raw: unknown): ShopAdminIngred
         : 0,
     usage: normalizeShopAdminIngredientUsage(source.usage),
     isPersisted: source.isPersisted === true,
+    isMystery: source.isMystery === true,
   };
 }
 
@@ -192,6 +201,10 @@ export function validateShopAdminIngredientDrafts(
       );
     }
 
+    if (draft.isMystery && draft.costCoins !== 0) {
+      errors.push(`Ingredient ${rowNumber}: a mystery ingredient can't have a price (it is never for sale).`);
+    }
+
     if (draft.iconPath && !draft.iconPath.startsWith("/")) {
       errors.push(`Ingredient ${rowNumber}: icon path must start with "/".`);
     }
@@ -213,6 +226,7 @@ export function serializeShopAdminIngredientDrafts(
     iconPath: draft.iconPath.trim() || null,
     costCoins: draft.costCoins,
     usage: { ...draft.usage },
+    isMystery: draft.isMystery,
   }));
 }
 
@@ -246,6 +260,8 @@ export function buildShopRecipeAdminDraft(recipe: ShopRecipe): ShopRecipeAdminDr
     })),
     cookMethod: recipe.cookMethod,
     foodType: recipe.foodType,
+    isMystery: recipe.isMystery,
+    teaserI18n: { en: recipe.teaserI18n?.en ?? "", zh: recipe.teaserI18n?.zh ?? "" },
   };
 }
 
@@ -467,6 +483,8 @@ export function normalizeShopRecipeAdminDraft(draft: {
   variantIconRules?: unknown;
   cookMethod?: unknown;
   foodType?: unknown;
+  isMystery?: unknown;
+  teaserI18n?: unknown;
 }): ShopRecipeAdminDraft {
   return {
     recipeId: typeof draft.recipeId === "string" ? draft.recipeId.trim() : "",
@@ -477,6 +495,8 @@ export function normalizeShopRecipeAdminDraft(draft: {
     variantIconRules: normalizeVariantIconRules(draft.variantIconRules),
     cookMethod: normalizeShopCookMethod(draft.cookMethod),
     foodType: normalizeShopFoodType(draft.foodType),
+    isMystery: draft.isMystery === true,
+    teaserI18n: normalizeLocalizedStringValue(draft.teaserI18n),
   };
 }
 
@@ -543,7 +563,16 @@ function validateLocalizedIngredientRows(params: {
   return errors;
 }
 
-export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): string[] {
+/**
+ * `mysteryIngredientKeys` is the set of catalog keys flagged is_mystery. When given
+ * (the save route and the admin page both pass it), a mystery food may use ONLY
+ * mystery ingredients and a normal recipe may use NONE -- mystery ingredients are
+ * never for sale, so a normal recipe needing one could never be cooked.
+ */
+export function validateShopRecipeAdminDraft(
+  draft: ShopRecipeAdminDraft,
+  mysteryIngredientKeys?: ReadonlySet<string>
+): string[] {
   const normalized = normalizeShopRecipeAdminDraft(draft);
   const errors: string[] = [];
 
@@ -580,6 +609,35 @@ export function validateShopRecipeAdminDraft(draft: ShopRecipeAdminDraft): strin
   // can't be cookable without also knowing where it belongs.
   if (normalized.cookMethod !== null && normalized.foodType === null) {
     errors.push("Food Type is required for a cookable recipe (Shop Kitchen).");
+  }
+
+  if (normalized.isMystery) {
+    if (normalized.cookMethod === null) {
+      errors.push("A mystery food must be cookable: set a Cook Method.");
+    }
+    for (const locale of ["en", "zh"] as const) {
+      if (normalized.teaserI18n[locale].length > SHOP_RECIPE_TEASER_MAX) {
+        errors.push(
+          `${locale.toUpperCase()} teaser must be ${SHOP_RECIPE_TEASER_MAX} characters or fewer.`
+        );
+      }
+    }
+  }
+
+  if (mysteryIngredientKeys) {
+    const usedKeys = new Set(
+      [...normalized.baseIngredients.en, ...normalized.specialIngredients.en]
+        .map((ingredient) => canonicalizeShopIngredientKey(ingredient.ingredientKey))
+        .filter(Boolean)
+    );
+    for (const key of usedKeys) {
+      const isMysteryKey = mysteryIngredientKeys.has(key);
+      if (normalized.isMystery && !isMysteryKey) {
+        errors.push(`A mystery food can only use mystery ingredients ("${key}" is a normal ingredient).`);
+      } else if (!normalized.isMystery && isMysteryKey) {
+        errors.push(`Only a mystery food can use a mystery ingredient ("${key}").`);
+      }
+    }
   }
 
   errors.push(

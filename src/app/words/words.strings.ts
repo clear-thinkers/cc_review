@@ -387,6 +387,16 @@ export const wordsStrings = {
       headlinePlural: "You earned {count} ingredients!",
       subtext: "Take them back to the kitchen to cook something new.",
       continueButton: "Continue",
+      // Win session (mystery ingredients replace the random reward).
+      winEyebrow: "Perfect session!",
+      winHeadlineSingular: "You found 1 mystery ingredient!",
+      winHeadlinePlural: "You found {count} mystery ingredients!",
+      winSubtext: "Collect them all to unlock a mystery food.",
+      mysteryBadge: "Mystery",
+      quantityTimes: "×{quantity}",
+      unlockedEyebrow: "Mystery food unlocked!",
+      unlockedHeadline: "{title} is ready to cook!",
+      unlockedSubtext: "Head to Shop Kitchen to make it.",
     },
 
     // ============= QUIZ RESULTS PAGE =============
@@ -514,6 +524,19 @@ export const wordsStrings = {
         buyRecipeNotUnlocked: "Unlock this recipe first.",
         buyInvalidQuantity: "Enter a quantity between 1 and 99.",
       },
+      mystery: {
+        tileLabel: "Mystery Food",
+        lockedHint:
+          "Finish a study session without any completely wrong answers to find secret ingredients.",
+        progress: "{have}/{total} ingredients",
+        progressAria: "{have} of {total} mystery ingredients collected",
+        tileAria: "Mystery food, {have} of {total} ingredients collected",
+        teaserFallback: "Something delicious is waiting to be discovered…",
+        unlockedBadge: "Mystery",
+        modalHeading: "Secret Ingredients",
+        ingredientHave: "You have {have}, need {need}",
+        ingredientNotForSale: "Mystery ingredients can't be bought. Earn them in study sessions.",
+      },
       history: {
         tooltip: "Tap to open a pop-up of your shop coin history.",
         title: "Shop Coin History",
@@ -636,6 +659,13 @@ export const wordsStrings = {
         foodTypeDrinks: "Drinks",
         foodTypeHotMeal: "Hot Meal",
         foodTypeDesserts: "Desserts",
+        isMystery: "Mystery Food",
+        isMysteryHelper:
+          "Stays locked until the child holds every ingredient, which can only come from win-session rewards. Unlock cost is always 0, and only mystery ingredients may be used.",
+        teaserEnglish: "Teaser (EN)",
+        teaserChinese: "Teaser (ZH)",
+        teaserHelper:
+          "Shown on the locked mystery tile instead of the food's name, so don't reveal what it is.",
       },
       ingredients: {
         iconIngredient: "Icon Ingredient",
@@ -673,6 +703,11 @@ export const wordsStrings = {
         baseBadge: "Base",
         specialBadge: "Special",
         unusedBadge: "Unused",
+        filterMystery: "Mystery",
+        mysteryBadge: "Mystery",
+        mysteryToggle: "Mystery ingredient",
+        mysteryHelper:
+          "Cannot be bought and never appears in random rewards. Only mystery foods may use it. Price is always 0.",
         emptyState: "No ingredients in this filter yet.",
         add: "Add Ingredient",
         delete: "Delete Ingredient",
@@ -1733,6 +1768,16 @@ export const wordsStrings = {
       headlinePlural: "你获得了 {count} 个食材！",
       subtext: "把它们带回厨房，做点新东西吧！",
       continueButton: "继续",
+      // 全胜测验（神秘食材取代随机奖励）。
+      winEyebrow: "完美通关！",
+      winHeadlineSingular: "你找到了 1 种神秘食材！",
+      winHeadlinePlural: "你找到了 {count} 种神秘食材！",
+      winSubtext: "集齐所有神秘食材，就能解锁神秘美食。",
+      mysteryBadge: "神秘",
+      quantityTimes: "×{quantity}",
+      unlockedEyebrow: "神秘美食已解锁！",
+      unlockedHeadline: "{title} 可以烹饪啦！",
+      unlockedSubtext: "快去食谱厨房做做看吧！",
     },
 
     // ============= 测验结果页面 =============
@@ -1859,6 +1904,18 @@ export const wordsStrings = {
         buyRecipeNotUnlocked: "请先解锁这个食谱。",
         buyInvalidQuantity: "请输入 1 到 99 之间的数量。",
       },
+      mystery: {
+        tileLabel: "神秘美食",
+        lockedHint: "完成一次没有完全答错的学习，就能找到神秘食材。",
+        progress: "{have}/{total} 种食材",
+        progressAria: "已集齐 {total} 种神秘食材中的 {have} 种",
+        tileAria: "神秘美食，已集齐 {have}/{total} 种食材",
+        teaserFallback: "有一道美味正等着你发现……",
+        unlockedBadge: "神秘",
+        modalHeading: "神秘食材",
+        ingredientHave: "已有 {have}，需要 {need}",
+        ingredientNotForSale: "神秘食材不能购买，只能通过学习奖励获得。",
+      },
       history: {
         tooltip: "点击后可弹出查看你的商店金币记录。",
         title: "商店金币记录",
@@ -1979,6 +2036,12 @@ export const wordsStrings = {
         foodTypeDrinks: "饮品",
         foodTypeHotMeal: "热菜",
         foodTypeDesserts: "甜点",
+        isMystery: "神秘美食",
+        isMysteryHelper:
+          "需集齐所有食材才会解锁，而食材只能通过学习奖励获得。解锁费用固定为 0，且只能使用神秘食材。",
+        teaserEnglish: "提示语（英文）",
+        teaserChinese: "提示语（中文）",
+        teaserHelper: "未解锁时显示在神秘卡片上，用来代替菜名，请不要透露是什么菜。",
       },
       ingredients: {
         iconIngredient: "图标材料",
@@ -2014,6 +2077,10 @@ export const wordsStrings = {
         baseBadge: "基础",
         specialBadge: "特殊",
         unusedBadge: "未使用",
+        filterMystery: "神秘",
+        mysteryBadge: "神秘",
+        mysteryToggle: "神秘食材",
+        mysteryHelper: "不能购买，也不会出现在随机奖励中，只能用于神秘美食。价格固定为 0。",
         emptyState: "这个筛选下暂时没有材料。",
         add: "新增材料",
         delete: "删除材料",

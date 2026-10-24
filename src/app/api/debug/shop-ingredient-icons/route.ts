@@ -25,6 +25,7 @@ type ShopIngredientPriceRow = {
   cost_coins: number;
   label_i18n?: unknown;
   icon_path?: string | null;
+  is_mystery?: boolean | null;
 };
 
 type ShopRecipeIngredientReferenceRow = {
@@ -166,7 +167,7 @@ async function loadAuditResponse(
   }: { data: ShopIngredientPriceRow[] | null; error: { message?: string } | null } =
     await adminClient
       .from("shop_ingredient_prices")
-      .select("ingredient_key, cost_coins, label_i18n, icon_path")
+      .select("ingredient_key, cost_coins, label_i18n, icon_path, is_mystery")
       .order("ingredient_key", { ascending: true });
 
   if (isMissingIconPathColumnError(priceError)) {
@@ -221,6 +222,7 @@ async function loadAuditResponse(
       ingredientKey: canonicalizeShopIngredientKey(row.ingredient_key),
       costCoins: row.cost_coins,
       updatedAt: Date.now(),
+      isMystery: row.is_mystery === true,
       iconPath: typeof row.icon_path === "string" ? row.icon_path.trim() || null : null,
       labelI18n:
         row.label_i18n && typeof row.label_i18n === "object"

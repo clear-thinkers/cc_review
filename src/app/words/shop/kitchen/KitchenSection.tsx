@@ -165,8 +165,17 @@ function FridgeModal({
                 return (
                   <div
                     key={ingredient.ingredientKey}
-                    className="flex flex-col items-center gap-2 rounded-xl border border-[#eadfbe] bg-white px-3 py-3 text-center"
+                    className={
+                      record?.isMystery
+                        ? "relative flex flex-col items-center gap-2 rounded-xl border border-purple-300 bg-white px-3 py-3 text-center shadow-[0_0_10px_rgba(126,34,206,0.18)]"
+                        : "flex flex-col items-center gap-2 rounded-xl border border-[#eadfbe] bg-white px-3 py-3 text-center"
+                    }
                   >
+                    {record?.isMystery ? (
+                      <span className="absolute -top-2 left-2 rounded-full bg-purple-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                        {strings.fridgeMysteryBadge}
+                      </span>
+                    ) : null}
                     <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-[#eadfbe] bg-[#fff8ea] p-1.5">
                       {iconPath ? (
                         <img src={iconPath} alt={label} className="h-full w-full object-contain" />
