@@ -43,3 +43,7 @@ next-env.d.ts
 # local agent artifacts
 tmpclaude-*
 .claude/settings.local.json
+
+# raw art staging folders (source images awaiting place-icon/normalize; never shipped)
+/public/**/staging/
+/public/**/_staging/

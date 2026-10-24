@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useLocale } from "@/app/shared/locale";
+import { useSession } from "@/lib/authContext";
 import type {
   ShopCookedDish,
   ShopFoodType,
@@ -32,6 +33,10 @@ import {
 } from "@/lib/supabase-service";
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 import { kitchenStrings } from "./kitchen.strings";
+import KitchenChef from "./KitchenChef";
+import { kitchenChefStrings } from "./kitchenChef.strings";
+import { findUnseenMysteryUnlocks, parseSeenUnlockIds, serializeSeenUnlockIds } from "./kitchenChef.utils";
+import { useKitchenChef } from "./useKitchenChef";
 import {
   buildCountertopTiles,
   buildShelfTilesByFoodType,
@@ -617,6 +622,12 @@ function ShelfModal({
 export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   const locale = useLocale();
   const str = kitchenStrings[locale];
+  const session = useSession();
+  const userId = session?.userId ?? null;
+  const chefStrings = kitchenChefStrings[locale];
+  const chef = useKitchenChef(chefStrings);
+  const chefSay = chef.say;
+  const [isChefHidden, setIsChefHidden] = useState(false);
 
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [recipes, setRecipes] = useState<ShopRecipe[]>([]);
@@ -664,6 +675,36 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
         setConsumptions(consumptionRows);
         setDishes(dishRows);
         setLoadState("ready");
+
+        // A mystery food unlocks during a quiz, not here, so the chef announces any
+        // newly unlocked one the first time the child comes back to the kitchen.
+        // "Already announced" lives in localStorage (a lost flag just means one
+        // repeat line -- low stakes), keyed per profile.
+        if (userId) {
+          const storageKey = `hq-kitchen-chef-seen-unlocks:${userId}`;
+          let seen = new Set<string>();
+          try {
+            seen = parseSeenUnlockIds(window.localStorage.getItem(storageKey));
+          } catch {
+            // storage unavailable (private window etc.): treat as nothing seen
+          }
+          const unseen = findUnseenMysteryUnlocks(
+            recipeRows,
+            new Set(unlockRows.map((unlock) => unlock.recipeId)),
+            seen
+          );
+          if (unseen.length > 0) {
+            chefSay("unlock", { recipeSlug: unseen[0].slug });
+            try {
+              window.localStorage.setItem(
+                storageKey,
+                serializeSeenUnlockIds(new Set([...seen, ...unseen.map((recipe) => recipe.id)]))
+              );
+            } catch {
+              // ignore: worst case the line repeats next visit
+            }
+          }
+        }
       } catch (error) {
         console.error("Failed to load kitchen:", error);
         if (!isCancelled) setLoadState("error");
@@ -674,7 +715,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     return () => {
       isCancelled = true;
     };
-  }, [vm.page]);
+  }, [vm.page, userId, chefSay]);
 
   const ingredientRecordsByKey = useMemo(
     () => buildShopIngredientRecordMap(ingredientPrices),
@@ -709,6 +750,14 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   );
   const totalDishesMade = useMemo(() => countTotalCookedDishes(dishes), [dishes]);
   const selectedRecipe = selectedRecipeId ? recipesById.get(selectedRecipeId) ?? null : null;
+  const servedRecipeSlugs = useMemo(
+    () =>
+      dishes.flatMap((dish) => {
+        const slug = recipesById.get(dish.recipeId)?.slug;
+        return slug ? [slug] : [];
+      }),
+    [dishes, recipesById]
+  );
   const isCountertopFull = countertopCount >= SHOP_KITCHEN_COUNTERTOP_CAPACITY;
   const availableSpecialIngredientOptions = useMemo(
     () =>
@@ -764,6 +813,15 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     if (resolveAvailableSpecialIngredients(localizedSpecialIngredients, availabilityByKey).length > 0) {
       setIsBookOpen(false);
       setIsSpecialIngredientsOpen(true);
+    }
+  }
+
+  // The recipe book and special-ingredient picker are full-screen modals, so the
+  // chef's "start cooking" line plays when the child returns to the kitchen scene
+  // with a recipe chosen -- the moment they can actually see him.
+  function announceCookingStart(): void {
+    if (selectedRecipe) {
+      chef.say("start", { recipeSlug: selectedRecipe.slug });
     }
   }
 
@@ -836,6 +894,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       setSelectedRecipeId(null);
       setSelectedSpecialIngredientKeys([]);
       setNotice({ tone: "success", text: replaceToken(str.cookSuccessTemplate, "{title}", localized.title) });
+      chef.say("success", { recipeSlug: selectedRecipe.slug });
     } catch (error) {
       console.error("Failed to cook recipe:", error);
       setNotice({ tone: "error", text: str.cookFailedGeneric });
@@ -937,6 +996,16 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
               ariaLabel={str.shelfOpenAria}
               onClick={() => setIsShelfOpen(true)}
             />
+            <KitchenChef
+              pose={chef.pose}
+              line={chef.line}
+              tapAria={chefStrings.tapAria}
+              hideLabel={chefStrings.hideLabel}
+              showLabel={chefStrings.showLabel}
+              hidden={isChefHidden}
+              onTap={() => chef.tap(servedRecipeSlugs)}
+              onToggleHidden={() => setIsChefHidden((current) => !current)}
+            />
           </div>
 
           {/* Fridge / recipe book status line */}
@@ -1029,7 +1098,10 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
           onSelectRecipe={handleSelectRecipeFromBook}
           locale={locale}
           strings={str}
-          onClose={() => setIsBookOpen(false)}
+          onClose={() => {
+            setIsBookOpen(false);
+            announceCookingStart();
+          }}
         />
       ) : null}
 
@@ -1050,7 +1122,10 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
           ingredientRecordsByKey={ingredientRecordsByKey}
           locale={locale}
           strings={str}
-          onClose={() => setIsSpecialIngredientsOpen(false)}
+          onClose={() => {
+            setIsSpecialIngredientsOpen(false);
+            announceCookingStart();
+          }}
         />
       ) : null}
     </section>
