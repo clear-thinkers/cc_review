@@ -21,6 +21,7 @@ import { extractUniqueHanzi, resolveParagraphQuizResume } from "../../shared/wor
 import {
   buildParagraphQuizGradeData,
   isPageComplete,
+  isPlacementCorrect,
   isQuizComplete,
   isRevealEligible,
 } from "./paragraphQuiz.utils";
@@ -153,11 +154,11 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
     void completeSessionAndReturn();
   }
 
-  async function finishSession() {
+  async function finishSession(finalHistory: ParagraphQuizHistoryItem[]) {
     if (!activeReviewTestSession) return;
     let quizSessionId: string | null = null;
     try {
-      const gradeData = buildParagraphQuizGradeData(history);
+      const gradeData = buildParagraphQuizGradeData(finalHistory);
       const durationSeconds = sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : 0;
       const session: QuizSession = {
         id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -201,7 +202,17 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
     setSelectedBankSpanId(null);
     setDraggingSpanId(null);
 
-    if (bankSpanId !== targetSpanId) {
+    // Identical-text blanks are interchangeable: a correct drop is any bank
+    // item with the target's text, and the target's own bank entry (same
+    // text, so visually indistinguishable) is the one consumed.
+    if (
+      !isPlacementCorrect(
+        blanksBySpanId.get(bankSpanId)?.text,
+        blanksBySpanId.get(targetSpanId)?.text,
+        bankSpanId,
+        targetSpanId
+      )
+    ) {
       // Wrong drop: bounce back to the bank. Bumps TWO independent counters:
       // blankState[targetSpanId].retryCount (grading tier -- keyed by which
       // BLANK was missed, whichever bank item caused it) and
@@ -266,8 +277,11 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
         [targetSpanId]: { status: "correct", retryCount },
       };
       setBlankState(nextBlankState);
-      setHistory((previous) => [
-        ...previous,
+      // Built eagerly (not read back from `history` state) because finishSession
+      // runs in this same tick, before the setHistory below has committed --
+      // reading the closed-over `history` there dropped the final blank.
+      const nextHistory: ParagraphQuizHistoryItem[] = [
+        ...history,
         {
           spanId: blank.spanId,
           wordId: blank.wordId,
@@ -276,13 +290,14 @@ export default function ParagraphQuizReviewSection({ vm }: { vm: WordsWorkspaceV
           tier,
           retryCount,
         },
-      ]);
+      ];
+      setHistory(nextHistory);
 
       const page = paragraphQuiz.pages[currentPageIndex];
       if (page && isPageComplete(page, nextBlankState)) {
         if (isQuizComplete(paragraphQuiz.pages, nextBlankState)) {
           autosave(currentPageIndex, nextBlankState);
-          await finishSession();
+          await finishSession(nextHistory);
           return;
         }
         const nextPageIndex = currentPageIndex + 1;

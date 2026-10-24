@@ -3,6 +3,7 @@ import {
   buildParagraphQuizGradeData,
   findNextIncompletePageIndex,
   isPageComplete,
+  isPlacementCorrect,
   isQuizComplete,
   isRevealEligible,
   resolveCharacterRevealContent,
@@ -153,6 +154,24 @@ describe("buildParagraphQuizGradeData", () => {
 
   it("returns an empty array for an empty session", () => {
     expect(buildParagraphQuizGradeData([])).toEqual([]);
+  });
+});
+
+describe("isPlacementCorrect", () => {
+  it("accepts the blank's own bank item", () => {
+    expect(isPlacementCorrect("你", "你", "a", "a")).toBe(true);
+  });
+
+  it("accepts a different bank item with identical text", () => {
+    expect(isPlacementCorrect("你", "你", "a", "b")).toBe(true);
+  });
+
+  it("rejects a bank item with different text", () => {
+    expect(isPlacementCorrect("好", "你", "a", "b")).toBe(false);
+  });
+
+  it("rejects when either text is unknown", () => {
+    expect(isPlacementCorrect(undefined, undefined, "a", "b")).toBe(false);
   });
 });
 

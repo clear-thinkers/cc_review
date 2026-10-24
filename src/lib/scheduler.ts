@@ -26,6 +26,11 @@ export type GradeResult = {
 // not an independent product decision — re-derive it if FORGETTING_FACTOR ever changes.
 const R_TARGET = 0.974;
 const S_MIN = 0.5;
+// Upper bound on stability (~10 years). Without it, repeated easy/good grades compound
+// stability multiplicatively (x3+ each) with no ceiling; ~20 back-to-back easy grades push
+// nextReviewAt past Postgres bigint range and the grade write fails. At the cap the interval is
+// ~390 days, so no realistic schedule is affected.
+const S_MAX = 3650;
 const FORGETTING_FACTOR = 4;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -98,6 +103,8 @@ export function calculateNextState(word: Word, grade: Grade, now = Date.now()): 
     nextStability = Math.max(S_MIN, currentStability * 3.0 * recallBoost);
     nextRepetitions += 1;
   }
+
+  nextStability = Math.min(S_MAX, nextStability);
 
   const intervalDays = computeIntervalDays(nextStability, R_TARGET);
   const nextReviewAt = now + intervalDays * DAY_MS;

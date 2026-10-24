@@ -178,6 +178,20 @@ describe("calculateNextState", () => {
     expect(next.intervalDays).toBeGreaterThan(0);
   });
 
+  it("repeated easy grades clamp stability at the ceiling so nextReviewAt stays in bigint range", () => {
+    const now = Date.now();
+    let word = makeWord({ ease: 21, repetitions: 0, intervalDays: 0, nextReviewAt: 0 });
+
+    for (let i = 0; i < 40; i += 1) {
+      word = calculateNextState(word, "easy", now);
+    }
+
+    expect(word.ease).toBe(3650);
+    expect(word.intervalDays).toBeLessThan(1000);
+    expect(Number.isSafeInteger(Math.round(word.nextReviewAt))).toBe(true);
+    expect(word.nextReviewAt).toBeLessThan(9_223_372_036_854_775_807);
+  });
+
   it("multi-failure cycle: repeated again grades clamp at S_min", () => {
     const now = 10_000;
     let word = makeWord({ ease: 0.5, repetitions: 3, nextReviewAt: 0 });
@@ -291,19 +305,20 @@ describe("calculateNextState", () => {
   });
 
   it("floating-point stability at high values remains precise", () => {
-    // Simulate ~20 consecutive "easy" grades starting from S = 0.5, all at the same fixed `now`
+    // Simulate 8 consecutive "easy" grades starting from S = 0.5, all at the same fixed `now`
     // (so elapsed-since-last-review is always 0 and no recall boost applies).
-    // Expected growth: 0.5 x (3.0^20)
+    // Expected growth: 0.5 x (3.0^8) = 3280.5, just under the stability ceiling (3650); growth
+    // past the ceiling is covered by the clamp test above.
     const now = 10_000;
     const base = makeWord({ ease: 0.5, repetitions: 0, nextReviewAt: 0 });
 
     let word = base;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 8; i++) {
       word = calculateNextState(word, "easy", now);
     }
 
     // Final stability should be compounded growth
-    const expectedStability = 0.5 * Math.pow(3.0, 20);
+    const expectedStability = 0.5 * Math.pow(3.0, 8);
     expect(word.ease).toBeCloseTo(expectedStability, 5); // Allow 5 decimal places
 
     // Interval should be computable without error

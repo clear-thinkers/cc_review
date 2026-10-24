@@ -62,6 +62,21 @@ export function buildParagraphQuizGradeData(historyItems: ParagraphQuizHistoryIt
   }));
 }
 
+/**
+ * Whether a word-bank item is a correct answer for a blank. Two blanks with
+ * identical text (the same character/phrase appearing twice in the paragraph)
+ * are interchangeable, so the bank item need not be the blank's own span.
+ */
+export function isPlacementCorrect(
+  bankText: string | undefined,
+  targetText: string | undefined,
+  bankSpanId: string,
+  targetSpanId: string
+): boolean {
+  if (bankSpanId === targetSpanId) return true;
+  return bankText !== undefined && bankText === targetText;
+}
+
 /** Convenience wrapper: retryCount -> tier, re-exported so callers only import from this module. */
 export { deriveParagraphBlankTier };
 
