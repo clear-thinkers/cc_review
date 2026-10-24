@@ -2,11 +2,12 @@
 /**
  * Mystery Foods verification (roadmap items L/M/N; spec docs/feature-specs/2026-10-24-mystery-foods.md)
  *
- * Exercises reward_session_ingredients and the mystery branches of
- * unlock_shop_recipe / purchase_shop_ingredient / reward_random_ingredients against a
- * live Supabase DEV project, as a real child JWT. The TypeScript reference
- * implementation of the reward rules lives in src/lib/mysteryFood.ts; this script
- * checks that the SQL behaves the same way.
+ * Exercises the reward flow (reward_session_ingredients -> OFFER, claim_session_ingredient_offer
+ * -> grant), its size tiers, and the mystery branches of unlock_shop_recipe /
+ * purchase_shop_ingredient against a live Supabase DEV project, as a real child JWT.
+ * The TypeScript reference implementations live in src/lib/mysteryFood.ts and
+ * src/lib/rewardTiers.ts; this script checks that the SQL behaves the same way.
+ * (Roadmap items L/M/N and P.)
  *
  * It creates a throwaway family + children, TEMPORARY mystery foods/ingredients
  * (keys prefixed `zz-test-`), and, for the "temp foods" phase, briefly sets the real
@@ -120,20 +121,27 @@ async function createChild(label: string): Promise<{ client: SupabaseClient; use
 
 type GradeSpec = 'easy' | 'good' | 'hard' | 'again';
 
+// `tested` = the session's Tested Count (distinct hanzi). The given grades come first;
+// the session is padded with first-try 'easy' entries up to `tested`. Default 30 = the
+// top reward tier, so the older scenarios keep their full 3-pick reward.
 async function makeSession(
   userId: string,
   familyId: string,
   grades: GradeSpec[],
-  kind: 'character' | 'phrase' | 'paragraph' = 'character'
+  kind: 'character' | 'phrase' | 'paragraph' = 'character',
+  tested = 30
 ): Promise<string> {
   const id = `${TAG}_q_${Math.random().toString(36).slice(2, 10)}`;
-  const gradeData = grades.map((grade, index) => ({
+  const padded: GradeSpec[] = [...grades];
+  while (padded.length < tested) padded.push('easy');
+  const gradeData = padded.map((grade, index) => ({
     wordId: `w${index}`,
-    hanzi: '字',
+    hanzi: `字${index}`,
     grade,
     ...(kind === 'phrase' ? { isVocabPhrase: true } : {}),
     ...(kind === 'paragraph' ? { isParagraphBlank: true } : {}),
   }));
+  grades = padded;
   const { error } = await admin.from('quiz_sessions').insert({
     id,
     user_id: userId,
@@ -151,19 +159,63 @@ async function makeSession(
   return id;
 }
 
-async function reward(client: SupabaseClient, sessionId: string): Promise<RewardResult> {
+type Offer = {
+  hasOffer: boolean;
+  isWin: boolean;
+  testedCount: number;
+  picksAllowed: number;
+  claimed: boolean;
+  offers: Reward[];
+};
+type Claim = { success: boolean; code: string; ingredients: Reward[]; unlockedRecipeIds: string[] };
+
+const toReward = (row: Reward): Reward => ({
+  ingredientKey: row.ingredientKey,
+  quantity: Number(row.quantity),
+  isMystery: Boolean(row.isMystery),
+});
+
+async function offer(client: SupabaseClient, sessionId: string): Promise<Offer> {
   const { data, error } = await client.rpc('reward_session_ingredients', { p_quiz_session_id: sessionId });
   if (error) throw new Error(`reward_session_ingredients: ${error.message}`);
-  const raw = data as RewardResult;
+  const raw = (data ?? {}) as Partial<Offer>;
   return {
-    isWin: Boolean(raw.isWin),
-    ingredients: (raw.ingredients ?? []).map((row) => ({
-      ingredientKey: row.ingredientKey,
-      quantity: Number(row.quantity),
-      isMystery: Boolean(row.isMystery),
-    })),
+    hasOffer: raw.hasOffer === true,
+    isWin: raw.isWin === true,
+    testedCount: Number(raw.testedCount ?? 0),
+    picksAllowed: Number(raw.picksAllowed ?? 0),
+    claimed: raw.claimed === true,
+    offers: (raw.offers ?? []).map(toReward),
+  };
+}
+
+async function claim(client: SupabaseClient, sessionId: string, keys: string[]): Promise<Claim> {
+  const { data, error } = await client.rpc('claim_session_ingredient_offer', {
+    p_quiz_session_id: sessionId,
+    p_ingredient_keys: keys,
+  });
+  if (error) throw new Error(`claim_session_ingredient_offer: ${error.message}`);
+  const raw = (data ?? {}) as Partial<Claim>;
+  return {
+    success: raw.success === true,
+    code: String(raw.code ?? ''),
+    ingredients: (raw.ingredients ?? []).map(toReward),
     unlockedRecipeIds: raw.unlockedRecipeIds ?? [],
   };
+}
+
+// The pre-tier mental model the older scenarios were written in: finish a session, take the
+// offered reward. Creates the offer, then claims the first `picksAllowed` offered ingredients
+// (offers are listed in priority order). No offer / already claimed -> an empty reward.
+async function reward(client: SupabaseClient, sessionId: string): Promise<RewardResult> {
+  const o = await offer(client, sessionId);
+  if (!o.hasOffer || o.claimed) {
+    return { isWin: false, ingredients: [], unlockedRecipeIds: [] };
+  }
+  const picked = o.offers.slice(0, o.picksAllowed).map((row) => row.ingredientKey);
+  const c = await claim(client, sessionId, picked);
+  if (!c.success) throw new Error(`claim failed: ${c.code}`);
+  return { isWin: o.isWin, ingredients: c.ingredients, unlockedRecipeIds: c.unlockedRecipeIds };
 }
 
 async function held(userId: string, key: string): Promise<number> {
@@ -251,7 +303,7 @@ async function phase1(): Promise<void> {
   check('phrase round with a wrong answer: non-win', phraseLoss.isWin === false, show(phraseLoss));
 
   // Zero graded entries -> non-win.
-  const zero = await reward(kid.client, await makeSession(kid.userId, kid.familyId, []));
+  const zero = await reward(kid.client, await makeSession(kid.userId, kid.familyId, [], 'character', 0));
   check('zero graded entries: non-win', zero.isWin === false, show(zero));
 
   // Paragraph quiz: bounce (good) -> non-win even though failed_count = 0.
@@ -353,8 +405,98 @@ async function phase1(): Promise<void> {
     check('normal ingredient purchase still works', false, "cake has no ingredientKey to buy");
   }
 
+  await tiersAndClaims(a, b, c, f1);
+
   // Deactivate temporaries before the real-recipe phase.
   await admin.from('shop_recipes').update({ is_active: false }).in('id', tempRecipeIds);
+}
+
+// ─── phase 1b: size tiers, offers, claims, and direct-write blocks ─────────
+async function tiersAndClaims(a: string, b: string, c: string, f1: string): Promise<void> {
+  console.log('\n■ Phase 1b: size tiers, offer -> claim, and blocked shortcuts');
+
+  const kid = await createChild('tier');
+  const { data: bun } = await admin.from('shop_recipes').select('id').eq('slug', 'bun').single();
+  if (!bun) throw new Error("normal recipe 'bun' not found");
+  await admin.from('shop_recipe_unlocks').insert({ user_id: kid.userId, family_id: kid.familyId, recipe_id: bun.id, coins_spent: 0 });
+
+  // Tier boundaries by Tested Count (clean sessions -> mystery offers).
+  const tiers: Array<[number, number]> = [[9, 0], [10, 1], [19, 1], [20, 2], [29, 2], [30, 3]];
+  let twentySessionId = '';
+  for (const [tested, picks] of tiers) {
+    const sessionId = await makeSession(kid.userId, kid.familyId, [], 'character', tested);
+    if (tested === 20) twentySessionId = sessionId;
+    const o = await offer(kid.client, sessionId);
+    if (picks === 0) {
+      check(`tier: ${tested} tested -> no reward`, o.hasOffer === false, show(o));
+    } else {
+      check(`tier: ${tested} tested -> pick ${picks} of ${o.offers.length}`, o.hasOffer && o.picksAllowed === picks && o.offers.length === 3, show(o));
+      check(`tier: ${tested} tested clean -> mystery offers`, o.isWin && o.offers.every((row) => row.isMystery) && show(o.offers.map((row) => row.ingredientKey)) === show([a, b, c]), show(o));
+    }
+  }
+  check('offers grant nothing by themselves (no ledger rows, nothing unlocked)',
+    (await held(kid.userId, a)) === 0 && (await held(kid.userId, b)) === 0 && (await held(kid.userId, c)) === 0);
+  const { data: earlyUnlock } = await admin.from('shop_recipe_unlocks').select('recipe_id').eq('user_id', kid.userId).eq('recipe_id', f1);
+  check('a mystery food does not unlock at offer time', (earlyUnlock ?? []).length === 0);
+
+  // Offer is created once per session.
+  const again = await offer(kid.client, twentySessionId);
+  const { data: offerRows } = await admin.from('shop_ingredient_reward_offers').select('id').eq('quiz_session_id', twentySessionId);
+  check('repeat offer call returns the same single offer', again.hasOffer && (offerRows ?? []).length === 1, show(offerRows));
+
+  // Non-win offers are regular random ingredients, same tiers.
+  const lossId = await makeSession(kid.userId, kid.familyId, ['again'], 'character', 12);
+  const loss = await offer(kid.client, lossId);
+  check('non-win at 12 tested -> pick 1, regular (non-mystery) offers', loss.hasOffer && !loss.isWin && loss.picksAllowed === 1 && loss.offers.length >= 1 && loss.offers.every((row) => !row.isMystery), show(loss));
+
+  // Pending list (walk-away recovery).
+  const pending = await kid.client.rpc('list_pending_ingredient_offers');
+  const pendingIds = ((pending.data ?? []) as Array<{ quizSessionId: string }>).map((row) => row.quizSessionId);
+  check('pending list includes unclaimed offers', pendingIds.includes(twentySessionId) && pendingIds.includes(lossId), show(pendingIds));
+
+  // Claim validation against the 20-tested offer (picks 2 of [a, b, c]).
+  const tooFew = await claim(kid.client, twentySessionId, [a]);
+  check('claim: too few picks rejected', !tooFew.success && tooFew.code === 'invalid_selection', show(tooFew));
+  const tooMany = await claim(kid.client, twentySessionId, [a, b, c]);
+  check('claim: too many picks rejected', !tooMany.success && tooMany.code === 'invalid_selection', show(tooMany));
+  const duplicate = await claim(kid.client, twentySessionId, [a, a]);
+  check('claim: the same ingredient twice rejected', !duplicate.success && duplicate.code === 'invalid_selection', show(duplicate));
+  const notOffered = await claim(kid.client, twentySessionId, [a, `${TAG}-never-offered`]);
+  check('claim: an ingredient that was not offered rejected', !notOffered.success && notOffered.code === 'invalid_selection', show(notOffered));
+  check('rejected claims grant nothing', (await held(kid.userId, a)) === 0 && (await held(kid.userId, b)) === 0);
+
+  const other = await createChild('tierother');
+  const foreign = await claim(other.client, twentySessionId, [a, b]);
+  check("claim: another child can't claim this offer", !foreign.success && foreign.code === 'no_offer', show(foreign));
+
+  const good = await claim(kid.client, twentySessionId, [a, b]);
+  check('claim: a valid pick of 2 succeeds', good.success && good.code === 'claimed' && good.ingredients.length === 2, show(good));
+  check('claim: granted exactly the picked ingredients at full quantity (a x1, b x2), not c',
+    (await held(kid.userId, a)) === 1 && (await held(kid.userId, b)) === 2 && (await held(kid.userId, c)) === 0);
+  check('claim: the mystery food unlocks at claim time', good.unlockedRecipeIds.includes(f1), show(good.unlockedRecipeIds));
+
+  const second = await claim(kid.client, twentySessionId, [a, b]);
+  check('claim: a second claim is refused (already_claimed) and grants nothing', !second.success && second.code === 'already_claimed' && (await held(kid.userId, a)) === 1, show(second));
+  const afterClaim = await offer(kid.client, twentySessionId);
+  check('offer call after a claim reports claimed', afterClaim.hasOffer && afterClaim.claimed);
+  const pending2 = await kid.client.rpc('list_pending_ingredient_offers');
+  const pendingIds2 = ((pending2.data ?? []) as Array<{ quizSessionId: string }>).map((row) => row.quizSessionId);
+  check('a claimed offer leaves the pending list', !pendingIds2.includes(twentySessionId) && pendingIds2.includes(lossId), show(pendingIds2));
+
+  // Shortcuts that would skip the tiers must be closed.
+  const directReward = await kid.client.from('shop_ingredient_rewards').insert({
+    user_id: kid.userId, family_id: kid.familyId, ingredient_key: a, quiz_session_id: twentySessionId,
+  });
+  check('direct insert into shop_ingredient_rewards is refused', !!directReward.error, 'insert succeeded');
+  const directOffer = await kid.client.from('shop_ingredient_reward_offers').insert({
+    user_id: kid.userId, family_id: kid.familyId, quiz_session_id: lossId, is_win: true, tested_count: 99, picks_allowed: 3, offers: [],
+  });
+  check('direct insert into shop_ingredient_reward_offers is refused', !!directOffer.error, 'insert succeeded');
+  await kid.client.from('shop_ingredient_reward_offers').update({ claimed_at: null, picks_allowed: 3 }).eq('quiz_session_id', twentySessionId);
+  const { data: untouched } = await admin.from('shop_ingredient_reward_offers').select('claimed_at, picks_allowed').eq('quiz_session_id', twentySessionId).single();
+  check('a child cannot rewrite an offer (still claimed, still 2 picks)', !!untouched?.claimed_at && untouched?.picks_allowed === 2, show(untouched));
+  const oldRpc = await kid.client.rpc('reward_random_ingredients', { p_quiz_session_id: lossId });
+  check('the old reward_random_ingredients RPC is no longer callable by a child', !!oldRpc.error, show(oldRpc.data));
 }
 
 // ─── phase 2: the real Crystal Dumplings seed ──────────────────────────────

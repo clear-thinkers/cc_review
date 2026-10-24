@@ -21,6 +21,10 @@
  *                                       family-scoped read incl. cross-family isolation,
  *                                       NO direct client insert/update/delete at all — both
  *                                       tables are RPC-only writers, unlike shop_ingredient_rewards)
+ *   ✅ child-created packaged sessions + reward offers → Section 12 (a child can create /
+ *                                       extend / delete only their OWN sessions, a parent's
+ *                                       stay out of reach, cross-family isolation, and the
+ *                                       offers table has no client writes)
  *   ✅ shop_ingredient_purchases RLS → Section 11 (family-scoped read incl. cross-family
  *                                       isolation, user-scoped insert, no update/delete —
  *                                       same shape as shop_ingredient_rewards)
@@ -1093,10 +1097,11 @@ async function section8_paragraphTestModes(): Promise<void> {
 // Paragraph-quiz ingredient reward (feature spec 2026-08-22-paragraph-quiz-
 // ingredient-reward.md): family-scoped read (parent visibility into a
 // child's rewards, same shape as review_session_progress), user-scoped
-// insert (a family member can only insert a row attributed to themselves --
-// the app never calls this directly, only reward_random_ingredients does,
-// but RLS still must reject an insert impersonating another user_id), and
-// NO update/delete policy at all -- immutable, like quiz_sessions.
+// insert -- REMOVED 2026-10-24 (roadmap item P): the direct-insert policy let a
+// signed-in user mint their own reward rows with no quiz, so the definer RPC
+// claim_session_ingredient_offer is now the ONLY writer and every direct client
+// insert must be refused. NO update/delete policy either -- immutable, like
+// quiz_sessions.
 async function section9_shopIngredientRewards(): Promise<void> {
   console.log('\n■ Section 9: shop_ingredient_rewards RLS');
 
@@ -1163,8 +1168,24 @@ async function section9_shopIngredientRewards(): Promise<void> {
     }
   }
 
-  // ── Child CAN insert a reward row attributed to themselves ──
-  const { data: rewardRow, error: childOwnInsertErr } = await familyAChildClient
+  // ── Child can NO LONGER insert a reward row directly, even for themselves ──
+  const { data: childOwnInsertData, error: childOwnInsertErr } = await familyAChildClient
+    .from('shop_ingredient_rewards')
+    .insert({
+      user_id: testChildAUserId,
+      family_id: testFamilyAId,
+      ingredient_key: testIngredientKey,
+      quiz_session_id: testSessionId,
+    })
+    .select('id');
+  if (childOwnInsertErr || !childOwnInsertData || childOwnInsertData.length === 0) {
+    pass(`shop_ingredient_rewards no direct insert: child JWT INSERT for own user_id refused: "${childOwnInsertErr?.message ?? '0 rows'}"`);
+  } else {
+    fail('shop_ingredient_rewards no direct insert: child JWT INSERT SUCCEEDED — the claim RPC is not the only writer!');
+  }
+
+  // Seed a row through the service role so the read / immutability checks below still have a target.
+  const { data: rewardRow, error: seedRewardErr } = await admin
     .from('shop_ingredient_rewards')
     .insert({
       user_id: testChildAUserId,
@@ -1174,10 +1195,8 @@ async function section9_shopIngredientRewards(): Promise<void> {
     })
     .select('id')
     .single();
-  if (childOwnInsertErr || !rewardRow) {
-    fail('shop_ingredient_rewards user scoped insert: child JWT INSERT for own user_id failed', childOwnInsertErr?.message);
-  } else {
-    pass('shop_ingredient_rewards user scoped insert: child JWT INSERT for own user_id succeeded');
+  if (seedRewardErr || !rewardRow) {
+    fail('section9 setup: service role INSERT shop_ingredient_rewards row', seedRewardErr?.message);
   }
   const rewardId = rewardRow ? (rewardRow as { id: string }).id : null;
 
@@ -1192,11 +1211,11 @@ async function section9_shopIngredientRewards(): Promise<void> {
     })
     .select('id');
   if (impersonatedInsertErr) {
-    pass(`shop_ingredient_rewards user scoped insert: child JWT INSERT for another user_id rejected by RLS: "${impersonatedInsertErr.message}"`);
+    pass(`shop_ingredient_rewards no direct insert: child JWT INSERT for another user_id rejected by RLS: "${impersonatedInsertErr.message}"`);
   } else if (!impersonatedInsertData || impersonatedInsertData.length === 0) {
-    pass('shop_ingredient_rewards user scoped insert: child JWT INSERT for another user_id silently inserted 0 rows');
+    pass('shop_ingredient_rewards no direct insert: child JWT INSERT for another user_id silently inserted 0 rows');
   } else {
-    fail('shop_ingredient_rewards user scoped insert: child JWT INSERT for another user_id SUCCEEDED — user scoping not enforced!');
+    fail('shop_ingredient_rewards no direct insert: child JWT INSERT for another user_id SUCCEEDED — not enforced!');
   }
 
   if (rewardId) {
@@ -1685,6 +1704,288 @@ async function section11_shopIngredientPurchases(): Promise<void> {
   }
 }
 
+// ─── Section 12: child-created packaged sessions + reward offers ────────────
+//
+// Roadmap item P (feature spec 2026-10-24-child-packaged-sessions-and-reward-picks.md).
+// Three ADDITIVE policies let a child create a session (attributed to themselves,
+// character targets only), add targets to a session they created, and delete a
+// session they created -- while a parent's sessions stay out of a child's reach. The
+// offers table is read-only to the family: every write goes through the definer RPCs.
+async function section12_childPackagedSessions(): Promise<void> {
+  console.log('\n■ Section 12: child-created packaged sessions + reward offers');
+
+  if (!testFamilyAId || !testFamilyBId || !familyAParentClient || !familyAChildClient || !testChildAUserId || !testParentAUserId) {
+    fail('section12 setup incomplete — Section 2/4 must have succeeded');
+    return;
+  }
+
+  // Family B child (cross-family attacker), self-contained.
+  let familyBChildClient: SupabaseClient | null = null;
+  let authUserChildBId: string | null = null;
+  const { data: childBRow, error: childBErr } = await admin
+    .from('users')
+    .insert({ family_id: testFamilyBId, name: `${TEST_TAG}_child_b_s12`, role: 'child' })
+    .select('id')
+    .single();
+  if (childBErr || !childBRow) {
+    fail('section12 setup: service role INSERT child user for Family B', childBErr?.message);
+  } else {
+    try {
+      const childBResult = await createTestAuthClient({
+        email: `${TEST_TAG}-child-b-s12@test.invalid`,
+        familyId: testFamilyBId,
+        userId: (childBRow as { id: string }).id,
+        role: 'child',
+      });
+      familyBChildClient = childBResult.client;
+      authUserChildBId = childBResult.authUserId;
+    } catch (e: unknown) {
+      fail('section12 setup: Family B child auth client creation failed', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const childSessionId = `${TEST_TAG}_s12_child_session`;
+  const parentSessionId = `${TEST_TAG}_s12_parent_session`;
+  const childTarget = (sessionId: string) => ({
+    session_id: sessionId,
+    family_id: testFamilyAId,
+    character: '验',
+    pronunciation: 'yàn',
+    display_order: 0,
+  });
+
+  // ── A child can create a session attributed to themselves ──
+  const { error: childCreateErr } = await familyAChildClient.from('review_test_sessions').insert({
+    id: childSessionId,
+    family_id: testFamilyAId,
+    name: `${TEST_TAG}_s12_child`,
+    created_by_user_id: testChildAUserId,
+  });
+  if (childCreateErr) {
+    fail('review_test_sessions child insert: own session failed', childCreateErr.message);
+  } else {
+    pass('review_test_sessions child insert: a child can create a session attributed to themselves');
+  }
+
+  // ── ...but not as someone else, in another family, or as a paragraph quiz ──
+  const { error: spoofErr } = await familyAChildClient.from('review_test_sessions').insert({
+    id: `${TEST_TAG}_s12_spoof`,
+    family_id: testFamilyAId,
+    name: `${TEST_TAG}_s12_spoof`,
+    created_by_user_id: testParentAUserId,
+  });
+  if (spoofErr) pass('review_test_sessions child insert: attributing the session to a parent is rejected');
+  else fail('review_test_sessions child insert: a child created a session attributed to the PARENT — not enforced!');
+
+  const { error: crossFamilyErr } = await familyAChildClient.from('review_test_sessions').insert({
+    id: `${TEST_TAG}_s12_xfam`,
+    family_id: testFamilyBId,
+    name: `${TEST_TAG}_s12_xfam`,
+    created_by_user_id: testChildAUserId,
+  });
+  if (crossFamilyErr) pass('review_test_sessions child insert: a session in another family is rejected');
+  else fail('review_test_sessions child insert: a child created a session in ANOTHER family — not enforced!');
+
+  const { error: paragraphErr } = await familyAChildClient.from('review_test_sessions').insert({
+    id: `${TEST_TAG}_s12_para`,
+    family_id: testFamilyAId,
+    name: `${TEST_TAG}_s12_para`,
+    created_by_user_id: testChildAUserId,
+    paragraph_test_mode_id: '00000000-0000-0000-0000-000000000000',
+  });
+  if (paragraphErr) pass('review_test_sessions child insert: a child cannot create a paragraph-quiz session');
+  else fail('review_test_sessions child insert: a child created a paragraph-quiz session — not enforced!');
+
+  // ── Targets: own session yes; phrase/paragraph targets no ──
+  const { error: ownTargetErr } = await familyAChildClient
+    .from('review_test_session_targets')
+    .insert(childTarget(childSessionId));
+  if (ownTargetErr) fail('review_test_session_targets child insert: own session failed', ownTargetErr.message);
+  else pass('review_test_session_targets child insert: a child can add a character target to their own session');
+
+  const { error: phraseTargetErr } = await familyAChildClient.from('review_test_session_targets').insert({
+    ...childTarget(childSessionId),
+    character: '验证',
+    vocab_phrase_id: '00000000-0000-0000-0000-000000000000',
+  });
+  if (phraseTargetErr) pass('review_test_session_targets child insert: a phrase target is rejected');
+  else fail('review_test_session_targets child insert: a child added a PHRASE target — not enforced!');
+
+  // ── A parent's session is out of a child's reach ──
+  const { error: parentCreateErr } = await familyAParentClient.from('review_test_sessions').insert({
+    id: parentSessionId,
+    family_id: testFamilyAId,
+    name: `${TEST_TAG}_s12_parent`,
+    created_by_user_id: testParentAUserId,
+  });
+  if (parentCreateErr) {
+    fail('review_test_sessions parent insert: unchanged parent flow failed', parentCreateErr.message);
+  } else {
+    pass('review_test_sessions parent insert: a parent can still create a session (unchanged)');
+  }
+
+  const { error: intoParentErr } = await familyAChildClient
+    .from('review_test_session_targets')
+    .insert({ ...childTarget(parentSessionId), character: '考' });
+  if (intoParentErr) pass("review_test_session_targets child insert: adding a target to a PARENT's session is rejected");
+  else fail("review_test_session_targets child insert: a child added a target to a parent's session — not enforced!");
+
+  const { data: childDeletedParent, error: childDeleteParentErr } = await familyAChildClient
+    .from('review_test_sessions')
+    .delete()
+    .eq('id', parentSessionId)
+    .select('id');
+  const { data: parentStillThere } = await admin.from('review_test_sessions').select('id').eq('id', parentSessionId);
+  if (!childDeleteParentErr && (childDeletedParent ?? []).length === 0 && (parentStillThere ?? []).length === 1) {
+    pass("review_test_sessions child delete: a child cannot delete a parent's session (0 rows, session intact)");
+  } else if (childDeleteParentErr && (parentStillThere ?? []).length === 1) {
+    pass(`review_test_sessions child delete: deleting a parent's session rejected: "${childDeleteParentErr.message}"`);
+  } else {
+    fail("review_test_sessions child delete: a child DELETED a parent's session — not enforced!");
+  }
+
+  // ── Cross-family: a Family B child can neither add to nor delete Family A's child session ──
+  if (familyBChildClient) {
+    const { error: xTargetErr } = await familyBChildClient
+      .from('review_test_session_targets')
+      .insert({ ...childTarget(childSessionId), family_id: testFamilyBId, character: '跨' });
+    if (xTargetErr) pass("review_test_session_targets cross-family: Family B child cannot add to Family A's session");
+    else fail("review_test_session_targets cross-family: Family B child added a target to Family A's session!");
+
+    const { data: xDeleted } = await familyBChildClient
+      .from('review_test_sessions')
+      .delete()
+      .eq('id', childSessionId)
+      .select('id');
+    const { data: stillThere } = await admin.from('review_test_sessions').select('id').eq('id', childSessionId);
+    if ((xDeleted ?? []).length === 0 && (stillThere ?? []).length === 1) {
+      pass("review_test_sessions cross-family: Family B child cannot delete Family A's session");
+    } else {
+      fail("review_test_sessions cross-family: Family B child DELETED Family A's session!");
+    }
+  }
+
+  // ── A parent can delete a child's session (existing parent delete policy) ──
+  const { data: parentDeleted, error: parentDeleteErr } = await familyAParentClient
+    .from('review_test_sessions')
+    .delete()
+    .eq('id', childSessionId)
+    .select('id');
+  if (!parentDeleteErr && (parentDeleted ?? []).length === 1) {
+    pass("review_test_sessions parent delete: a parent can delete a child's session");
+  } else {
+    fail("review_test_sessions parent delete: a parent could not delete a child's session", parentDeleteErr?.message);
+  }
+  const { data: orphanTargets } = await admin.from('review_test_session_targets').select('id').eq('session_id', childSessionId);
+  if ((orphanTargets ?? []).length === 0) pass("review_test_session_targets: a deleted session's targets cascade away");
+  else fail("review_test_session_targets: a deleted session left orphan targets");
+
+  // ── A child can delete a session they created ──
+  const ownDeleteId = `${TEST_TAG}_s12_child_session2`;
+  await familyAChildClient.from('review_test_sessions').insert({
+    id: ownDeleteId,
+    family_id: testFamilyAId,
+    name: `${TEST_TAG}_s12_child2`,
+    created_by_user_id: testChildAUserId,
+  });
+  const { data: ownDeleted, error: ownDeleteErr } = await familyAChildClient
+    .from('review_test_sessions')
+    .delete()
+    .eq('id', ownDeleteId)
+    .select('id');
+  if (!ownDeleteErr && (ownDeleted ?? []).length === 1) {
+    pass('review_test_sessions child delete: a child can delete a session they created');
+  } else {
+    fail('review_test_sessions child delete: a child could not delete their own session', ownDeleteErr?.message);
+  }
+
+  // ── Reward offers table: family-scoped read, no client writes ──
+  const offerSessionId = `${TEST_TAG}_s12_offer_session`;
+  await admin.from('quiz_sessions').insert({
+    id: offerSessionId,
+    user_id: testChildAUserId,
+    family_id: testFamilyAId,
+    session_type: 'fill-test',
+    grade_data: [],
+    fully_correct_count: 0,
+    failed_count: 0,
+    partially_correct_count: 0,
+    total_grades: 0,
+    duration_seconds: 0,
+    coins_earned: 0,
+  });
+  const { error: seedOfferErr } = await admin.from('shop_ingredient_reward_offers').insert({
+    user_id: testChildAUserId,
+    family_id: testFamilyAId,
+    quiz_session_id: offerSessionId,
+    is_win: false,
+    tested_count: 12,
+    picks_allowed: 1,
+    offers: [{ ingredientKey: 'milk', quantity: 1, isMystery: false }],
+  });
+  if (seedOfferErr) {
+    fail('section12 setup: service role INSERT shop_ingredient_reward_offers row', seedOfferErr.message);
+  } else {
+    const { data: parentOfferRead } = await familyAParentClient
+      .from('shop_ingredient_reward_offers')
+      .select('id')
+      .eq('quiz_session_id', offerSessionId);
+    if ((parentOfferRead ?? []).length === 1) pass("shop_ingredient_reward_offers family scoped read: a parent can read the child's offer");
+    else fail("shop_ingredient_reward_offers family scoped read: parent could not read the child's offer");
+
+    if (familyBChildClient) {
+      const { data: xOfferRead } = await familyBChildClient
+        .from('shop_ingredient_reward_offers')
+        .select('id')
+        .eq('quiz_session_id', offerSessionId);
+      if ((xOfferRead ?? []).length === 0) pass("shop_ingredient_reward_offers cross-family isolation: Family B cannot read Family A's offer");
+      else fail("shop_ingredient_reward_offers cross-family isolation: Family B READ Family A's offer!");
+    }
+
+    const { error: childOfferInsertErr } = await familyAChildClient.from('shop_ingredient_reward_offers').insert({
+      user_id: testChildAUserId,
+      family_id: testFamilyAId,
+      quiz_session_id: `${TEST_TAG}_s12_nope`,
+      is_win: true,
+      tested_count: 99,
+      picks_allowed: 3,
+      offers: [],
+    });
+    if (childOfferInsertErr) pass('shop_ingredient_reward_offers: a child cannot insert an offer (RPC-only writes)');
+    else fail('shop_ingredient_reward_offers: a child INSERTED an offer — direct writes not blocked!');
+
+    await familyAChildClient
+      .from('shop_ingredient_reward_offers')
+      .update({ picks_allowed: 3, claimed_at: new Date().toISOString() })
+      .eq('quiz_session_id', offerSessionId);
+    const { data: offerAfter } = await admin
+      .from('shop_ingredient_reward_offers')
+      .select('picks_allowed, claimed_at')
+      .eq('quiz_session_id', offerSessionId)
+      .single();
+    if (offerAfter && offerAfter.picks_allowed === 1 && offerAfter.claimed_at === null) {
+      pass('shop_ingredient_reward_offers: a child cannot update an offer (picks and claimed state unchanged)');
+    } else {
+      fail('shop_ingredient_reward_offers: a child MODIFIED an offer — direct writes not blocked!');
+    }
+
+    await familyAChildClient.from('shop_ingredient_reward_offers').delete().eq('quiz_session_id', offerSessionId);
+    const { data: offerStill } = await admin
+      .from('shop_ingredient_reward_offers')
+      .select('id')
+      .eq('quiz_session_id', offerSessionId);
+    if ((offerStill ?? []).length === 1) pass('shop_ingredient_reward_offers: a child cannot delete an offer');
+    else fail('shop_ingredient_reward_offers: a child DELETED an offer — direct writes not blocked!');
+  }
+
+  // ── Section-local cleanup (sessions/offers cascade with the test families) ──
+  await admin.from('review_test_sessions').delete().in('id', [childSessionId, parentSessionId, ownDeleteId]);
+  if (authUserChildBId) {
+    const { error: authDelErr } = await admin.auth.admin.deleteUser(authUserChildBId);
+    if (authDelErr) console.error(`  ⚠️  Failed to delete Section 12 Family B auth user: ${authDelErr.message}`);
+  }
+}
+
 // ─── Cleanup ───────────────────────────────────────────────────────────────
 async function cleanup(): Promise<void> {
   console.log('\n■ Cleanup: Removing synthetic test data');
@@ -1739,6 +2040,7 @@ async function main(): Promise<void> {
     await section9_shopIngredientRewards();
     await section10_shopKitchen();
     await section11_shopIngredientPurchases();
+    await section12_childPackagedSessions();
   } finally {
     await cleanup();
   }
