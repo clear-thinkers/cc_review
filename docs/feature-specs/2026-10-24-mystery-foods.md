@@ -60,7 +60,7 @@ Walk foods in that order; take each food's unsatisfied types (recipe order) unti
 - Rewards for ad-hoc due-review sessions.
 - Cook-several-at-once (a later convenience; no schema impact).
 - Parent-facing visibility (Shop Kitchen has none).
-- Extending the `add-food` / `add-ingredient` skills to set `is_mystery` (first food is added via migration/Shop Admin).
+- Extending the `add-food` / `add-ingredient` skills to set `is_mystery` (first food was added via migration; `add-food` gained a `--mystery` mode on 2026-10-24 — `add-ingredient` still has none).
 
 ## Proposed behavior
 

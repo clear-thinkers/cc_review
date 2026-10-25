@@ -72,6 +72,19 @@
  *
  * --is-active defaults to true; pass --is-active false to land the food as
  * a reserved/inactive wall slot instead (Recipe Shop Rule 7).
+ *
+ * --mystery creates a MYSTERY food (docs/feature-specs/2026-10-24-mystery-foods.md):
+ * the recipe row gets is_mystery = true plus a localized teaser_i18n, and
+ * every ingredient is a mystery ingredient (is_mystery = true, cost 0). Rules
+ * enforced here, mirroring Shop Admin validation and the table CHECKs:
+ *   - --teaser-en / --teaser-zh required (shown on the locked tile).
+ *   - --cook-method + --food-type required (mystery foods are always cookable).
+ *   - --unlock-cost is ignored/forced to 0 (auto-unlock, never bought).
+ *   - no --special-ingredients and no --variants.
+ *   - --new-ingredients entries cost 0 (cost may be omitted) and are inserted
+ *     with is_mystery = true; any ingredient resolved from the existing
+ *     catalog must already be is_mystery = true.
+ *   - a NON-mystery food may not reference a mystery ingredient.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -128,13 +141,14 @@ function toJsonbSql(value: unknown): string {
   return `${escapeSqlLiteral(JSON.stringify(value))}::jsonb`;
 }
 
-const BOOLEAN_FLAGS = new Set(["apply", "no-prod-migration", "prod-verified"]);
+const BOOLEAN_FLAGS = new Set(["apply", "no-prod-migration", "prod-verified", "mystery"]);
 
 function parseArgs(argv: string[]): Record<string, string | boolean> {
   const args: Record<string, string | boolean> = {
     apply: false,
     "no-prod-migration": false,
     "prod-verified": false,
+    mystery: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
@@ -323,7 +337,10 @@ async function main() {
   const titleZh = args["title-zh"] as string | undefined;
   const introEn = (args["intro-en"] as string | undefined) ?? "";
   const introZh = (args["intro-zh"] as string | undefined) ?? "";
-  const unlockCost = Number(args["unlock-cost"]);
+  const isMystery = Boolean(args.mystery);
+  const teaserEn = args["teaser-en"] as string | undefined;
+  const teaserZh = args["teaser-zh"] as string | undefined;
+  const unlockCost = isMystery ? 0 : Number(args["unlock-cost"]);
   const cookMethodRaw = ((args["cook-method"] as string | undefined) ?? "none").toLowerCase();
   const foodTypeRaw = ((args["food-type"] as string | undefined) ?? "none").toLowerCase();
   const isActive = ((args["is-active"] as string | undefined) ?? "true").toLowerCase() !== "false";
@@ -334,7 +351,9 @@ async function main() {
   if (!slugRaw) missing.push("--slug");
   if (!titleEn) missing.push("--title-en");
   if (!titleZh) missing.push("--title-zh");
-  if (!args["unlock-cost"]) missing.push("--unlock-cost");
+  if (!isMystery && !args["unlock-cost"]) missing.push("--unlock-cost");
+  if (isMystery && !teaserEn) missing.push("--teaser-en");
+  if (isMystery && !teaserZh) missing.push("--teaser-zh");
   if (!plainIconFile) missing.push("--plain-icon-file");
   if (!args["base-ingredients"]) missing.push("--base-ingredients");
   if (missing.length > 0) {
@@ -358,6 +377,13 @@ async function main() {
   }
   if (cookMethod !== null && foodType === null) {
     throw new Error(`--cook-method "${cookMethod}" requires --food-type to also be set (Shop Admin Rule 10).`);
+  }
+
+  if (isMystery && cookMethod === null) {
+    throw new Error("--mystery requires --cook-method and --food-type (mystery foods are always cookable).");
+  }
+  if (isMystery && (args["special-ingredients"] || variantsRaw)) {
+    throw new Error("--mystery foods take no --special-ingredients and no --variants.");
   }
 
   const slug = canonicalizeSlug(slugRaw!);
@@ -416,6 +442,10 @@ async function main() {
       throw new Error(`--new-ingredients is not valid JSON: ${newIngredientsRaw}`);
     }
     for (const ingredient of newIngredients) {
+      if (isMystery && (ingredient.cost === undefined || ingredient.cost === null)) ingredient.cost = 0;
+      if (isMystery && ingredient.cost !== 0) {
+        throw new Error(`--new-ingredients entry "${ingredient.key}": mystery ingredients must cost 0, got: ${ingredient.cost}`);
+      }
       const missingFields: string[] = [];
       if (!ingredient.key) missingFields.push("key");
       if (!ingredient.labelEn) missingFields.push("labelEn");
@@ -512,18 +542,43 @@ async function main() {
     }
   }
 
+  // Mystery-flag integrity: a mystery food uses only mystery ingredients, and a
+  // normal food never uses one. New ingredients take the food's own flag.
+  const pendingKeys = new Set(newIngredients.map((ingredient) => ingredient.key));
+  const existingKeys = [...baseEntries, ...specialEntries]
+    .map((entry) => entry.key)
+    .filter((key) => !pendingKeys.has(key));
+  if (existingKeys.length > 0) {
+    const { data: flagRows, error: flagError } = await supabase
+      .from("shop_ingredient_prices")
+      .select("ingredient_key, is_mystery")
+      .in("ingredient_key", existingKeys);
+    if (flagError) throw new Error(`Failed to check is_mystery on ingredients: ${flagError.message}`);
+    for (const flagRow of flagRows ?? []) {
+      if (Boolean(flagRow.is_mystery) !== isMystery) {
+        throw new Error(
+          isMystery
+            ? `Ingredient "${flagRow.ingredient_key}" is a normal ingredient -- a mystery food may only use mystery ingredients (create a separate mystery ingredient via --new-ingredients).`
+            : `Ingredient "${flagRow.ingredient_key}" is a mystery ingredient -- a normal food may not use it.`
+        );
+      }
+    }
+  }
+
   const ingredientUpsertSqls = newIngredients.map(
     (ingredient) => `insert into shop_ingredient_prices (
   ingredient_key,
   cost_coins,
   label_i18n,
-  icon_path
+  icon_path${isMystery ? `,
+  is_mystery` : ""}
 )
 values (
   ${escapeSqlLiteral(ingredient.key)},
   ${ingredient.cost},
   ${toJsonbSql({ en: ingredient.labelEn, zh: ingredient.labelZh })},
-  ${escapeSqlLiteral(`/ingredients/${ingredient.iconFile}`)}
+  ${escapeSqlLiteral(`/ingredients/${ingredient.iconFile}`)}${isMystery ? `,
+  true` : ""}
 )
 on conflict (ingredient_key) do nothing;`
   );
@@ -576,6 +631,9 @@ on conflict (ingredient_key) do nothing;`
     variant_icon_rules: variantIconRules,
     cook_method: cookMethod,
     food_type: foodType,
+    ...(isMystery
+      ? { is_mystery: true, teaser_i18n: { en: teaserEn!, zh: teaserZh! } }
+      : {}),
   };
 
   const insertSql = `insert into shop_recipes (
@@ -583,7 +641,8 @@ on conflict (ingredient_key) do nothing;`
   intro, intro_i18n, unlock_cost_coins,
   base_ingredients, base_ingredients_i18n,
   special_ingredient_slots, special_ingredient_slots_i18n,
-  variant_icon_rules, cook_method, food_type
+  variant_icon_rules, cook_method, food_type${isMystery ? `,
+  is_mystery, teaser_i18n` : ""}
 )
 values (
   ${escapeSqlLiteral(slug)},
@@ -600,7 +659,11 @@ values (
   ${toJsonbSql(row.special_ingredient_slots_i18n)},
   ${toJsonbSql(row.variant_icon_rules)},
   ${cookMethod ? escapeSqlLiteral(cookMethod) : "null"},
-  ${foodType ? escapeSqlLiteral(foodType) : "null"}
+  ${foodType ? escapeSqlLiteral(foodType) : "null"}${
+    isMystery ? `,
+  true,
+  ${toJsonbSql(row.teaser_i18n)}` : ""
+  }
 );`;
 
   if (ingredientUpsertSqls.length > 0) {
@@ -623,6 +686,7 @@ values (
         cost_coins: ingredient.cost,
         label_i18n: { en: ingredient.labelEn, zh: ingredient.labelZh },
         icon_path: `/ingredients/${ingredient.iconFile}`,
+        ...(isMystery ? { is_mystery: true } : {}),
       }))
     );
     if (ingredientInsertError) throw new Error(`Failed to insert new ingredient(s): ${ingredientInsertError.message}`);

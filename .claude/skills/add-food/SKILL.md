@@ -1,6 +1,6 @@
 ---
 name: add-food
-description: Add a brand-new food (a new shop_recipes row) to Shop Kitchen - e.g. introducing Pancake as a food type that doesn't exist yet. Requires the plain reward icon (and any launch-day variant icon) to already be placed in public/rewards/ or public/rewards/_staging/ before this skill is invoked; it fixes format/transparency/placement of whatever the user placed, but never drafts or generates art itself, and aborts if no source image exists anywhere. Drafts the bilingual title/intro, resolves base/special ingredients against the existing catalog, then previews and applies the new shop_recipes row to dev. Use when the user asks to add a new food/recipe/dish TYPE to this game's shop/kitchen feature, distinct from adding an ingredient or a variant to an existing food.
+description: Add a brand-new food (a new shop_recipes row) to Shop Kitchen - e.g. introducing Pancake as a food type that doesn't exist yet. Requires the plain reward icon (and any launch-day variant icon) to already be placed in public/rewards/ or public/rewards/_staging/ before this skill is invoked; it fixes format/transparency/placement of whatever the user placed, but never drafts or generates art itself, and aborts if no source image exists anywhere. Drafts the bilingual title/intro, resolves base/special ingredients against the existing catalog, then previews and applies the new shop_recipes row to dev. Also covers MYSTERY foods (is_mystery recipe + its mystery ingredients + locked-tile teaser) via the "Mystery foods" section. Use when the user asks to add a new food/recipe/dish TYPE to this game's shop/kitchen feature, distinct from adding an ingredient or a variant to an existing food.
 tools: Bash, Read, Edit, Write, Glob, Grep, Skill
 ---
 
@@ -87,6 +87,34 @@ shop-content skills).
   just never appears in the Kitchen's Recipe Book.
 - Nothing is written to the database until the user has explicitly approved
   the SQL preview in Phase 5.
+
+## Mystery foods
+
+A mystery food (spec: `docs/feature-specs/2026-10-24-mystery-foods.md`) is
+auto-unlocked from rewards, never bought. When the user says "mystery food",
+follow every phase below with these differences, and pass `--mystery` to
+`apply-food.ts`:
+
+- **Art:** staged images often sit in `public/rewards/staging/` (no
+  underscore), ingredient art included. Point `place-icon.mjs` at them there
+  and place ingredient art at `public/ingredients/<key>.png`. View each staged
+  image to map it to its ingredient — don't assume numbering.
+- **Ingredients are always new and mystery-flagged.** A mystery ingredient is a
+  separate catalog item (never an existing normal one — `find-ingredient.ts`
+  should return no match); list every one in `--new-ingredients` (cost is 0,
+  may be omitted). The script rejects a normal ingredient in a mystery food
+  and a mystery ingredient in a normal food.
+- **Asked of the user:** quantity per ingredient, `cookMethod` + `foodType`
+  (both required), and a bilingual **teaser** (`--teaser-en/--teaser-zh`,
+  shown only while the tile is locked). No `unlockCostCoins` (forced to 0), no
+  special ingredients, no launch variants.
+- **Wall size:** same rule — bump `SHOP_WALL_SIZE` when full.
+- **Review/apply:** show teaser in the Phase 5 review; the generated SQL
+  carries `is_mystery = true` and `teaser_i18n`. `SHOP_INGREDIENT_CATALOG` in
+  `shopIngredients.ts` is **not** updated for mystery ingredients (existing
+  ones, e.g. `crystal-dumpling`'s, aren't there either).
+- **Prod:** same as any food — migration file, `db:push:prod`, then deploy the
+  app (a `SHOP_WALL_SIZE` bump only ships with the regular deploy).
 
 ## Phase 1 — Resolve identity and check the art precondition
 
