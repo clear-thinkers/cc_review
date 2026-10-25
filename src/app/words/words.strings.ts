@@ -211,7 +211,8 @@ export const wordsStrings = {
         rewardTierHint:
           "Rewards: test 10+ items to pick 1 reward, 20+ to pick 2, 30+ to pick all 3. A perfect run (nothing missed) offers mystery ingredients!",
         defaultSessionName: "My practice {time}",
-        quickAddNotEnough: "You need at least {count} due characters for this.",
+        quickAddNotEnough: "You need at least {count} due characters that have quiz content.",
+        leftOutNoQuizContent: "{count} selected characters were left out because they don't have quiz content yet.",
         sessionNameTaken: "That name is already used by another session. Please choose a different name.",
       },
     },
@@ -343,6 +344,8 @@ export const wordsStrings = {
       reviewTestSession: {
         activeSession: "Test session quiz: {name} ({count} characters)",
         completed: "Completed test session: {name}",
+        smallSessionHint: "Only {tested} items were tested, so there was no reward this time. Test at least 10 items to earn one.",
+        rewardLoadError: "We couldn't load your reward just now. If you earned one, it will show up on the Due Review page.",
         completeError: "Quiz finished, but the test session could not be marked complete: {name}",
         returnToDueReviewButton: "Return to Due Review",
       },
@@ -1614,7 +1617,8 @@ export const wordsStrings = {
         rewardTierHint:
           "奖励：测试 10 个以上可选 1 个奖励，20 个以上选 2 个，30 个以上 3 个全选。全部答对还会获得神秘食材！",
         defaultSessionName: "我的练习 {time}",
-        quickAddNotEnough: "至少需要 {count} 个到期的字才能使用。",
+        quickAddNotEnough: "至少需要 {count} 个到期且有测验内容的字。",
+        leftOutNoQuizContent: "有 {count} 个所选的字还没有测验内容，已被略过。",
         sessionNameTaken: "这个名字已被其他测验使用，请换一个名字。",
       },
     },
@@ -1745,6 +1749,8 @@ export const wordsStrings = {
       reviewTestSession: {
         activeSession: "测验：{name}（{count} 个汉字）",
         completed: "已完成测验：{name}",
+        smallSessionHint: "这次只测试了 {tested} 个，所以没有奖励。至少测试 10 个才能获得奖励。",
+        rewardLoadError: "暂时无法加载你的奖励。如果你获得了奖励，它会显示在复习页面。",
         completeError: "测验已完成，但无法把测验标记为已完成：{name}",
         returnToDueReviewButton: "返回待复习",
       },

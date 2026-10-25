@@ -74,8 +74,16 @@ const familyIds: string[] = [];
 const authUserIds: string[] = [];
 const tempRecipeIds: string[] = [];
 const tempIngredientKeys: string[] = [];
-let realRecipeId: string | null = null;
-let realWasActive = true;
+// Every REAL (non-test) mystery food in the database, with its original active flag. The
+// scenarios below need to control exactly which mystery foods are in play, so they are all
+// set aside during the temp-food phase, only Crystal Dumplings is switched back on for the
+// real-seed phase, and every original flag is restored in cleanup.
+const realMysteryFoods: Array<{ id: string; slug: string; wasActive: boolean }> = [];
+async function setRealMysteryActive(activeSlugs: ReadonlySet<string>): Promise<void> {
+  for (const food of realMysteryFoods) {
+    await admin.from('shop_recipes').update({ is_active: activeSlugs.has(food.slug) }).eq('id', food.id);
+  }
+}
 
 type Reward = { ingredientKey: string; quantity: number; isMystery: boolean };
 type RewardResult = { isWin: boolean; ingredients: Reward[]; unlockedRecipeIds: string[] };
@@ -434,6 +442,10 @@ async function tiersAndClaims(a: string, b: string, c: string, f1: string): Prom
       check(`tier: ${tested} tested clean -> mystery offers`, o.isWin && o.offers.every((row) => row.isMystery) && show(o.offers.map((row) => row.ingredientKey)) === show([a, b, c]), show(o));
     }
   }
+  // None of these sessions has a review_test_sessions row: they are AD-HOC sessions (no packaged
+  // session behind them), and they still got offers -- rewards key off the saved quiz session.
+  const { data: packagedRows } = await admin.from('review_test_sessions').select('id').eq('family_id', kid.familyId);
+  check('ad-hoc sessions (no packaged session row) earn offers exactly like packaged ones', (packagedRows ?? []).length === 0);
   check('offers grant nothing by themselves (no ledger rows, nothing unlocked)',
     (await held(kid.userId, a)) === 0 && (await held(kid.userId, b)) === 0 && (await held(kid.userId, c)) === 0);
   const { data: earlyUnlock } = await admin.from('shop_recipe_unlocks').select('recipe_id').eq('user_id', kid.userId).eq('recipe_id', f1);
@@ -547,10 +559,10 @@ async function phase2(): Promise<void> {
 // ─── cleanup ───────────────────────────────────────────────────────────────
 async function cleanup(): Promise<void> {
   console.log('\n■ Cleanup');
-  if (realRecipeId) {
-    const { error } = await admin.from('shop_recipes').update({ is_active: realWasActive }).eq('id', realRecipeId);
-    if (error) console.error(`  ⚠️  Could not restore crystal-dumpling is_active=${realWasActive}: ${error.message}`);
-    else console.log(`  restored crystal-dumpling is_active=${realWasActive}`);
+  for (const food of realMysteryFoods) {
+    const { error } = await admin.from('shop_recipes').update({ is_active: food.wasActive }).eq('id', food.id);
+    if (error) console.error(`  ⚠️  Could not restore ${food.slug} is_active=${food.wasActive}: ${error.message}`);
+    else console.log(`  restored ${food.slug} is_active=${food.wasActive}`);
   }
   for (const id of familyIds) {
     const { error } = await admin.from('families').delete().eq('id', id);
@@ -573,18 +585,25 @@ async function cleanup(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log('Mystery Foods verification (dev)');
-  const { data: real } = await admin.from('shop_recipes').select('id, is_active').eq('slug', 'crystal-dumpling').single();
-  if (!real) {
+  const { data: realFoods } = await admin
+    .from('shop_recipes')
+    .select('id, slug, is_active')
+    .eq('is_mystery', true)
+    .not('slug', 'like', 'zz-test-%');
+  const crystal = (realFoods ?? []).find((food) => food.slug === 'crystal-dumpling');
+  if (!crystal) {
     console.error('❌ crystal-dumpling recipe not found — has migration 20261024170000 been pushed?');
     process.exit(1);
   }
-  realRecipeId = real.id;
-  realWasActive = real.is_active;
+  for (const food of realFoods ?? []) {
+    realMysteryFoods.push({ id: food.id, slug: food.slug, wasActive: food.is_active });
+  }
 
   try {
-    await admin.from('shop_recipes').update({ is_active: false }).eq('id', real.id);
+    // Phase 1 runs on temporary foods only; Phase 2 on the real Crystal Dumplings only.
+    await setRealMysteryActive(new Set());
     await phase1();
-    await admin.from('shop_recipes').update({ is_active: realWasActive }).eq('id', real.id);
+    await setRealMysteryActive(new Set(crystal.is_active ? ['crystal-dumpling'] : []));
     await phase2();
   } catch (error) {
     failed++;

@@ -43,6 +43,7 @@ import {
   getActiveSessionTargetKeys,
   requestSessionRewardOffer,
 } from "@/lib/supabase-service";
+import { countTestedItems, isBelowRewardThreshold } from "@/lib/rewardTiers";
 import { gradeBundledFillTest, type Placement } from "@/lib/fillTest";
 import {
   buildFlashcardLlmRequestKey,
@@ -4201,7 +4202,8 @@ const gradeLabels = getGradeLabels(str);
   // immediately -- same two-phase shape ParagraphQuizReviewSection.tsx
   // already uses for its own finishSession/completeSessionAndReturn split.
   async function finalizeQuizCompletion(
-    completedReviewTestSession: (typeof reviewTestSessions)[number] | null
+    completedReviewTestSession: (typeof reviewTestSessions)[number] | null,
+    extraNotice: string | null = null
   ) {
     // Tracks whether completeReviewTestSession actually succeeded, so the
     // unconditional notice below never clobbers a real error with a false
@@ -4246,7 +4248,9 @@ const gradeLabels = getGradeLabels(str);
       adHocNoticeMessage: str.fillTest.completionMessage,
     });
     if (completionNotice !== null) {
-      setQuizNotice(completionNotice);
+      // An explanation of why there was no reward (too small a session, or the reward
+      // request failed) rides along with the normal completion message.
+      setQuizNotice(extraNotice ? `${completionNotice} ${extraNotice}` : completionNotice);
     }
     await refreshAll();
   }
@@ -4343,26 +4347,40 @@ const gradeLabels = getGradeLabels(str);
           // Don't block quiz completion if session save fails
         }
 
-        // Ingredient reward -- packaged sessions only (character, phrase, or
-        // mixed alike; broadened from the original paragraph-quiz-only scope,
-        // see docs/feature-specs/2026-08-22-paragraph-quiz-ingredient-reward.md).
-        // A failure here, or an empty result (no unlocked recipes / empty
-        // pool / already rewarded), must never block normal completion --
-        // fall straight through to finalizeQuizCompletion exactly as before
-        // this feature existed.
-        if (completedReviewTestSession && quizSessionId) {
+        // Ingredient reward -- EVERY completed fill-test session, packaged or ad-hoc
+        // (owner decision 2026-10-24, roadmap item P: once rewards were sized by Tested
+        // Count -- nothing under 10 items -- there was no reason to treat the two
+        // differently, and "Test Selected" sat next to "Quick Add" looking identical).
+        // The offer is keyed to the saved quiz session, never to a packaged session.
+        // History: paragraph-quiz only (2026-08-22), then packaged sessions (2026-08-24);
+        // see docs/feature-specs/2026-08-22-paragraph-quiz-ingredient-reward.md.
+        // A failure here, or an empty result (nothing rewardable / under 10 tested /
+        // already offered), must never block normal completion -- fall straight through
+        // to finalizeQuizCompletion exactly as before this feature existed.
+        let rewardNotice: string | null = null;
+        if (quizSessionId) {
           try {
             const offer = await requestSessionRewardOffer(quizSessionId);
             if (offer) {
               setQuizRewardOffer(offer);
               return; // defer finalizeQuizCompletion until the child claims (or skips) and continues
             }
+            // No offer. The common reason is a session that tested fewer than 10 items --
+            // say so, instead of leaving the child wondering where the reward went.
+            const testedCount = countTestedItems(quizHistory);
+            if (isBelowRewardThreshold(testedCount)) {
+              rewardNotice = str.fillTest.reviewTestSession.smallSessionHint.replace(
+                "{tested}",
+                String(testedCount)
+              );
+            }
           } catch (error) {
             console.error("Failed to reward ingredients for packaged fill-test session:", error);
+            rewardNotice = str.fillTest.reviewTestSession.rewardLoadError;
           }
         }
 
-        await finalizeQuizCompletion(completedReviewTestSession);
+        await finalizeQuizCompletion(completedReviewTestSession, rewardNotice);
       } finally {
         quizFinishInFlightRef.current = false;
         setQuizSubmitting(false);

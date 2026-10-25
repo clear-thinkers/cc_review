@@ -68,3 +68,8 @@ export function toggleRewardSelection(
   }
   return selected.length >= picksAllowed ? [...selected] : [...selected, key];
 }
+
+/** True when a finished session tested too few items to earn a reward (under REWARD_MIN_TESTED_COUNT). */
+export function isBelowRewardThreshold(testedCount: number): boolean {
+  return rewardPicksForTestedCount(testedCount) === 0;
+}

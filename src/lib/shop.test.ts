@@ -382,8 +382,8 @@ describe("normalizeShopTeaserI18n", () => {
 });
 
 describe("SHOP_WALL_SIZE", () => {
-  it("has room for every launch recipe plus the Crystal Dumplings mystery food (14)", () => {
-    expect(SHOP_WALL_SIZE).toBe(14);
+  it("has room for every launch recipe plus the Crystal Dumplings mystery food (a floor of 14 -- the wall only ever grows as foods are added)", () => {
+    expect(SHOP_WALL_SIZE).toBeGreaterThanOrEqual(14);
   });
 });
 

@@ -19,6 +19,7 @@ import {
   buildDefaultChildSessionName,
   canDeleteReviewTestSession,
   isQuickAddAvailable,
+  partitionByQuizReady,
   resolveSessionNameTarget,
 } from "./dueReviewPackaging";
 import PendingRewardOfferBanner from "./PendingRewardOfferBanner";
@@ -85,6 +86,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
     reviewTestSessionStatus,
     reviewTestSessionName,
     adminTargets,
+    adminNotice,
     adminLoading,
     words,
     reviewTestSessions,
@@ -146,8 +148,12 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
   // flow as "Add Selected to Session" (handleAddSelectedToSession) below -- so it inherits
   // that flow's target resolution, create-or-append logic, and name-input requirement
   // rather than duplicating any of it.
+  //
+  // It chooses ONLY from due characters that have saved quiz content (fillTestDueWords):
+  // a character with no content can't be tested, so including one silently shrinks the
+  // session -- and a session earns a reward only for the items it actually tests.
   function handleQuickAdd(count: number): void {
-    const lowestFamiliarityIds = selectLowestFamiliarityWords(dueWords, count).map((word) => word.id);
+    const lowestFamiliarityIds = selectLowestFamiliarityWords(fillTestDueWords, count).map((word) => word.id);
     setSelectedDueWordIds(lowestFamiliarityIds);
     setSessionNameInput(suggestSessionName());
     setSessionFormOpen(true);
@@ -161,13 +167,30 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
       return;
     }
 
-    const selectedWords = words.filter((word) => selectedDueWordIds.includes(word.id));
+    const allSelectedWords = words.filter((word) => selectedDueWordIds.includes(word.id));
+    // A child's session keeps only characters that can actually be quizzed (and is told how
+    // many were left out); a parent's selection is used as chosen, exactly as before.
+    // Quiz content is attached to the DUE list only (`words` never carries it), so readiness
+    // is looked up there by id.
+    const quizReadyIds = new Set(fillTestDueWords.map((word) => word.id));
+    const { quizReady, notQuizReady } = partitionByQuizReady(allSelectedWords, (word) => quizReadyIds.has(word.id));
+    const selectedWords = isChildViewer ? quizReady : allSelectedWords;
+    const leftOutNote =
+      isChildViewer && notQuizReady.length > 0
+        ? ` ${str.due.batchActions.leftOutNoQuizContent.replace("{count}", String(notQuizReady.length))}`
+        : "";
     const drafts: ReviewTestSessionTargetDraft[] = selectedWords.flatMap((word) =>
       adminTargets.filter((target) => target.character === word.hanzi)
     );
 
     if (drafts.length === 0) {
-      setBatchActionNotice(str.admin.messages.reviewTestSessionNoSelection);
+      // Targets come from a background load. If it hasn't landed yet (or failed), say that
+      // instead of claiming nothing was selected.
+      setBatchActionNotice(
+        adminTargets.length === 0
+          ? (adminNotice ?? str.admin.loading)
+          : str.admin.messages.reviewTestSessionNoSelection
+      );
       return;
     }
 
@@ -187,18 +210,18 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
       if (nameTarget.kind === "append") {
         const addedCount = await appendTargetsToReviewTestSession(nameTarget.sessionId, orderedTargets);
         setBatchActionNotice(
-          addedCount > 0
+          (addedCount > 0
             ? str.admin.messages.reviewTestSessionAppendSuccess
                 .replace("{name}", trimmedName)
                 .replace("{count}", String(addedCount))
-            : str.admin.messages.reviewTestSessionNoNewTargets.replace("{name}", trimmedName)
+            : str.admin.messages.reviewTestSessionNoNewTargets.replace("{name}", trimmedName)) + leftOutNote
         );
       } else {
         await createReviewTestSession(trimmedName, orderedTargets);
         setBatchActionNotice(
           str.admin.messages.reviewTestSessionCreateSuccess
             .replace("{name}", trimmedName)
-            .replace("{count}", String(orderedTargets.length))
+            .replace("{count}", String(orderedTargets.length)) + leftOutNote
         );
       }
       setSelectedDueWordIds([]);
@@ -654,7 +677,7 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
           )}
           {canManageSessions &&
             QUICK_ADD_SIZES.map((size) => {
-              const available = isQuickAddAvailable(size, dueWords.length);
+              const available = isQuickAddAvailable(size, fillTestDueWords.length);
               return (
                 <button
                   key={`quick-add-${size}`}
@@ -690,7 +713,8 @@ export default function DueReviewSection({ vm }: { vm: WordsWorkspaceVM }) {
               <button
                 type="submit"
                 className="rounded border-2 px-3 py-1.5 text-xs font-medium leading-none btn-secondary disabled:opacity-50"
-                disabled={creatingSession}
+                disabled={creatingSession || adminLoading}
+                title={adminLoading ? str.admin.loading : undefined}
               >
                 {str.admin.reviewTestSession.createButton}
               </button>

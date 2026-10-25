@@ -4,6 +4,7 @@ import {
   buildDefaultChildSessionName,
   canDeleteReviewTestSession,
   isQuickAddAvailable,
+  partitionByQuizReady,
   resolveSessionNameTarget,
 } from "./dueReviewPackaging";
 
@@ -103,5 +104,24 @@ describe("isQuickAddAvailable", () => {
     expect(isQuickAddAvailable(10, 10)).toBe(true);
     expect(isQuickAddAvailable(30, 25)).toBe(false);
     expect(isQuickAddAvailable(20, 40)).toBe(true);
+  });
+});
+
+describe("partitionByQuizReady", () => {
+  const words = [
+    { id: "a", ready: true },
+    { id: "b", ready: false },
+    { id: "c", ready: true },
+  ];
+
+  it("separates quizzable words from ones with no quiz content, keeping order", () => {
+    const { quizReady, notQuizReady } = partitionByQuizReady(words, (word) => word.ready);
+    expect(quizReady.map((word) => word.id)).toEqual(["a", "c"]);
+    expect(notQuizReady.map((word) => word.id)).toEqual(["b"]);
+  });
+
+  it("handles none and all", () => {
+    expect(partitionByQuizReady([], () => true)).toEqual({ quizReady: [], notQuizReady: [] });
+    expect(partitionByQuizReady(words, () => false).quizReady).toEqual([]);
   });
 });

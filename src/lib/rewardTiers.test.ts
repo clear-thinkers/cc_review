@@ -4,6 +4,7 @@ import {
   REWARD_OFFER_SIZE,
   countTestedItems,
   effectiveRewardPicks,
+  isBelowRewardThreshold,
   isValidRewardClaim,
   rewardPicksForTestedCount,
   toggleRewardSelection,
@@ -104,5 +105,14 @@ describe("toggleRewardSelection", () => {
 
   it("allows nothing when no picks are allowed", () => {
     expect(toggleRewardSelection([], "a", 0)).toEqual([]);
+  });
+});
+
+describe("isBelowRewardThreshold", () => {
+  it("is true only under 10 tested items", () => {
+    expect(isBelowRewardThreshold(0)).toBe(true);
+    expect(isBelowRewardThreshold(9)).toBe(true);
+    expect(isBelowRewardThreshold(10)).toBe(false);
+    expect(isBelowRewardThreshold(40)).toBe(false);
   });
 });

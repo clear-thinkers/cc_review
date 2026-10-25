@@ -4,7 +4,7 @@ Roadmap item **P**. Builds on Mystery Foods (`2026-10-24-mystery-foods.md`) and 
 
 ## Status
 
-**Built on dev 2026-10-24 — manual in-browser QA passed; prod migration (`20261024190000`) pending.** Authorized 2026-10-24 (build plan at the bottom).
+**Shipped 2026-10-24 — manual in-browser QA passed on dev; migration `20261024190000` run on prod by the owner.** Authorized 2026-10-24 (build plan at the bottom).
 
 **Scope-boundary authorization (`AI_CONTRACT.md §2`): given 2026-10-24** ("authorize the change", after the boundary and plan were stated). Covers:
 1. **RLS policy additions** — child-scoped INSERT on `review_test_sessions` and `review_test_session_targets`, and child-scoped DELETE on their own `review_test_sessions`. Additive: no existing policy is edited or dropped.
@@ -43,6 +43,10 @@ Only a parent can package a review test session, so a child can't choose their o
 - **Idempotent:** one offer per quiz session; a repeated call returns the existing offer; an offer can be claimed once; a claim must be exactly `picks_allowed` distinct offered keys. The client never supplies which ingredients exist, the tier, or win status.
 - **Failure never blocks completion** (unchanged): a failed offer call just means no panel now; a pending offer, if one was created, still shows on Due Review.
 - **Due Review:** children now see Add Selected to Session, Quick Add 10/20/30 and the name form. The name box defaults to a fresh unique name ("My practice" + date/time) for a child — never a parent's session name. A hint explains the tiers. A child sees Delete only on sessions they created.
+
+## Addendum (owner, 2026-10-24): ad-hoc sessions are rewarded too
+
+The first release rewarded only **packaged** sessions (saved `review_test_sessions`); a fill-test run started any other way (Test Selected, a per-row Fill Test, the due queue) was **ad-hoc** and earned coins only. That split was confusing -- the owner's child ran an ad-hoc quiz right after Quick Add and saw no reward. **Decision: every completed fill-test session is rewarded identically**, packaged or not: same Tested Count tiers, same win rule, same offer -> claim flow. The reward RPC keys off the saved `quiz_sessions` row and never checked "packaged", so this is a client-only change (`moveQuizForward` requests an offer whenever a quiz session was saved); no schema, RPC or RLS change. Packaging remains useful for planning and repeating a set, but is no longer a condition for a reward.
 
 ## Out of scope
 
@@ -97,4 +101,4 @@ None at authorization time.
 - [x] `tsc` clean · eslint clean on all touched files (7 pre-existing errors elsewhere) · `npm test` 1068/1068 · `check:encoding` passes · `next build` succeeds
 - [x] ARCHITECTURE (Due Review Rules 13/14/32/35/36 notes + new 38/39; Content Admin Rule 21; Fill-Test Rule 40; Recipe Shop Rule 26; schema incl. the new offers table; System Guarantees 6c/6d), ROADMAP, BUILD_CONVENTIONS, older specs' addenda
 - [x] Owner live QA (child + parent) passed 2026-10-24 · committed and pushed to `main`
-- [ ] Prod: `npm run db:push:prod:dry` → `npm run db:push:prod` (owner; the migration also drops a policy and revokes a function there)
+- [x] Prod: `db:push:prod` run by the owner 2026-10-24 (the migration also dropped a policy and revoked a function there); live use on prod has begun

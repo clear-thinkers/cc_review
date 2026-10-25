@@ -68,7 +68,25 @@ export function buildDefaultChildSessionName(template: string, now: Date): strin
   return template.replace("{time}", stamp);
 }
 
-/** A Quick Add of `size` characters is only offered when that many are due. */
+/**
+ * Splits words into those that can actually be quizzed (they have saved fill-test content)
+ * and those that can't. A session only earns a reward for the items it really TESTS, so
+ * packaging a character with no quiz content silently shrinks the session -- Quick Add must
+ * choose only from the quizzable ones, and a child's Add Selected leaves the rest out.
+ */
+export function partitionByQuizReady<T>(
+  words: ReadonlyArray<T>,
+  hasFillTest: (word: T) => boolean
+): { quizReady: T[]; notQuizReady: T[] } {
+  const quizReady: T[] = [];
+  const notQuizReady: T[] = [];
+  for (const word of words) {
+    (hasFillTest(word) ? quizReady : notQuizReady).push(word);
+  }
+  return { quizReady, notQuizReady };
+}
+
+/** A Quick Add of `size` characters is only offered when that many QUIZZABLE characters are due. */
 export function isQuickAddAvailable(size: number, dueCount: number): boolean {
   return dueCount >= size;
 }
