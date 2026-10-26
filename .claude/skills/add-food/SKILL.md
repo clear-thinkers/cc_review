@@ -356,7 +356,12 @@ Phase 5 with `--apply` appended. This inserts any `--new-ingredients`
 catalog row(s) first, then the new `shop_recipes` row, in **dev**. On
 success it also writes a scoped migration file to
 `supabase/migrations/<timestamp>_shop_add_<slug>_food.sql` containing the
-same statement(s) — written to disk only, never run.
+same statement(s) — written to disk only, never run. The script then
+automatically runs `supabase migration repair --status applied <version>`
+against dev (the linked project; never prod), because the rows are already
+in dev and a later `db:push` there would otherwise replay the plain recipe
+insert and fail on `shop_recipes_slug_key`. If that repair step warns it
+couldn't run, run the printed command manually.
 
 If `--new-ingredients` created any genuinely new ingredient(s), also update
 the checked-in fallback catalog so it doesn't drift from the DB: add an

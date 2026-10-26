@@ -88,6 +88,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { canonicalizeShopIngredientKey, getShopIngredientCatalogEntry } from "../../../../src/lib/shopIngredients";
@@ -709,6 +710,29 @@ values (
     });
     console.log(
       `Wrote ${migrationPath} (not applied -- review it, then run npm run db:push:prod:dry / npm run db:push:prod when ready to promote to production).`
+    );
+    markMigrationAppliedInDev(migrationPath);
+  }
+}
+
+// The rows are already in dev (inserted above), but the migration file just
+// written isn't in dev's migration history -- so a later `db:push` on dev
+// would replay the plain recipe insert and fail on shop_recipes_slug_key.
+// Record it as applied. `supabase migration repair` targets the *linked*
+// project (dev); prod is only ever reached via --db-url in db-push-prod.mjs,
+// so this can never touch production. Only writes dev's history table.
+function markMigrationAppliedInDev(migrationPath: string): void {
+  const version = path.basename(migrationPath).split("_")[0];
+  if (!/^\d+$/.test(version)) {
+    console.warn(`Could not parse a migration version from ${migrationPath}; skipping dev history repair.`);
+    return;
+  }
+  try {
+    execSync(`npx supabase migration repair --status applied ${version}`, { stdio: "pipe" });
+    console.log(`Marked ${version} as applied in dev's migration history (so db:push on dev won't replay it).`);
+  } catch {
+    console.warn(
+      `Could not mark ${version} as applied in dev. Run manually: npx supabase migration repair --status applied ${version}`
     );
   }
 }
