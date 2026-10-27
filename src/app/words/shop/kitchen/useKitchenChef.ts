@@ -6,20 +6,24 @@ import {
   CHEF_POSE_FOR_TRIGGER,
   CHEF_TAP_COOLDOWN_MS,
   type ChefPose,
+  type ChefReaction,
+  type ChefSpot,
   type ChefTrigger,
   type KitchenChefLocaleStrings,
 } from "./kitchenChef.types";
-import { canChefRespondToTap, pickChefLine } from "./kitchenChef.utils";
+import { canChefRespondToTap, pickChefLine, pickChefTapReaction } from "./kitchenChef.utils";
 
-type ChefState = { pose: ChefPose; line: string | null };
+type ChefState = { pose: ChefPose; line: string | null; spot: ChefSpot };
 
-const IDLE_STATE: ChefState = { pose: "idle", line: null };
+const IDLE_STATE: ChefState = { pose: "idle", line: null, spot: "ladder" };
 
 /**
- * Drives Chef Shrewy: which pose is showing and what he's saying. `say` plays a
- * line for a trigger and returns him to idle after CHEF_LINE_DURATION_MS; `tap`
- * is the click handler (rate-limited by CHEF_TAP_COOLDOWN_MS so rapid taps never
- * stack lines). Purely presentational -- nothing here touches kitchen data.
+ * Drives Chef Shrewy: which pose is showing, what he's saying, and where he stands.
+ * `say` plays a line for a trigger (from the ladder) and returns him to idle there
+ * after CHEF_LINE_DURATION_MS; `tap` is the click handler (rate-limited by
+ * CHEF_TAP_COOLDOWN_MS so rapid taps never stack lines), which may also pick one of
+ * the situational `extraReactions` and walk him to its spot. Purely presentational --
+ * nothing here touches kitchen data.
  */
 export function useKitchenChef(strings: Pick<KitchenChefLocaleStrings, "generic" | "recipes">) {
   const [state, setState] = useState<ChefState>(IDLE_STATE);
@@ -39,34 +43,43 @@ export function useKitchenChef(strings: Pick<KitchenChefLocaleStrings, "generic"
     []
   );
 
+  const show = useCallback((reaction: ChefReaction) => {
+    lastLineRef.current = reaction.line;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setState(reaction);
+    timerRef.current = setTimeout(() => setState(IDLE_STATE), CHEF_LINE_DURATION_MS);
+  }, []);
+
   const say = useCallback(
-    (trigger: ChefTrigger, options: { recipeSlug?: string | null; servedRecipeSlugs?: readonly string[] } = {}) => {
+    (trigger: ChefTrigger, options: { recipeSlug?: string | null } = {}) => {
       const line = pickChefLine({
         trigger,
         strings: stringsRef.current,
         recipeSlug: options.recipeSlug,
-        servedRecipeSlugs: options.servedRecipeSlugs,
         lastLine: lastLineRef.current,
       });
       if (line === null) return;
-
-      lastLineRef.current = line;
-      if (timerRef.current) clearTimeout(timerRef.current);
-      setState({ pose: CHEF_POSE_FOR_TRIGGER[trigger], line });
-      timerRef.current = setTimeout(() => setState(IDLE_STATE), CHEF_LINE_DURATION_MS);
+      show({ line, pose: CHEF_POSE_FOR_TRIGGER[trigger], spot: "ladder" });
     },
-    []
+    [show]
   );
 
   const tap = useCallback(
-    (servedRecipeSlugs: readonly string[]) => {
+    (servedRecipeSlugs: readonly string[], extraReactions: readonly ChefReaction[] = []) => {
       const now = Date.now();
       if (!canChefRespondToTap(now, lastTapAtRef.current, CHEF_TAP_COOLDOWN_MS)) return;
       lastTapAtRef.current = now;
-      say(servedRecipeSlugs.length > 0 ? "tapServed" : "tapEmpty", { servedRecipeSlugs });
+      const reaction = pickChefTapReaction({
+        trigger: servedRecipeSlugs.length > 0 ? "tapServed" : "tapEmpty",
+        strings: stringsRef.current,
+        servedRecipeSlugs,
+        extraReactions,
+        lastLine: lastLineRef.current,
+      });
+      if (reaction) show(reaction);
     },
-    [say]
+    [show]
   );
 
-  return { pose: state.pose, line: state.line, say, tap };
+  return { pose: state.pose, line: state.line, spot: state.spot, say, tap };
 }

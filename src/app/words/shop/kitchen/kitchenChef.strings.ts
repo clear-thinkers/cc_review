@@ -1,10 +1,11 @@
 import type { KitchenChefLocaleStrings } from "./kitchenChef.types";
 
 /**
- * Kitchen Chef Strings — Last updated: 2026-10-24
+ * Kitchen Chef Strings — Last updated: 2026-10-26
  * Chef Shrewy's lines (roadmap item O, docs/feature-specs/2026-10-24-kitchen-chef-dialogue.md).
  * No generic line names a food, an ingredient, or coins. Recipe-specific lines
- * override the generic set per trigger.
+ * override the generic set per trigger. Shelf-aware lines (`shelf`) may name food
+ * types and dishes (owner-approved 2026-10-26).
  */
 export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChefLocaleStrings } = {
   en: {
@@ -29,6 +30,14 @@ export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChef
         tapServed: ["Mmm, that crunchy bamboo shoot and sweet tiger prawn... my mouth is watering!"],
       },
     },
+    shelf: {
+      foodTypes: { drinks: "drinks", hotmeal: "hot meals", desserts: "desserts" },
+      lines: {
+        foodTypeImbalance: "So many {have}! How about some {missing} next?",
+        favoriteAgain: "{dish} again? You really love it, huh!",
+        favoriteSpecialty: "I think {dish} is our specialty now!",
+      },
+    },
   },
   zh: {
     chefName: "鼩仔",
@@ -48,6 +57,14 @@ export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChef
         start: ["小心烫哦！等蒸汽散开，虾饺就会像水晶一样透亮！"],
         success: ["太棒啦！皮薄馅大，晶莹剔透！连皇帝吃了都要再来一笼！"],
         tapServed: ["吸溜……脆生生的笋尖配上大虾仁，看得我都流口水啦！"],
+      },
+    },
+    shelf: {
+      foodTypes: { drinks: "饮品", hotmeal: "热菜", desserts: "甜点" },
+      lines: {
+        foodTypeImbalance: "好多{have}呀！下次做点{missing}怎么样？",
+        favoriteAgain: "又是{dish}？你真的超爱它耶！",
+        favoriteSpecialty: "{dish}已经是我们的招牌菜啦！",
       },
     },
   },

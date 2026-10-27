@@ -46,6 +46,10 @@ describe("kitchenChef types", () => {
       showLabel: "Show",
       generic,
       recipes: { soup: { start: ["Soup time!"] } },
+      shelf: {
+        foodTypes: { drinks: "drinks", hotmeal: "hot meals", desserts: "desserts" },
+        lines: { foodTypeImbalance: "So many {have}!", favoriteAgain: "{dish}!", favoriteSpecialty: "{dish}!!" },
+      },
     };
     expect(pose).toBe("idle");
     expect(strings.generic[trigger]).toEqual(["b"]);

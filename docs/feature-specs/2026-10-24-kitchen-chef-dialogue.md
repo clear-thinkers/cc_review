@@ -135,3 +135,7 @@ The unlock and idle-tap lines are over the length guide; allow the bubble to wra
 ## Open questions
 
 None. Spec is ready to build on the owner's go-ahead (UI-only: new `kitchenChef` strings section with EN/ZH parity test, five processed PNG sprites, a chef overlay component with speech bubble, and pure line-selection helpers).
+
+## Shelf-aware reactions (2026-10-26)
+
+Ten owner-approved lines in which the chef reacts to the child's shelf from different spots in the kitchen. Specced and tracked separately, with a handoff block: `2026-10-27-kitchen-chef-shelf-reactions.md`.

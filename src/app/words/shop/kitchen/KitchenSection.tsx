@@ -35,7 +35,14 @@ import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 import { kitchenStrings } from "./kitchen.strings";
 import KitchenChef from "./KitchenChef";
 import { kitchenChefStrings } from "./kitchenChef.strings";
-import { findUnseenMysteryUnlocks, parseSeenUnlockIds, serializeSeenUnlockIds } from "./kitchenChef.utils";
+import {
+  buildShelfChefReactions,
+  countShelfDishesByFoodType,
+  findFavoriteRecipeId,
+  findUnseenMysteryUnlocks,
+  parseSeenUnlockIds,
+  serializeSeenUnlockIds,
+} from "./kitchenChef.utils";
 import { useKitchenChef } from "./useKitchenChef";
 import {
   buildCountertopTiles,
@@ -757,6 +764,16 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       }),
     [dishes, recipesById]
   );
+  const shelfChefReactions = useMemo(() => {
+    const favoriteRecipe = recipesById.get(findFavoriteRecipeId(dishes, recipesById) ?? "");
+    return buildShelfChefReactions(
+      {
+        shelfCountsByFoodType: countShelfDishesByFoodType(dishes, recipesById),
+        favoriteDishTitle: favoriteRecipe ? getShopRecipeContentForLocale(favoriteRecipe, locale).title : null,
+      },
+      chefStrings
+    );
+  }, [dishes, recipesById, chefStrings, locale]);
   const isCountertopFull = countertopCount >= SHOP_KITCHEN_COUNTERTOP_CAPACITY;
   const availableSpecialIngredientOptions = useMemo(
     () =>
@@ -998,11 +1015,12 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
               <KitchenChef
                 pose={chef.pose}
                 line={chef.line}
+                spot={chef.spot}
                 tapAria={chefStrings.tapAria}
                 hideLabel={chefStrings.hideLabel}
                 showLabel={chefStrings.showLabel}
                 hidden={isChefHidden}
-                onTap={() => chef.tap(servedRecipeSlugs)}
+                onTap={() => chef.tap(servedRecipeSlugs, shelfChefReactions)}
                 onToggleHidden={() => setIsChefHidden((current) => !current)}
               />
             ) : null}
