@@ -431,6 +431,7 @@ These rules govern the platform-admin maintenance page:
 3. Shop reward-icon audits compare persisted recipe reward icon rules against files under `public/rewards`.
 4. Ingredient-audit actions may edit or clear broken ingredient icon paths. Reward-audit actions may edit, create, or delete reward icon rules.
 5. Debug maintenance actions must not modify scheduler state, words, flashcard content, or quiz results.
+6. **Ingredient-quantity editor (2026-10-27, for kitchen testing).** `/api/debug/shop-ingredient-quantities` lets a platform admin set **their own** active profile's spendable count of any catalog ingredient (mystery ones included). The profile comes from the verified token's own claims and the family from its `users` row, never from the request. Changes are append-only: raising inserts `shop_ingredient_purchases` rows with `coins_spent = 0` (attributed to a recipe that uses the ingredient), and lowering inserts `shop_ingredient_consumptions` rows whose `cooked_dish_id` matches no dish. This is the one sanctioned writer of those ledgers outside their RPCs, and the one way a mystery ingredient reaches a purchase row (an exception to Recipe Shop Rule 25). After a raise, each active mystery food using the ingredient is passed to `unlock_shop_recipe` **as the caller**, so that RPC remains the only writer of `shop_recipe_unlocks`. No wallet, coin-history, or unlock row is written directly.
 
 ### Login & Avatar Protection Rules (`/login`)
 

@@ -56,3 +56,18 @@ export type DebugShopRewardIconAuditResponse = {
   items: DebugShopRewardIconAuditItem[];
   missingItems: DebugShopRewardIconAuditItem[];
 };
+
+export type DebugShopIngredientQuantityItem = {
+  key: string;
+  label: ShopLocalizedValue<string>;
+  iconPath: string | null;
+  isMystery: boolean;
+  /** The caller's spendable count: rewards + purchases - consumptions. */
+  quantity: number;
+};
+
+export type DebugShopIngredientQuantitiesResponse = {
+  items: DebugShopIngredientQuantityItem[];
+  /** Mystery foods this change unlocked for the caller (PATCH only). */
+  unlockedRecipes?: { slug: string; title: ShopLocalizedValue<string> }[];
+};

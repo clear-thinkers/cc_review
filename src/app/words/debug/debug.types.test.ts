@@ -5,6 +5,14 @@ import type {
   DebugShopIngredientIconAuditResponse,
 } from "./debug.types";
 
+describe("debug ingredient quantity strings parity", () => {
+  it("keeps the quantity table keys in sync across locales", () => {
+    expect(Object.keys(wordsStrings.en.debug.ingredientQtyTable).sort()).toEqual(
+      Object.keys(wordsStrings.zh.debug.ingredientQtyTable).sort()
+    );
+  });
+});
+
 describe("debug ingredient icon strings parity", () => {
   it("keeps ingredient icon table keys in sync across locales", () => {
     expect(Object.keys(wordsStrings.en.debug.ingredientIconsTable).sort()).toEqual(

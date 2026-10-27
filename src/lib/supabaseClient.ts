@@ -58,3 +58,19 @@ export function getServerSupabaseClient(): SupabaseClient {
     },
   });
 }
+
+/**
+ * Server-side client that acts AS the caller (use in API routes only)
+ * - Uses the anon key plus the caller's own access token, so RLS and
+ *   current_user_id()/current_family_id() see the caller, exactly as if the
+ *   browser had made the call -- for invoking caller-scoped RPCs from a route
+ */
+export function getCallerScopedSupabaseClient(accessToken: string): SupabaseClient {
+  return createClient(supabaseUrl!, supabaseAnonKey!, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}

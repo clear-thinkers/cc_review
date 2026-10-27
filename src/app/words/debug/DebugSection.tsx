@@ -2,9 +2,14 @@
 
 import type { ReactElement } from "react";
 import { useState } from "react";
+import { useLocale } from "@/app/shared/locale";
 import { useSession } from "@/lib/authContext";
+import { normalizeDebugIngredientTargetQuantity } from "@/lib/debugIngredientQuantities";
+import { SHOP_INGREDIENT_QUANTITY_MAX } from "@/lib/shop";
 import type {
   DebugErrorResponse,
+  DebugShopIngredientQuantitiesResponse,
+  DebugShopIngredientQuantityItem,
   DebugShopIngredientIconAuditItem,
   DebugShopIngredientIconAuditResponse,
   DebugShopRewardIconAuditItem,
@@ -42,8 +47,91 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
   const [creatingRewardIconPath, setCreatingRewardIconPath] = useState<string | null>(null);
   const [creatingRewardRecipeId, setCreatingRewardRecipeId] = useState("");
   const [creatingRewardMatchInput, setCreatingRewardMatchInput] = useState("");
+  const locale = useLocale();
+  const [quantityItems, setQuantityItems] = useState<DebugShopIngredientQuantityItem[] | null>(null);
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
+  const [quantityFilter, setQuantityFilter] = useState("");
+  const [quantityMysteryOnly, setQuantityMysteryOnly] = useState(false);
+  const [loadingQuantities, setLoadingQuantities] = useState(false);
+  const [savingQuantityKey, setSavingQuantityKey] = useState<string | null>(null);
+  const [quantityNotice, setQuantityNotice] = useState<DebugToolMessage | null>(null);
 
   if (page !== "debug") return null;
+
+  function applyQuantityResponse(json: DebugShopIngredientQuantitiesResponse): void {
+    setQuantityItems(json.items);
+    setQuantityDrafts(Object.fromEntries(json.items.map((item) => [item.key, String(item.quantity)])));
+  }
+
+  async function requestQuantities(init?: RequestInit): Promise<DebugShopIngredientQuantitiesResponse> {
+    const accessToken = session?.supabaseSession.access_token;
+    if (!accessToken) throw new Error(s.ingredientIconsAuthRequired);
+    const response = await fetch("/api/debug/shop-ingredient-quantities", {
+      ...init,
+      headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), Authorization: `Bearer ${accessToken}` },
+    });
+    const json = (await response.json()) as DebugShopIngredientQuantitiesResponse | DebugErrorResponse;
+    if (!response.ok || !("items" in json) || !Array.isArray(json.items)) {
+      throw new Error("error" in json ? json.error || str.common.error : str.common.error);
+    }
+    return json;
+  }
+
+  async function handleLoadQuantities(): Promise<void> {
+    setLoadingQuantities(true);
+    setQuantityNotice(null);
+    try {
+      const json = await requestQuantities();
+      applyQuantityResponse(json);
+      setQuantityNotice({ tone: "success", text: s.ingredientQtyLoaded(json.items.length) });
+    } catch (error) {
+      setQuantityNotice({
+        tone: "error",
+        text: s.ingredientQtyError(error instanceof Error ? error.message : String(error)),
+      });
+    } finally {
+      setLoadingQuantities(false);
+    }
+  }
+
+  async function handleSaveQuantity(item: DebugShopIngredientQuantityItem): Promise<void> {
+    const quantity = normalizeDebugIngredientTargetQuantity(quantityDrafts[item.key] ?? "");
+    if (quantity === null) {
+      setQuantityNotice({ tone: "error", text: s.ingredientQtyInvalid(SHOP_INGREDIENT_QUANTITY_MAX) });
+      return;
+    }
+
+    setSavingQuantityKey(item.key);
+    setQuantityNotice(null);
+    try {
+      const json = await requestQuantities({
+        method: "PATCH",
+        body: JSON.stringify({ ingredientKey: item.key, quantity }),
+      });
+      applyQuantityResponse(json);
+      const saved = s.ingredientQtySaved(item.label[locale], quantity);
+      const unlocked = (json.unlockedRecipes ?? []).map((recipe) => recipe.title[locale]);
+      setQuantityNotice({
+        tone: "success",
+        text: unlocked.length > 0 ? `${saved} ${s.ingredientQtyUnlocked(unlocked.join(", "))}` : saved,
+      });
+    } catch (error) {
+      setQuantityNotice({
+        tone: "error",
+        text: s.ingredientQtyError(error instanceof Error ? error.message : String(error)),
+      });
+    } finally {
+      setSavingQuantityKey(null);
+    }
+  }
+
+  const normalizedQuantityFilter = quantityFilter.trim().toLowerCase();
+  const visibleQuantityItems = (quantityItems ?? []).filter(
+    (item) =>
+      (!quantityMysteryOnly || item.isMystery) &&
+      (normalizedQuantityFilter === "" ||
+        [item.key, item.label.en, item.label.zh].some((text) => text.toLowerCase().includes(normalizedQuantityFilter)))
+  );
 
   function getIngredientIconAuditStatusLabel(
     item: DebugShopIngredientIconAuditItem
@@ -443,6 +531,122 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
       <p className="text-sm text-gray-700">{s.pageDescription}</p>
 
       <div className="space-y-3">
+        <div className="rounded-md border p-3">
+          <h3 className="text-sm font-medium">{s.ingredientQtyTitle}</h3>
+          <p className="mt-1 text-sm text-gray-600">{s.ingredientQtyDescription}</p>
+          <button
+            type="button"
+            disabled={loadingQuantities}
+            onClick={() => void handleLoadQuantities()}
+            className="mt-3 rounded-md border-2 px-4 py-2 font-medium btn-secondary disabled:opacity-50"
+          >
+            {loadingQuantities ? s.ingredientQtyLoading : s.ingredientQtyLoadButton}
+          </button>
+
+          {quantityNotice ? (
+            <p
+              className={`mt-3 text-sm ${quantityNotice.tone === "error" ? "text-red-700" : "text-blue-700"}`}
+            >
+              {quantityNotice.text}
+            </p>
+          ) : quantityItems === null ? (
+            <p className="mt-3 text-sm text-gray-600">{s.ingredientQtyIdle}</p>
+          ) : null}
+
+          {quantityItems ? (
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <label className="flex items-center gap-2">
+                  <span>{s.ingredientQtyFilterLabel}</span>
+                  <input
+                    type="text"
+                    value={quantityFilter}
+                    placeholder={s.ingredientQtyFilterPlaceholder}
+                    onChange={(event) => setQuantityFilter(event.target.value)}
+                    className="rounded-md border px-2 py-1"
+                  />
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={quantityMysteryOnly}
+                    onChange={(event) => setQuantityMysteryOnly(event.target.checked)}
+                  />
+                  <span>{s.ingredientQtyMysteryOnly}</span>
+                </label>
+              </div>
+
+              <div className="mt-3 max-h-96 overflow-auto rounded-md border">
+                <table className="min-w-full border-collapse text-sm">
+                  <thead className="sticky top-0 border-b bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">{s.ingredientQtyTable.ingredient}</th>
+                      <th className="px-3 py-2 text-left font-medium">{s.ingredientQtyTable.ingredientKey}</th>
+                      <th className="px-3 py-2 text-left font-medium">{s.ingredientQtyTable.quantity}</th>
+                      <th className="px-3 py-2 text-left font-medium">{s.ingredientQtyTable.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleQuantityItems.map((item) => (
+                      <tr key={item.key} className="border-b align-middle">
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            {item.iconPath ? (
+                              <img src={item.iconPath} alt="" className="h-8 w-8 object-contain" />
+                            ) : null}
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {item.label.en}
+                                {item.isMystery ? (
+                                  <span className="ml-2 rounded border border-amber-400 bg-amber-100 px-1 text-[11px] font-medium text-amber-900">
+                                    {s.ingredientQtyMysteryBadge}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="text-xs text-gray-500">{item.label.zh}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-600">{item.key}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={SHOP_INGREDIENT_QUANTITY_MAX}
+                            step={1}
+                            value={quantityDrafts[item.key] ?? ""}
+                            onChange={(event) =>
+                              setQuantityDrafts((current) => ({ ...current, [item.key]: event.target.value }))
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") void handleSaveQuantity(item);
+                            }}
+                            aria-label={`${s.ingredientQtyTable.quantity}: ${item.label[locale]}`}
+                            className="w-20 rounded-md border px-2 py-1"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            title={s.ingredientQtySaveTooltip}
+                            disabled={
+                              savingQuantityKey !== null || quantityDrafts[item.key] === String(item.quantity)
+                            }
+                            onClick={() => void handleSaveQuantity(item)}
+                            className="rounded border-2 px-1.5 py-0.5 text-[11px] font-medium leading-none btn-primary disabled:opacity-50"
+                          >
+                            {savingQuantityKey === item.key ? s.ingredientQtySaving : s.ingredientQtySave}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </div>
+
         <div className="rounded-md border p-3">
           <h3 className="text-sm font-medium">{s.cleanOrphanedTitle}</h3>
           <p className="mt-1 text-sm text-gray-600">{s.cleanOrphanedDescription}</p>
