@@ -29,6 +29,12 @@ export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChef
         success: ["Perfection! Tender, sweet, and glowing! Even the Emperor would ask for seconds!"],
         tapServed: ["Mmm, that crunchy bamboo shoot and sweet tiger prawn... my mouth is watering!"],
       },
+      "crystal-pear-dew": {
+        unlock: ["Whoa! Smell that? Snow pears and golden blossoms... a secret royal tea is ready to brew!"],
+        start: ["Low and slow now! When the amber crystals melt, the whole pot turns sparkly gold!"],
+        success: ["Ahh, so warm and sweet! One sip and you feel cozy all the way to your toes!"],
+        tapServed: ["Sweet pear, ruby goji berries, a little floating flower... can I have just one sip?"],
+      },
     },
     shelf: {
       foodTypes: { drinks: "drinks", hotmeal: "hot meals", desserts: "desserts" },
@@ -57,6 +63,12 @@ export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChef
         start: ["小心烫哦！等蒸汽散开，虾饺就会像水晶一样透亮！"],
         success: ["太棒啦！皮薄馅大，晶莹剔透！连皇帝吃了都要再来一笼！"],
         tapServed: ["吸溜……脆生生的笋尖配上大虾仁，看得我都流口水啦！"],
+      },
+      "crystal-pear-dew": {
+        unlock: ["哇！闻到了吗？雪梨和金菊的香气……神秘的御用甜饮可以开炖啦！"],
+        start: ["小火慢慢炖哦！等琥珀冰晶化开，整锅都会变得金灿灿的！"],
+        success: ["好暖好甜呀！喝一口，从头暖到脚趾头！"],
+        tapServed: ["清甜的雪梨，红红的杞果，还漂着一朵小金菊……让我喝一小口嘛！"],
       },
     },
     shelf: {

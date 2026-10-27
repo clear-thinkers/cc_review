@@ -27,7 +27,7 @@ import {
   type ShopIngredientCatalogEntry,
 } from "./shopIngredients";
 
-export const SHOP_WALL_SIZE = 17;
+export const SHOP_WALL_SIZE = 18;
 export const SHOP_INGREDIENT_QUANTITY_MIN = 1;
 export const SHOP_INGREDIENT_QUANTITY_MAX = 99;
 const SHOP_PLAIN_ICON_TOKEN = "plain";
@@ -728,18 +728,7 @@ export function computeShopCookReadiness(
   availabilityByKey: ReadonlyMap<string, number>,
   activeSpecialIngredientKeys: string[] = []
 ): ShopCookReadiness {
-  const matchedRule = resolveShopRecipeVariant(recipe.variantIconRules ?? [], activeSpecialIngredientKeys);
-  const waivedKeys = new Set(
-    (matchedRule?.waivedBaseIngredientKeys ?? []).map((key) => canonicalizeShopIngredientKey(key))
-  );
-
-  const requiredByKey = new Map<string, number>();
-
-  for (const ingredient of recipe.baseIngredients) {
-    const key = canonicalizeShopIngredientKey(ingredient.ingredientKey);
-    if (!key || waivedKeys.has(key)) continue;
-    requiredByKey.set(key, (requiredByKey.get(key) ?? 0) + ingredient.quantity);
-  }
+  const requiredByKey = computeShopCookBaseRequirements(recipe, activeSpecialIngredientKeys);
 
   const missingIngredientKeys: string[] = [];
   for (const [key, requiredQty] of requiredByKey) {
@@ -752,6 +741,29 @@ export function computeShopCookReadiness(
     isReady: requiredByKey.size > 0 && missingIngredientKeys.length === 0,
     missingIngredientKeys,
   };
+}
+
+/**
+ * The base-ingredient units one cook consumes, by canonical key, in recipe order
+ * (duplicates summed) -- minus any base ingredient the matched variant waives for
+ * these special ingredients. The same requirement computeShopCookReadiness checks.
+ */
+export function computeShopCookBaseRequirements(
+  recipe: Pick<ShopRecipe, "baseIngredients"> & Partial<Pick<ShopRecipe, "variantIconRules">>,
+  activeSpecialIngredientKeys: string[] = []
+): Map<string, number> {
+  const matchedRule = resolveShopRecipeVariant(recipe.variantIconRules ?? [], activeSpecialIngredientKeys);
+  const waivedKeys = new Set(
+    (matchedRule?.waivedBaseIngredientKeys ?? []).map((key) => canonicalizeShopIngredientKey(key))
+  );
+
+  const requiredByKey = new Map<string, number>();
+  for (const ingredient of recipe.baseIngredients) {
+    const key = canonicalizeShopIngredientKey(ingredient.ingredientKey);
+    if (!key || waivedKeys.has(key)) continue;
+    requiredByKey.set(key, (requiredByKey.get(key) ?? 0) + ingredient.quantity);
+  }
+  return requiredByKey;
 }
 
 type CookShopRecipeRpcResult = {

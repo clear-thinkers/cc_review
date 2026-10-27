@@ -30,8 +30,13 @@ export type KitchenDishTile = {
  */
 function resolveDishIconPath(dish: ShopCookedDish, recipe: ShopRecipe | undefined): string | null {
   if (!recipe) return null;
+  return resolveRecipeDishIconPath(recipe, dish.specialIngredientKeys);
+}
+
+/** Same icon rule as resolveDishIconPath, for a dish about to be (or just) cooked with these special ingredients. */
+export function resolveRecipeDishIconPath(recipe: ShopRecipe, specialIngredientKeys: string[]): string | null {
   return (
-    resolveShopRecipeIconPath(recipe.variantIconRules, dish.specialIngredientKeys) ??
+    resolveShopRecipeIconPath(recipe.variantIconRules, specialIngredientKeys) ??
     resolvePlainShopRecipeIconPath(recipe.variantIconRules)
   );
 }
@@ -183,7 +188,96 @@ export type KitchenSceneLayout = {
   aspectRatio: string;
   showChef: boolean;
   hotspots: Readonly<Record<KitchenSceneHotspotName, KitchenSceneHotspot>>;
+  /** Optional animation anchors for this artwork (KitchenSceneEffects.tsx). */
+  effects?: KitchenSceneEffectsLayout;
 };
+
+/** A point on a scene artwork, as percentages of the image's own box. */
+export type KitchenScenePoint = { left: string; top: string };
+
+/**
+ * Where a recipe scene's animations sit on its artwork (2026-10-27): steam and a
+ * warm glow over the pot, twinkling sparkles, the prep step (the child drags each
+ * needed ingredient from its spot into the pot, one unit at a time, before the
+ * stove will cook), the ~3 s bubbling cook, and the PAINTED chef's speech bubble
+ * and tap area -- these scenes draw Chef Shrewy themselves, so his sprite is
+ * hidden there. The finished dish is then shown full-size in KitchenDishReveal.
+ */
+export type KitchenSceneEffectsLayout = {
+  pot: KitchenSceneHotspot;
+  sparkles: readonly KitchenScenePoint[];
+  /** Where each prep token sits, in requirement order; cycled if a recipe needs more kinds. */
+  ingredientOrigins: readonly KitchenScenePoint[];
+  /**
+   * The painted chef's tap box. His bubble sits above him, opening from the
+   * `bubbleAlign` edge; with `bubbleBesideOnWide`, md+ screens (where there's room)
+   * move it beside him instead, so it doesn't hide the prep tokens.
+   */
+  chef: KitchenSceneHotspot & { bubbleAlign: "left" | "right"; bubbleBesideOnWide?: "left" | "right" };
+};
+
+/** How long the pot bubbles on the stove before the dish is revealed (owner asked for ~3 s, 2026-10-27). */
+export const KITCHEN_SCENE_COOK_MS = 3000;
+
+/** How long the Finish celebration (confetti + chime) plays before the dish reveal closes. */
+export const KITCHEN_DISH_REVEAL_FINISH_MS = 1800;
+
+/** How long the cooking phase still has to run, given when it started -- never negative. */
+export function remainingKitchenSceneCookMs(startedAtMs: number, nowMs: number): number {
+  return Math.max(KITCHEN_SCENE_COOK_MS - (nowMs - startedAtMs), 0);
+}
+
+/** How long one ingredient takes to sink into the pot once dropped or tapped (matches .fly). */
+export const KITCHEN_SCENE_FLY_MS = 1400;
+
+/** One kind of ingredient the prep step asks for, and how many units of it. */
+export type KitchenScenePrepRequirement = { key: string; label: string; iconPath: string; quantity: number };
+
+/** A draggable ingredient still waiting to go into the pot. */
+export type KitchenScenePrepToken = KitchenScenePrepRequirement & { from: KitchenScenePoint; remaining: number };
+
+/**
+ * What the prep step asks for: the base units one cook consumes (variant waivers
+ * already applied by the caller) plus each chosen special ingredient's slot
+ * quantity. Ingredients with no icon can't be dragged, so they're left out --
+ * the prep step never blocks a cook on something the child can't see.
+ */
+export function buildKitchenScenePrepRequirements(params: {
+  baseRequirements: ReadonlyMap<string, number>;
+  specialIngredients: readonly { key: string; quantity: number }[];
+  resolveIngredient: (key: string) => { label: string; iconPath: string | null };
+}): KitchenScenePrepRequirement[] {
+  const quantities = new Map(params.baseRequirements);
+  for (const special of params.specialIngredients) {
+    quantities.set(special.key, (quantities.get(special.key) ?? 0) + special.quantity);
+  }
+  return Array.from(quantities, ([key, quantity]) => ({ key, quantity, ...params.resolveIngredient(key) })).filter(
+    (requirement): requirement is KitchenScenePrepRequirement => Boolean(requirement.iconPath) && requirement.quantity > 0
+  );
+}
+
+/** Tokens for whatever still has units left; each keeps its own origin as others finish. */
+export function buildKitchenScenePrepTokens(
+  requirements: readonly KitchenScenePrepRequirement[],
+  origins: readonly KitchenScenePoint[],
+  addedByKey: Readonly<Record<string, number>>
+): KitchenScenePrepToken[] {
+  if (origins.length === 0) return [];
+  return requirements
+    .map((requirement, index) => ({
+      ...requirement,
+      from: origins[index % origins.length],
+      remaining: Math.max(requirement.quantity - (addedByKey[requirement.key] ?? 0), 0),
+    }))
+    .filter((token) => token.remaining > 0);
+}
+
+export function isKitchenScenePrepComplete(
+  requirements: readonly KitchenScenePrepRequirement[],
+  addedByKey: Readonly<Record<string, number>>
+): boolean {
+  return requirements.every((requirement) => (addedByKey[requirement.key] ?? 0) >= requirement.quantity);
+}
 
 const DEFAULT_KITCHEN_SCENE_HOTSPOTS: KitchenSceneLayout["hotspots"] = {
   fridge: { left: "4%", top: "38%", width: "21%", height: "40%" },
@@ -210,6 +304,43 @@ export const RECIPE_KITCHEN_SCENES: Readonly<Record<string, KitchenSceneLayout>>
       stovetop: { left: "61%", top: "33%", width: "20%", height: "9.5%" },
       oven: { left: "61%", top: "42.5%", width: "14.5%", height: "17%" },
       shelf: { left: "81.5%", top: "14%", width: "18%", height: "41%" },
+    },
+  },
+  "crystal-pear-dew": {
+    imagePath: "/kitchen/kitchen_crystal-pear-dew.png",
+    aspectRatio: "1600 / 1391",
+    showChef: false,
+    hotspots: {
+      fridge: { left: "5%", top: "38%", width: "20%", height: "40%" },
+      book: { left: "48%", top: "30%", width: "9%", height: "10%" },
+      stovetop: { left: "33.5%", top: "34%", width: "16%", height: "15.5%" },
+      oven: { left: "37%", top: "51%", width: "12.5%", height: "13.5%" },
+      shelf: { left: "80%", top: "22%", width: "15%", height: "42%" },
+    },
+    effects: {
+      pot: { left: "38.5%", top: "35%", width: "9%", height: "8.5%" },
+      sparkles: [
+        { left: "37%", top: "33%" },
+        { left: "47.5%", top: "31.5%" },
+        { left: "44%", top: "29%" },
+        { left: "64%", top: "47%" },
+        { left: "74.5%", top: "45.5%" },
+      ],
+      // Pear dew's order: pear, amber crystals, chrysanthemum, goji.
+      ingredientOrigins: [
+        { left: "55%", top: "56.5%" }, // pear on the cutting board
+        { left: "66.5%", top: "51%" }, // gold jar
+        { left: "58.5%", top: "64%" }, // the little plate
+        { left: "72.2%", top: "48.2%" }, // goji jar
+      ],
+      chef: {
+        left: "62%",
+        top: "59%",
+        width: "11%",
+        height: "26%",
+        bubbleAlign: "right",
+        bubbleBesideOnWide: "right",
+      },
     },
   },
 };

@@ -4,6 +4,7 @@ import {
   buildShopIngredientPriceMap,
   canAffordIngredientPurchase,
   canAffordRecipeUnlock,
+  computeShopCookBaseRequirements,
   computeShopCookReadiness,
   getShopRecipeContentForLocale,
   normalizeCookShopRecipeResult,
@@ -796,6 +797,25 @@ describe("computeShopCookReadiness", () => {
     const readiness = computeShopCookReadiness(recipe, availability);
     expect(readiness.isReady).toBe(false);
     expect(readiness.missingIngredientKeys.sort()).toEqual(["egg", "milk"]);
+  });
+
+  it("sums duplicate base rows and drops a variant's waived base ingredient", () => {
+    const waiving = {
+      baseIngredients: [
+        { ingredientKey: "milk", name: "Milk", quantity: 2 },
+        { ingredientKey: "egg", name: "Egg", quantity: 1 },
+        { ingredientKey: "milk", name: "Milk", quantity: 1 },
+      ],
+      variantIconRules: [
+        { match: [], iconPath: "/rewards/x_plain.png" },
+        { match: ["pork"], iconPath: "/rewards/x_pork.png", waivedBaseIngredientKeys: ["egg"] },
+      ],
+    };
+    expect(Array.from(computeShopCookBaseRequirements(waiving))).toEqual([
+      ["milk", 3],
+      ["egg", 1],
+    ]);
+    expect(Array.from(computeShopCookBaseRequirements(waiving, ["pork"]))).toEqual([["milk", 3]]);
   });
 
   it("excludes ingredient rows with no resolvable ingredientKey from the requirement", () => {

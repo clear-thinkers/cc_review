@@ -77,6 +77,13 @@ describe("kitchenChef.strings", () => {
       "小心烫哦！等蒸汽散开，虾饺就会像水晶一样透亮！"
     );
   });
+
+  it("has all four Crystal Pear Dew lines in both locales", () => {
+    for (const locale of ["en", "zh"] as const) {
+      const lines = kitchenChefStrings[locale].recipes["crystal-pear-dew"];
+      expect(Object.keys(lines ?? {}).sort()).toEqual(["start", "success", "tapServed", "unlock"]);
+    }
+  });
   it("gives every shelf line id a template in both locales, with the tokens it needs", () => {
     const tokensById: Record<ChefShelfLineId, string[]> = {
       foodTypeImbalance: ["{have}", "{missing}"],

@@ -6,6 +6,11 @@ import {
   countCountertopDishes,
   countShelfDishes,
   countTotalCookedDishes,
+  buildKitchenScenePrepRequirements,
+  buildKitchenScenePrepTokens,
+  isKitchenScenePrepComplete,
+  KITCHEN_SCENE_COOK_MS,
+  remainingKitchenSceneCookMs,
   KITCHEN_SCENE_IMAGE_PATHS,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
@@ -323,6 +328,72 @@ describe("resolveKitchenScene", () => {
     expect(scene.imagePath).toBe("/kitchen/kitchen_rainbow-macarons.png");
     expect(scene.showChef).toBe(false);
   });
+
+  it("gives Crystal Pear Dew its own scene with animation anchors", () => {
+    const scene = resolveKitchenScene(0, "crystal-pear-dew");
+    expect(scene.imagePath).toBe("/kitchen/kitchen_crystal-pear-dew.png");
+    expect(scene.showChef).toBe(false);
+    expect(scene.effects?.ingredientOrigins.length).toBeGreaterThan(0);
+  });
+
+  it("keeps every scene's painted-chef tap area clear of its hotspots", () => {
+    const box = (b: { left: string; top: string; width: string; height: string }) => {
+      const [left, top, width, height] = [b.left, b.top, b.width, b.height].map(parseFloat);
+      return { left, top, right: left + width, bottom: top + height };
+    };
+    for (const scene of Object.values(RECIPE_KITCHEN_SCENES)) {
+      if (!scene.effects) continue;
+      const chef = box(scene.effects.chef);
+      for (const hotspot of Object.values(scene.hotspots).map(box)) {
+        const overlaps =
+          chef.left < hotspot.right && hotspot.left < chef.right && chef.top < hotspot.bottom && hotspot.top < chef.bottom;
+        expect(overlaps).toBe(false);
+      }
+    }
+  });
+});
+
+describe("kitchen scene prep", () => {
+  const origins = [
+    { left: "10%", top: "10%" },
+    { left: "20%", top: "20%" },
+  ];
+  const icons: Record<string, string | null> = { pear: "/pear.png", sugar: "/sugar.png", salt: null, goji: "/goji.png" };
+  const requirements = buildKitchenScenePrepRequirements({
+    baseRequirements: new Map([
+      ["pear", 2],
+      ["salt", 1],
+      ["sugar", 1],
+    ]),
+    specialIngredients: [
+      { key: "goji", quantity: 1 },
+      { key: "pear", quantity: 1 },
+    ],
+    resolveIngredient: (key) => ({ label: key.toUpperCase(), iconPath: icons[key] ?? null }),
+  });
+
+  it("asks for base units plus chosen specials, skipping iconless ingredients", () => {
+    expect(requirements.map((r) => [r.key, r.quantity, r.label])).toEqual([
+      ["pear", 3, "PEAR"],
+      ["sugar", 1, "SUGAR"],
+      ["goji", 1, "GOJI"],
+    ]);
+  });
+
+  it("keeps each token on its own origin as others finish, with what's left", () => {
+    const tokens = buildKitchenScenePrepTokens(requirements, origins, { pear: 1, sugar: 1 });
+    expect(tokens.map((t) => [t.key, t.remaining, t.from])).toEqual([
+      ["pear", 2, origins[0]],
+      ["goji", 1, origins[0]],
+    ]);
+    expect(buildKitchenScenePrepTokens(requirements, [], {})).toEqual([]);
+  });
+
+  it("is complete only once every unit is in the pot", () => {
+    expect(isKitchenScenePrepComplete(requirements, { pear: 3, sugar: 1 })).toBe(false);
+    expect(isKitchenScenePrepComplete(requirements, { pear: 3, sugar: 1, goji: 1 })).toBe(true);
+    expect(isKitchenScenePrepComplete([], {})).toBe(true);
+  });
 });
 
 describe("resolveAvailableSpecialIngredients", () => {
@@ -373,5 +444,13 @@ describe("kitchen.strings parity", () => {
     const enKeys = Object.keys(kitchenStrings.en).sort();
     const zhKeys = Object.keys(kitchenStrings.zh).sort();
     expect(enKeys).toEqual(zhKeys);
+  });
+});
+
+describe("remainingKitchenSceneCookMs", () => {
+  it("counts down the cook from when it started, never below zero", () => {
+    expect(remainingKitchenSceneCookMs(1000, 1000)).toBe(KITCHEN_SCENE_COOK_MS);
+    expect(remainingKitchenSceneCookMs(1000, 1400)).toBe(KITCHEN_SCENE_COOK_MS - 400);
+    expect(remainingKitchenSceneCookMs(1000, 1000 + KITCHEN_SCENE_COOK_MS + 50)).toBe(0);
   });
 });

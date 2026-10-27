@@ -16,6 +16,7 @@ import type {
 import {
   buildShopIngredientAvailabilityMap,
   buildShopIngredientRecordMap,
+  computeShopCookBaseRequirements,
   computeShopCookReadiness,
   getShopRecipeContentForLocale,
   resolveShopIngredientLabel,
@@ -34,6 +35,8 @@ import {
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 import { kitchenStrings } from "./kitchen.strings";
 import KitchenChef from "./KitchenChef";
+import KitchenDishReveal from "./KitchenDishReveal";
+import KitchenSceneEffects from "./KitchenSceneEffects";
 import { kitchenChefStrings } from "./kitchenChef.strings";
 import {
   buildShelfChefReactions,
@@ -50,11 +53,17 @@ import {
   countCountertopDishes,
   countShelfDishes,
   countTotalCookedDishes,
+  remainingKitchenSceneCookMs,
+  buildKitchenScenePrepRequirements,
+  buildKitchenScenePrepTokens,
+  isKitchenScenePrepComplete,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
   resolveKitchenScene,
+  resolveRecipeDishIconPath,
   SHOP_FOOD_TYPES,
   SHOP_KITCHEN_COUNTERTOP_CAPACITY,
+  type KitchenSceneLayout,
   type KitchenSpecialIngredientOption,
 } from "./kitchen.types";
 
@@ -653,6 +662,21 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [cookingRecipeId, setCookingRecipeId] = useState<string | null>(null);
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  // Recipe-scene prep: units the child has dragged into the pot, for one recipe +
+  // special-ingredient choice (`key`); any other choice, and every cook after a
+  // successful one, starts from an empty pot.
+  // A successful cook on such a scene then shows the dish full-size (`dishReveal`),
+  // holding the recipe's scene behind it until the child presses Finish.
+  const [scenePrep, setScenePrep] = useState<{ key: string; addedByKey: Record<string, number> }>({
+    key: "",
+    addedByKey: {},
+  });
+  const [dishReveal, setDishReveal] = useState<{
+    scene: KitchenSceneLayout;
+    iconPath: string | null;
+    title: string;
+    recipeSlug: string;
+  } | null>(null);
 
   useEffect(() => {
     if (vm.page !== "shopKitchen") return;
@@ -752,10 +776,42 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   );
   const totalDishesMade = useMemo(() => countTotalCookedDishes(dishes), [dishes]);
   const selectedRecipe = selectedRecipeId ? recipesById.get(selectedRecipeId) ?? null : null;
-  const kitchenScene = useMemo(
+  const selectedKitchenScene = useMemo(
     () => resolveKitchenScene(shelfDishCount, selectedRecipe?.slug ?? null),
     [shelfDishCount, selectedRecipe]
   );
+  const kitchenScene = dishReveal?.scene ?? selectedKitchenScene;
+  // The prep step only runs when the recipe can actually be cooked; otherwise the
+  // stove's usual missing-ingredients notice does the talking.
+  const scenePrepRequirements = useMemo(() => {
+    if (!selectedRecipe || !selectedKitchenScene.effects) return [];
+    if (!computeShopCookReadiness(selectedRecipe, availabilityByKey, selectedSpecialIngredientKeys).isReady) return [];
+    const specialSlots = getShopRecipeContentForLocale(selectedRecipe, locale).specialIngredients;
+    return buildKitchenScenePrepRequirements({
+      baseRequirements: computeShopCookBaseRequirements(selectedRecipe, selectedSpecialIngredientKeys),
+      specialIngredients: selectedSpecialIngredientKeys.map((key) => ({
+        key,
+        quantity: specialSlots.find((slot) => slot.ingredientKey === key)?.quantity ?? 1,
+      })),
+      resolveIngredient: (key) => {
+        const record = ingredientRecordsByKey.get(key);
+        return { label: resolveShopIngredientLabel(record, locale, key), iconPath: record?.iconPath ?? null };
+      },
+    });
+  }, [
+    selectedRecipe,
+    selectedKitchenScene,
+    availabilityByKey,
+    selectedSpecialIngredientKeys,
+    ingredientRecordsByKey,
+    locale,
+  ]);
+  const scenePrepKey = `${selectedRecipeId ?? ""}|${[...selectedSpecialIngredientKeys].sort().join(",")}`;
+  const scenePrepAdded = scenePrep.key === scenePrepKey ? scenePrep.addedByKey : {};
+  const scenePrepTokens = selectedKitchenScene.effects
+    ? buildKitchenScenePrepTokens(scenePrepRequirements, selectedKitchenScene.effects.ingredientOrigins, scenePrepAdded)
+    : [];
+  const isScenePrepPending = scenePrepRequirements.length > 0 && !isKitchenScenePrepComplete(scenePrepRequirements, scenePrepAdded);
   const servedRecipeSlugs = useMemo(
     () =>
       dishes.flatMap((dish) => {
@@ -826,19 +882,31 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     const localizedSpecialIngredients = recipe
       ? getShopRecipeContentForLocale(recipe, locale).specialIngredients
       : [];
+    // Picking a recipe closes the book straight away (2026-10-27) -- onto the
+    // special-ingredient picker if there's anything to offer, else the kitchen.
+    setIsBookOpen(false);
     if (resolveAvailableSpecialIngredients(localizedSpecialIngredients, availabilityByKey).length > 0) {
-      setIsBookOpen(false);
       setIsSpecialIngredientsOpen(true);
+    } else {
+      announceCookingStart(recipe ?? null);
     }
   }
 
   // The recipe book and special-ingredient picker are full-screen modals, so the
   // chef's "start cooking" line plays when the child returns to the kitchen scene
-  // with a recipe chosen -- the moment they can actually see him.
-  function announceCookingStart(): void {
-    if (selectedRecipe) {
-      chef.say("start", { recipeSlug: selectedRecipe.slug });
+  // with a recipe chosen -- the moment they can actually see him. Callers that
+  // just changed the selection pass the recipe, since `selectedRecipe` is stale.
+  function announceCookingStart(recipe: ShopRecipe | null = selectedRecipe): void {
+    if (recipe) {
+      chef.say("start", { recipeSlug: recipe.slug });
     }
+  }
+
+  function handleAddPrepIngredient(ingredientKey: string): void {
+    setScenePrep((current) => {
+      const addedByKey = current.key === scenePrepKey ? current.addedByKey : {};
+      return { key: scenePrepKey, addedByKey: { ...addedByKey, [ingredientKey]: (addedByKey[ingredientKey] ?? 0) + 1 } };
+    });
   }
 
   function handleToggleSpecialIngredient(ingredientKey: string): void {
@@ -850,6 +918,9 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   }
 
   async function handleCook(method: "stove" | "oven"): Promise<void> {
+    // One cook at a time -- a recipe scene's cook now runs for ~3 s.
+    if (cookingRecipeId) return;
+
     if (!selectedRecipe) {
       setNotice({ tone: "error", text: str.pickRecipeFirst });
       return;
@@ -885,8 +956,15 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       return;
     }
 
+    if (isScenePrepPending) {
+      setNotice({ tone: "error", text: str.prepNotDoneMessage });
+      return;
+    }
+
     setCookingRecipeId(selectedRecipe.id);
     setNotice(null);
+    const cookScene = selectedKitchenScene.effects ? selectedKitchenScene : null;
+    const cookStartedAt = Date.now();
     try {
       const result = await cookShopRecipe(selectedRecipe.id, selectedSpecialIngredientKeys);
       if (!result.success) {
@@ -906,17 +984,41 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       }
 
       const localized = getShopRecipeContentForLocale(selectedRecipe, locale);
+      if (cookScene) {
+        // The server cook is instant; let the pot bubble for the full ~3 s first.
+        const remainingMs = remainingKitchenSceneCookMs(cookStartedAt, Date.now());
+        if (remainingMs > 0) await new Promise((resolve) => setTimeout(resolve, remainingMs));
+      }
       await refreshAfterCook();
       setSelectedRecipeId(null);
       setSelectedSpecialIngredientKeys([]);
-      setNotice({ tone: "success", text: replaceToken(str.cookSuccessTemplate, "{title}", localized.title) });
-      chef.say("success", { recipeSlug: selectedRecipe.slug });
+      // Those units were cooked: a re-cook of the same recipe starts from an empty pot.
+      setScenePrep({ key: "", addedByKey: {} });
+      if (cookScene) {
+        // Success notice and chef line wait for Finish (handleFinishDishReveal).
+        setDishReveal({
+          scene: cookScene,
+          iconPath: resolveRecipeDishIconPath(selectedRecipe, selectedSpecialIngredientKeys),
+          title: localized.title,
+          recipeSlug: selectedRecipe.slug,
+        });
+      } else {
+        setNotice({ tone: "success", text: replaceToken(str.cookSuccessTemplate, "{title}", localized.title) });
+        chef.say("success", { recipeSlug: selectedRecipe.slug });
+      }
     } catch (error) {
       console.error("Failed to cook recipe:", error);
       setNotice({ tone: "error", text: str.cookFailedGeneric });
     } finally {
       setCookingRecipeId(null);
     }
+  }
+
+  function handleFinishDishReveal(): void {
+    if (!dishReveal) return;
+    setDishReveal(null);
+    setNotice({ tone: "success", text: replaceToken(str.cookSuccessTemplate, "{title}", dishReveal.title) });
+    chef.say("success", { recipeSlug: dishReveal.recipeSlug });
   }
 
   async function handleOrganize(): Promise<void> {
@@ -980,6 +1082,35 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
               aria-hidden="true"
               className="absolute inset-0 h-full w-full rounded-2xl object-contain"
             />
+            {kitchenScene.effects ? (
+              <KitchenSceneEffects
+                key={kitchenScene.imagePath}
+                effects={kitchenScene.effects}
+                prepTokens={scenePrepTokens}
+                prepComplete={scenePrepRequirements.length > 0 && !isScenePrepPending}
+                prompt={
+                  cookingRecipeId
+                    ? str.cookingPrompt
+                    : scenePrepRequirements.length === 0 || dishReveal
+                      ? null
+                      : isScenePrepPending
+                        ? str.prepDragPrompt
+                        : str.prepDonePrompt
+                }
+                tokenAriaLabel={(token) =>
+                  replaceToken(
+                    replaceToken(str.prepTokenAriaTemplate, "{ingredient}", token.label),
+                    "{count}",
+                    String(token.remaining)
+                  )
+                }
+                onAddIngredient={handleAddPrepIngredient}
+                cooking={cookingRecipeId !== null}
+                chefLine={chef.line}
+                chefTapAria={chefStrings.tapAria}
+                onChefTap={() => chef.tap(servedRecipeSlugs, shelfChefReactions)}
+              />
+            ) : null}
 
             <SceneHotspot
               {...kitchenScene.hotspots.fridge}
@@ -1120,6 +1251,15 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
             setIsBookOpen(false);
             announceCookingStart();
           }}
+        />
+      ) : null}
+
+      {dishReveal ? (
+        <KitchenDishReveal
+          heading={replaceToken(str.dishRevealTitleTemplate, "{title}", dishReveal.title)}
+          iconPath={dishReveal.iconPath}
+          finishLabel={str.dishRevealFinish}
+          onFinished={handleFinishDishReveal}
         />
       ) : null}
 

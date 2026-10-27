@@ -121,6 +121,19 @@ Used for `crystal-dumpling` in place of the generic lines for that trigger. Ligh
 
 The unlock and idle-tap lines are over the length guide; allow the bubble to wrap to two lines for recipe-specific lines (generic lines are written to fit on one).
 
+### Crystal Pear Dew (recipe-specific, added 2026-10-27)
+
+Used for `crystal-pear-dew` (mystery drink, stove). Drafted 2026-10-27; pending owner review.
+
+| Trigger / pose | EN | ZH |
+|---|---|---|
+| Unlock (`amazed`) | "Whoa! Smell that? Snow pears and golden blossoms... a secret royal tea is ready to brew!" | 哇！闻到了吗？雪梨和金菊的香气……神秘的御用甜饮可以开炖啦！ |
+| Start cooking (`careful`) | "Low and slow now! When the amber crystals melt, the whole pot turns sparkly gold!" | 小火慢慢炖哦！等琥珀冰晶化开，整锅都会变得金灿灿的！ |
+| Cook success (`celebrate`) | "Ahh, so warm and sweet! One sip and you feel cozy all the way to your toes!" | 好暖好甜呀！喝一口，从头暖到脚趾头！ |
+| Idle tap (`hungry`) | "Sweet pear, ruby goji berries, a little floating flower... can I have just one sip?" | 清甜的雪梨，红红的杞果，还漂着一朵小金菊……让我喝一小口嘛！ |
+
+**Recipe scenes that draw the chef (2026-10-27).** A recipe's own kitchen scene hides the chef sprite because the art already paints him. A scene with an `effects` layout (`RECIPE_KITCHEN_SCENES` in `kitchen.types.ts`, rendered by `KitchenSceneEffects.tsx`) shows his lines in a bubble over the painted chef and makes him tappable, alongside steam/glow/sparkles, a prep step (the child drags each needed ingredient unit from its spot into the pot -- a tap or Enter also sends one in -- and the stove refuses to cook until the pot is full; owner request 2026-10-27, motion slowed to 1.4 s), a ~3 s boil, and then the finished dish full-size (`KitchenDishReveal.tsx`), which stays until the child presses Finish -- that plays the shared celebration chime with confetti, then the success notice and chef line follow. Picking a recipe in the book now closes the book straight away. Crystal Pear Dew is the first; Rainbow Macarons has no `effects` yet, so its start line still goes unseen.
+
 **Chef name (decided 2026-10-24):** "Chef Shrewy" / 鼩仔. Lines are written so no name is needed; the name is available for UI labels (e.g. the chef's `aria-label`) and future copy.
 
 ## Decisions (all confirmed by the owner 2026-10-24)
