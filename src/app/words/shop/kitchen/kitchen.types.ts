@@ -167,6 +167,64 @@ export function resolveKitchenSceneImagePath(shelfDishCount: number): string {
   return KITCHEN_SCENE_IMAGE_PATHS.empty;
 }
 
+/** A clickable region over a kitchen scene, as percentages of the image's own box. */
+export type KitchenSceneHotspot = { left: string; top: string; width: string; height: string };
+
+export type KitchenSceneHotspotName = "fridge" | "book" | "stovetop" | "oven" | "shelf";
+
+/**
+ * Everything tied to one scene artwork's layout: the image, its aspect ratio,
+ * where each hotspot sits, and whether Chef Shrewy's sprite is overlaid (his
+ * position is pinned to the default art's ladder, so a scene that already
+ * draws him hides the sprite).
+ */
+export type KitchenSceneLayout = {
+  imagePath: string;
+  aspectRatio: string;
+  showChef: boolean;
+  hotspots: Readonly<Record<KitchenSceneHotspotName, KitchenSceneHotspot>>;
+};
+
+const DEFAULT_KITCHEN_SCENE_HOTSPOTS: KitchenSceneLayout["hotspots"] = {
+  fridge: { left: "4%", top: "38%", width: "21%", height: "40%" },
+  book: { left: "46%", top: "27%", width: "14%", height: "13%" },
+  stovetop: { left: "31%", top: "39%", width: "19%", height: "11%" },
+  oven: { left: "31%", top: "50%", width: "19%", height: "11%" },
+  shelf: { left: "76%", top: "20%", width: "17%", height: "48%" },
+};
+
+/**
+ * Per-recipe special scenes (2026-10-26), keyed by recipe slug: shown in place
+ * of the shelf-stock scene while that recipe is the selected one, and gone
+ * again once cooking succeeds (which clears the selection). Each artwork has
+ * its own layout, so each entry carries its own hotspot boxes.
+ */
+export const RECIPE_KITCHEN_SCENES: Readonly<Record<string, KitchenSceneLayout>> = {
+  "rainbow-macarons": {
+    imagePath: "/kitchen/kitchen_rainbow-macarons.png",
+    aspectRatio: "1529 / 1321",
+    showChef: false,
+    hotspots: {
+      fridge: { left: "1.5%", top: "20%", width: "21%", height: "45%" },
+      book: { left: "22%", top: "29%", width: "13%", height: "12%" },
+      stovetop: { left: "61%", top: "33%", width: "20%", height: "9.5%" },
+      oven: { left: "61%", top: "42.5%", width: "14.5%", height: "17%" },
+      shelf: { left: "81.5%", top: "14%", width: "18%", height: "41%" },
+    },
+  },
+};
+
+export function resolveKitchenScene(shelfDishCount: number, selectedRecipeSlug: string | null): KitchenSceneLayout {
+  const recipeScene = selectedRecipeSlug ? RECIPE_KITCHEN_SCENES[selectedRecipeSlug] : undefined;
+  if (recipeScene) return recipeScene;
+  return {
+    imagePath: resolveKitchenSceneImagePath(shelfDishCount),
+    aspectRatio: "1337 / 1176",
+    showChef: true,
+    hotspots: DEFAULT_KITCHEN_SCENE_HOTSPOTS,
+  };
+}
+
 /** The localized appliance label for a recipe's own `cookMethod` -- e.g. for the "X needs the {appliance}" wrong-appliance notice, the appliance named must be the recipe's actual required one, never whichever appliance the child clicked. */
 export function resolveApplianceLabel(
   cookMethod: ShopCookMethod,

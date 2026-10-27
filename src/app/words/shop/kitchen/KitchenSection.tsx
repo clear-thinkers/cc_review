@@ -45,7 +45,7 @@ import {
   countTotalCookedDishes,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
-  resolveKitchenSceneImagePath,
+  resolveKitchenScene,
   SHOP_FOOD_TYPES,
   SHOP_KITCHEN_COUNTERTOP_CAPACITY,
   type KitchenSpecialIngredientOption,
@@ -68,11 +68,10 @@ function replaceToken(template: string, token: string, value: string): string {
 }
 
 /**
- * One clickable region over the kitchen-scene illustration (one of
- * kitchen_empty/kitchen_half_stocked/kitchen_stocked.png -- see
- * resolveKitchenSceneImagePath). Position is expressed as percentages of the
- * image's own box, tied to this specific artwork's fixed layout, shared
- * identically across all three shelf-stock variants -- there's no static
+ * One clickable region over the kitchen-scene illustration (see
+ * resolveKitchenScene). Position is expressed as percentages of the
+ * image's own box, tied to each artwork's fixed layout (the three
+ * shelf-stock variants share one; a recipe's special scene has its own) -- there's no static
  * Tailwind class for "the top half of the appliance in this particular
  * picture," so inline style is the documented exception here
  * (BUILD_CONVENTIONS.md §7).
@@ -740,16 +739,16 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   );
   const countertopCount = useMemo(() => countCountertopDishes(dishes), [dishes]);
   const shelfDishCount = useMemo(() => countShelfDishes(dishes), [dishes]);
-  const kitchenSceneImagePath = useMemo(
-    () => resolveKitchenSceneImagePath(shelfDishCount),
-    [shelfDishCount]
-  );
   const shelfTilesByFoodType = useMemo(
     () => buildShelfTilesByFoodType(dishes, recipesById, locale),
     [dishes, recipesById, locale]
   );
   const totalDishesMade = useMemo(() => countTotalCookedDishes(dishes), [dishes]);
   const selectedRecipe = selectedRecipeId ? recipesById.get(selectedRecipeId) ?? null : null;
+  const kitchenScene = useMemo(
+    () => resolveKitchenScene(shelfDishCount, selectedRecipe?.slug ?? null),
+    [shelfDishCount, selectedRecipe]
+  );
   const servedRecipeSlugs = useMemo(
     () =>
       dishes.flatMap((dish) => {
@@ -951,61 +950,62 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
         <p className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{str.loadError}</p>
       ) : (
         <div className="space-y-4">
-          {/* The kitchen scene: kitchen_empty/kitchen_half_stocked/kitchen_stocked.png
-              (chosen by resolveKitchenSceneImagePath based on how many dishes are on
-              the shelf) with clickable hotspots for the fridge, recipe book, stovetop
-              (top of the appliance), oven (bottom of the appliance), and shelf --
-              positions are approximate percentage boxes over the artwork and may need
-              a small visual nudge once checked in a real browser against the actual
-              rendered image. */}
-          <div className="relative mx-auto w-full max-w-3xl" style={{ aspectRatio: "1337 / 1176" }}>
+          {/* The kitchen scene (chosen by resolveKitchenScene: a recipe's own special
+              scene while it's selected, otherwise kitchen_empty/kitchen_half_stocked/
+              kitchen_stocked.png by how many dishes are on the shelf) with clickable
+              hotspots for the fridge, recipe book, stovetop, oven, and shelf --
+              percentage boxes per artwork that may need a small visual nudge once
+              checked in a real browser against the actual rendered image. */}
+          <div className="relative mx-auto w-full max-w-3xl" style={{ aspectRatio: kitchenScene.aspectRatio }}>
             <img
-              src={kitchenSceneImagePath}
+              src={kitchenScene.imagePath}
               alt=""
               aria-hidden="true"
               className="absolute inset-0 h-full w-full rounded-2xl object-contain"
             />
 
             <SceneHotspot
-              left="4%" top="38%" width="21%" height="40%"
+              {...kitchenScene.hotspots.fridge}
               label={str.fridgeLabel}
               ariaLabel={str.fridgeOpenAria}
               onClick={() => setIsFridgeOpen(true)}
             />
             <SceneHotspot
-              left="46%" top="27%" width="14%" height="13%"
+              {...kitchenScene.hotspots.book}
               label={str.bookLabel}
               ariaLabel={str.bookOpenAria}
               onClick={() => setIsBookOpen(true)}
             />
             <SceneHotspot
-              left="31%" top="39%" width="19%" height="11%"
+              {...kitchenScene.hotspots.stovetop}
               label={str.stovetopLabel}
               ariaLabel={str.stovetopAria}
               onClick={() => void handleCook("stove")}
             />
             <SceneHotspot
-              left="31%" top="50%" width="19%" height="11%"
+              {...kitchenScene.hotspots.oven}
               label={str.ovenLabel}
               ariaLabel={str.ovenAria}
               onClick={() => void handleCook("oven")}
             />
             <SceneHotspot
-              left="76%" top="20%" width="17%" height="48%"
+              {...kitchenScene.hotspots.shelf}
               label={str.shelfLabel}
               ariaLabel={str.shelfOpenAria}
               onClick={() => setIsShelfOpen(true)}
             />
-            <KitchenChef
-              pose={chef.pose}
-              line={chef.line}
-              tapAria={chefStrings.tapAria}
-              hideLabel={chefStrings.hideLabel}
-              showLabel={chefStrings.showLabel}
-              hidden={isChefHidden}
-              onTap={() => chef.tap(servedRecipeSlugs)}
-              onToggleHidden={() => setIsChefHidden((current) => !current)}
-            />
+            {kitchenScene.showChef ? (
+              <KitchenChef
+                pose={chef.pose}
+                line={chef.line}
+                tapAria={chefStrings.tapAria}
+                hideLabel={chefStrings.hideLabel}
+                showLabel={chefStrings.showLabel}
+                hidden={isChefHidden}
+                onTap={() => chef.tap(servedRecipeSlugs)}
+                onToggleHidden={() => setIsChefHidden((current) => !current)}
+              />
+            ) : null}
           </div>
 
           {/* Fridge / recipe book status line */}

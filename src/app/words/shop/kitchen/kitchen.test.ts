@@ -9,7 +9,9 @@ import {
   KITCHEN_SCENE_IMAGE_PATHS,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
+  resolveKitchenScene,
   resolveKitchenSceneImagePath,
+  RECIPE_KITCHEN_SCENES,
   SHOP_FOOD_TYPES,
 } from "./kitchen.types";
 import { kitchenStrings } from "./kitchen.strings";
@@ -301,6 +303,25 @@ describe("resolveKitchenSceneImagePath", () => {
   it("returns the stocked scene for more than 5 shelved dishes", () => {
     expect(resolveKitchenSceneImagePath(6)).toBe(KITCHEN_SCENE_IMAGE_PATHS.stocked);
     expect(resolveKitchenSceneImagePath(20)).toBe(KITCHEN_SCENE_IMAGE_PATHS.stocked);
+  });
+});
+
+describe("resolveKitchenScene", () => {
+  it("uses the shelf-stock scene with the chef when no recipe is selected", () => {
+    const scene = resolveKitchenScene(3, null);
+    expect(scene.imagePath).toBe(KITCHEN_SCENE_IMAGE_PATHS.halfStocked);
+    expect(scene.showChef).toBe(true);
+  });
+
+  it("uses the shelf-stock scene for a selected recipe without a special scene", () => {
+    expect(resolveKitchenScene(0, "pancake").imagePath).toBe(KITCHEN_SCENE_IMAGE_PATHS.empty);
+  });
+
+  it("swaps in a recipe's special scene, layout and all, while it is selected", () => {
+    const scene = resolveKitchenScene(20, "rainbow-macarons");
+    expect(scene).toBe(RECIPE_KITCHEN_SCENES["rainbow-macarons"]);
+    expect(scene.imagePath).toBe("/kitchen/kitchen_rainbow-macarons.png");
+    expect(scene.showChef).toBe(false);
   });
 });
 
