@@ -222,11 +222,6 @@ export const KITCHEN_SCENE_COOK_MS = 3000;
 /** How long the Finish celebration (confetti + chime) plays before the dish reveal closes. */
 export const KITCHEN_DISH_REVEAL_FINISH_MS = 1800;
 
-/** How long the cooking phase still has to run, given when it started -- never negative. */
-export function remainingKitchenSceneCookMs(startedAtMs: number, nowMs: number): number {
-  return Math.max(KITCHEN_SCENE_COOK_MS - (nowMs - startedAtMs), 0);
-}
-
 /** How long one ingredient takes to sink into the pot once dropped or tapped (matches .fly). */
 export const KITCHEN_SCENE_FLY_MS = 1400;
 

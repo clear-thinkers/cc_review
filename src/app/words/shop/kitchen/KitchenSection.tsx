@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useLocale } from "@/app/shared/locale";
@@ -53,7 +53,7 @@ import {
   countCountertopDishes,
   countShelfDishes,
   countTotalCookedDishes,
-  remainingKitchenSceneCookMs,
+  KITCHEN_SCENE_COOK_MS,
   buildKitchenScenePrepRequirements,
   buildKitchenScenePrepTokens,
   isKitchenScenePrepComplete,
@@ -671,6 +671,18 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     key: "",
     addedByKey: {},
   });
+  // Cancelling (handleCancelCooking) bumps the run number; `isCookCommitting` marks
+  // the moment the server cook is in flight, when it can no longer be cancelled.
+  const cookRunRef = useRef(0);
+  const [isCookCommitting, setIsCookCommitting] = useState(false);
+
+  // Leaving the kitchen mid-boil counts as cancelling: the server cook never runs.
+  useEffect(
+    () => () => {
+      cookRunRef.current += 1;
+    },
+    []
+  );
   const [dishReveal, setDishReveal] = useState<{
     scene: KitchenSceneLayout;
     iconPath: string | null;
@@ -964,8 +976,16 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     setCookingRecipeId(selectedRecipe.id);
     setNotice(null);
     const cookScene = selectedKitchenScene.effects ? selectedKitchenScene : null;
-    const cookStartedAt = Date.now();
+    // Each cook gets a run number; handleCancelCooking bumps it, so a boil that was
+    // cancelled stops here and never reaches the server (nothing is consumed).
+    const run = ++cookRunRef.current;
     try {
+      if (cookScene) {
+        // Boil first (~3 s), cook on the server after -- so cancelling mid-boil is free.
+        await new Promise((resolve) => setTimeout(resolve, KITCHEN_SCENE_COOK_MS));
+        if (cookRunRef.current !== run) return;
+      }
+      setIsCookCommitting(true);
       const result = await cookShopRecipe(selectedRecipe.id, selectedSpecialIngredientKeys);
       if (!result.success) {
         if (result.code === "insufficient_ingredients") {
@@ -984,11 +1004,6 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       }
 
       const localized = getShopRecipeContentForLocale(selectedRecipe, locale);
-      if (cookScene) {
-        // The server cook is instant; let the pot bubble for the full ~3 s first.
-        const remainingMs = remainingKitchenSceneCookMs(cookStartedAt, Date.now());
-        if (remainingMs > 0) await new Promise((resolve) => setTimeout(resolve, remainingMs));
-      }
       await refreshAfterCook();
       setSelectedRecipeId(null);
       setSelectedSpecialIngredientKeys([]);
@@ -1010,8 +1025,24 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
       console.error("Failed to cook recipe:", error);
       setNotice({ tone: "error", text: str.cookFailedGeneric });
     } finally {
-      setCookingRecipeId(null);
+      // A cancelled run must not clear a newer cook the child has since started.
+      if (cookRunRef.current === run) {
+        setCookingRecipeId(null);
+        setIsCookCommitting(false);
+      }
     }
+  }
+
+  // Cancel at any point before the server cook (picking ingredients, or mid-boil):
+  // nothing was consumed yet, so "restoring" the ingredients is just emptying the pot.
+  function handleCancelCooking(): void {
+    if (isCookCommitting) return;
+    cookRunRef.current += 1;
+    setCookingRecipeId(null);
+    setSelectedRecipeId(null);
+    setSelectedSpecialIngredientKeys([]);
+    setScenePrep({ key: "", addedByKey: {} });
+    setNotice({ tone: "success", text: str.cookCancelledMessage });
   }
 
   function handleFinishDishReveal(): void {
@@ -1176,6 +1207,15 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
                 {selectedSpecialIngredientKeys.length > 0
                   ? replaceToken(str.specialEditPillTemplate, "{count}", String(selectedSpecialIngredientKeys.length))
                   : str.specialAddPillLabel}
+              </button>
+            ) : null}
+            {selectedRecipe && !isCookCommitting ? (
+              <button
+                type="button"
+                onClick={handleCancelCooking}
+                className="rounded-full border border-[#c9a99a] bg-white px-3 py-1 font-semibold text-[#8a4b3a] transition hover:bg-[#fbeee9]"
+              >
+                {str.cancelCookingButton}
               </button>
             ) : null}
             {cookingRecipeId ? <span className="text-gray-500">{str.cooking}</span> : null}

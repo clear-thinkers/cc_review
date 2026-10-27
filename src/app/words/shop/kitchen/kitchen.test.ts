@@ -9,8 +9,6 @@ import {
   buildKitchenScenePrepRequirements,
   buildKitchenScenePrepTokens,
   isKitchenScenePrepComplete,
-  KITCHEN_SCENE_COOK_MS,
-  remainingKitchenSceneCookMs,
   KITCHEN_SCENE_IMAGE_PATHS,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
@@ -444,13 +442,5 @@ describe("kitchen.strings parity", () => {
     const enKeys = Object.keys(kitchenStrings.en).sort();
     const zhKeys = Object.keys(kitchenStrings.zh).sort();
     expect(enKeys).toEqual(zhKeys);
-  });
-});
-
-describe("remainingKitchenSceneCookMs", () => {
-  it("counts down the cook from when it started, never below zero", () => {
-    expect(remainingKitchenSceneCookMs(1000, 1000)).toBe(KITCHEN_SCENE_COOK_MS);
-    expect(remainingKitchenSceneCookMs(1000, 1400)).toBe(KITCHEN_SCENE_COOK_MS - 400);
-    expect(remainingKitchenSceneCookMs(1000, 1000 + KITCHEN_SCENE_COOK_MS + 50)).toBe(0);
   });
 });
