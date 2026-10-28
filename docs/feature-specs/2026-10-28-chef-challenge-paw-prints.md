@@ -4,7 +4,7 @@ Roadmap item **T**. Builds on Shop Kitchen (item J), the kitchen chef (item O) a
 
 ## Status
 
-**Skeleton — open questions only (2026-10-28).** Problem and rough scope come from the owner. Everything under "Proposed behavior" waits on the answers below. **Not authorized for build:** this feature needs a schema migration and a new page, both `AI_CONTRACT.md §2` boundaries. Implementation starts only after the spec is approved and the owner's reply contains the word "authorized".
+**Full design drafted 2026-10-28 and approved by the owner the same day,** including the one-per-cook rule (`cook_required`), no scheduler impact (Q4), a separate economy (Q9), and confirm-on-delete for questions. **Awaiting the explicit word "authorized"** (`AI_CONTRACT.md §2`) before any build. All owner decisions are recorded inline under Open questions. The sections from "Data and security" down turn them into the build design. **Not authorized for build yet:** this feature needs a schema migration and a new page, both `AI_CONTRACT.md §2` boundaries. Implementation starts only after the spec is approved and the owner's reply contains the word "authorized".
 
 ## Problem
 
@@ -22,7 +22,8 @@ While cooking, tapping Chef Shrewy only gets a chat line. The owner wants that m
 - Any change to review scheduling, quiz sessions, coins or ingredients (see open question 4 and 9).
 - Live AI generation of questions (`AI_CONTRACT.md §1`: persisted content only).
 - Parent-side management of rewards (see open question 8).
-- Building the individual rewards themselves; this spec covers earning, storing and redeeming.
+- Rewards other than the hand-wash video: the launch catalog is **only "Shrewy washes his hands" (10 paw prints)** (owner, 2026-10-28). Others, e.g. new music tracks, come later as catalog rows plus their own small builds.
+- An admin UI for the reward catalog; launch rewards are seeded by migration.
 - **Future, not in this spec (owner, 2026-10-28):**
   - Other characters: a child can **sell cooked dishes** in a shop to other characters, who pay in **their own tokens**, each redeemable for that character's own rewards.
   - This spec should leave room for that: every token records its giver, balances and redemption catalogs are per giver, and the paw-print page can grow a section per character.
@@ -63,7 +64,7 @@ While cooking, tapping Chef Shrewy only gets a chat line. The owner wants that m
    - **2f. Admin tools — decided 2026-10-28:** add, edit, turn active/inactive, delete, and preview a question as the child will see it. Questions are entered one at a time; no bulk import.
    - **2g. Hidden answers:** the question bank must not show the correct answer to the child's browser. Otherwise a child could read it from the network traffic. Proposed: a server function hands out a question without the answer, and a second one checks the child's choice.
 3. ~~**Format?**~~ **Decided 2026-10-28: multiple choice.** The owner writes one correct option plus **2–3 wrong ones** per question (3–4 options in all), shown in a fresh shuffled order each time. Chinese only, with no pinyin (2b).
-4. **Does an answer touch review scheduling?** Recommended **no**: it keeps scheduler rules clean (`0_ARCHITECTURE.md` §4 guarantee 8) and makes this a game rather than a review.
+4. **Does an answer touch review scheduling?** **Decided 2026-10-28: no**: it keeps scheduler rules clean (`0_ARCHITECTURE.md` §4 guarantee 8) and makes this a game rather than a review.
 5. ~~**Wrong answer.**~~ **Decided 2026-10-28:** the pop-up **shows the correct answer**, and Shrewy says a "try again next time" line. There's no retry. That cook's challenge is used up (1d), and the question comes back in a later round (2d).
    - **Limits:** decisions 1d and 2d already cap earning at one paw print per cook, and cooking is limited by ingredients. Proposed: no extra daily cap or cooldown.
 6. ~~**What does the chef say?**~~ **Designed 2026-10-28** (the owner delegated the design; the owner may revise wording).
@@ -151,7 +152,7 @@ While cooking, tapping Chef Shrewy only gets a chat line. The owner wants that m
    - Is redeeming always permanent, or are some rewards consumable?
    - Who adds rewards later: hard-coded, or a Shop Admin catalog?
    - ~~Can parents see a child's paw prints and redemptions?~~ No — the Rewards page is child + platform-admin only (decision 10).
-9. **A separate economy?** Recommended **yes**: paw prints never convert to or from coins or ingredients, like the kitchen's ingredient economy.
+9. **A separate economy?** **Decided 2026-10-28: yes**: paw prints never convert to or from coins or ingredients, like the kitchen's ingredient economy.
 10. ~~**Where does the page live?**~~ **Decided 2026-10-28:** a new page named **Rewards** (nav label EN "Rewards", ZH proposed 奖励), placed in the nav **right after Shop Kitchen**.
     - **Access:** child + platform admin only. Parents are route-blocked and the page is hidden from their nav, like `/words/shop` and `/words/shop/kitchen`. So parents don't see a child's paw prints or redemptions.
     - **Path:** proposed `/words/shop/rewards`, a sibling of `/words/shop/kitchen`.
@@ -162,51 +163,219 @@ While cooking, tapping Chef Shrewy only gets a chat line. The owner wants that m
       - Shrewy's rewards with costs and Redeem buttons;
       - room for a section per future character.
 
-## Data and security (proposed — for review)
+## Data and security
 
-- **A new append-only ledger** of earned paw prints (each row records its **giver** — decision 7c — and the question/recipe it was earned on) and a redemption record, family/user-scoped, with **no client write policies**. They're written only by `security definer` RPCs that validate the caller. This is the same posture as the Shop Kitchen tables and the reward offers, and deliberately avoids the client-writable pattern that item Q (ledger write hardening) exists to fix.
-- **A shared question bank** (decision 2), global like `shop_recipes`, each question tied to a recipe (2c). It is **platform-admin write only**, and the correct answer must not be readable by children (2g).
-  - Either children get no direct read access at all and all reads go through RPCs, or the answer lives in a column or table they can't read.
-  - Admin edits go through API routes, the same pattern as Shop Admin's recipe and catalog routes.
-- **The server decides whether an answer is correct**, never the client. Otherwise a child could forge paw prints.
-  - Proposed: one RPC hands out a question (without the answer) and records which question was given for this cook.
-  - A second RPC checks the chosen option, enforces one challenge per cook (decision 1d), and on a correct answer appends one paw print to the ledger, all atomically.
-- New tables/RPCs need `verify-rls.ts` coverage and a migration on dev, then prod.
+New migration `supabase/migrations/<timestamp>_chef_challenge_paw_prints.sql`: five tables and three RPCs. Every table has RLS enabled, and **no table has a client insert/update/delete policy**. The RPCs are `security definer` and check the caller themselves, the same posture as the Shop Kitchen tables and reward offers. This deliberately avoids the client-writable pattern item Q exists to fix.
 
-## Layer impact (expected)
+**`chef_challenge_questions`**: the shared question bank (decisions 2, 2c, 3).
 
-- **UI:** chef challenge UI in the kitchen; redemption page; bilingual strings.
-- **Service:** new `supabase-service.ts` functions for the RPCs.
-- **Database:** migration (tables, RLS, RPCs).
-- **Domain:** a pure question-building/checking helper with tests.
-- No AI layer change.
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `recipe_id` | uuid | FK → `shop_recipes.id`, cascades on delete |
+| `prompt` | text | The question, Chinese only; 1–200 chars |
+| `correct_answer` | text | 1–60 chars |
+| `wrong_answers` | jsonb | Array of 2–3 strings, each 1–60 chars, all distinct from each other and from `correct_answer` (checked in the API route's validation; array length checked in the DB) |
+| `is_active` | boolean | Default `true`; inactive questions are never issued |
+| `display_order` | integer | Admin list order within a recipe |
+| `created_at` / `updated_at` | timestamptz | |
+| **RLS** | | **Platform-admin read and write only.** Children and parents can't select it at all, so the correct answer never reaches a child's browser (2g). Admin edits go through API routes (see Shop Admin below). |
+
+**`chef_challenge_attempts`**: one row per challenge handed to a child.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `user_id` / `family_id` | uuid | The child; cascades on delete |
+| `recipe_id` | uuid | FK → `shop_recipes.id`, cascades |
+| `question_id` | uuid | FK → `chef_challenge_questions.id`, **on delete set null** (history survives a deleted question) |
+| `round` | integer | The child's round number for this recipe (decision 2d) |
+| `issued_at` | timestamptz | |
+| `answered_at` | timestamptz (nullable) | Null = still open |
+| `chosen_answer` | text (nullable) | |
+| `is_correct` | boolean (nullable) | |
+| **Constraint** | | At most one open attempt per `(user_id, recipe_id)` (partial unique index where `answered_at is null`) |
+| **RLS** | | Family-scoped read (no answers stored here beyond the child's own choice); no client writes |
+
+**`paw_print_awards`**: the earned-paw-print ledger, append-only (decisions 7, 7a, 7b, 7c).
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `user_id` / `family_id` | uuid | Cascades on delete |
+| `giver` | text | Character key; check `giver in ('shrewy')`. The check grows when a character is added |
+| `recipe_id` | uuid (nullable) | FK, on delete set null; shown on tap (7b) |
+| `attempt_id` | uuid | FK → `chef_challenge_attempts.id`, **unique**, so one attempt can never award twice |
+| `earned_at` | timestamptz | Shown on tap (7b) |
+| **RLS** | | Family-scoped read; no client writes |
+
+**`paw_print_rewards`**: the reward catalog. It's server-side so the client can never set a price.
+
+| Field | Type | Notes |
+|---|---|---|
+| `reward_key` | text | PK; launch row `shrewy-hand-wash` |
+| `giver` | text | `shrewy` |
+| `cost` | integer | > 0; launch row `10` |
+| `is_active` | boolean | |
+| **RLS** | | Authenticated read; writes by migration only (no admin UI for the catalog yet) |
+
+**`paw_print_redemptions`**: what a child has redeemed. Redemptions are permanent (8d).
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | PK |
+| `user_id` / `family_id` | uuid | Cascades on delete |
+| `reward_key` | text | FK → `paw_print_rewards` |
+| `giver` | text | Copied from the reward |
+| `cost` | integer | The price paid, snapshotted |
+| `redeemed_at` | timestamptz | |
+| **Constraint** | | Unique `(user_id, reward_key)`: a reward is unlocked once, for good |
+| **RLS** | | Family-scoped read; no client writes |
+
+**Balances (per giver, decision 7c):**
+- **Available** = count of the child's `paw_print_awards` for that giver − sum of `cost` in their `paw_print_redemptions` for that giver.
+- **Collected** = the award count.
+- No running-balance column, the same convention as the ingredient ledgers.
+
+**RPCs** (all `security definer`, `set search_path = public`, caller from `current_user_id()`; role must be `child` or the caller must be platform admin, the same check as `claim_session_ingredient_offer`). Each returns `jsonb` with `success` plus a `code` on failure.
+
+1. **`get_chef_challenge(p_recipe_id uuid)`**: get the open challenge, or issue a new one.
+   - **Refuses:** `forbidden`; `not_unlocked` (no `shop_recipe_unlocks` row for the caller); `no_questions` (no active question for the recipe).
+   - **Refuses `cook_required`** (see the **one-per-cook rule** below).
+   - **If an open attempt exists** for this child and recipe, it returns that same attempt, so closing and reopening never re-rolls the question (1c).
+   - **Otherwise** it picks the next question: the active questions of this recipe not yet issued to this child in their current round. When none are left, the round number goes up and all active questions are eligible again (2d). The pick is random among the eligible ones. A question added mid-round is eligible at once, and a deactivated one is skipped.
+   - **It inserts** the attempt and returns `{ attemptId, prompt, options }`. `options` is the correct and wrong answers **shuffled**, with no marker of which is right.
+2. **`answer_chef_challenge(p_attempt_id uuid, p_answer text)`** locks the caller's own open attempt (`for update`). It refuses `no_attempt` or `already_answered`. It compares `p_answer` with the question's `correct_answer` and records the result. On a correct answer it inserts one `paw_print_awards` row (giver `shrewy`). It returns `{ isCorrect, correctAnswer, collected, available }`. The correct answer is revealed only **after** answering, so the pop-up can show it (decision 5).
+3. **`redeem_paw_print_reward(p_reward_key text)`** locks the caller's redemption rows for that giver. It refuses `unknown_reward` (missing or inactive), `already_redeemed`, or `insufficient_paw_prints` (available < cost). Otherwise it inserts the redemption and returns the new `available`.
+4. Reads (awards, redemptions, catalog) are plain selects through the RLS read policies; the service layer filters to the current user.
+
+**One-per-cook rule (anti-farming; approved by the owner 2026-10-28).** The server never sees a "cook" until `cook_shop_recipe` runs, since the prep phase is client-only. Without a rule, a child could Cancel and re-pick a recipe over and over, answering a fresh challenge each time and never cooking. Proposed: **after answering a challenge for a recipe, the child must actually cook that recipe** before `get_chef_challenge` issues the next one for it. In SQL: refuse `cook_required` when the child's latest answered attempt for the recipe is newer than their latest `shop_cooked_dishes.cooked_at` for that recipe. Answering, then cancelling the cook, simply means no new challenge for that recipe until it's cooked once. This makes decision 1d hold on the server, not just in the UI.
+
+## Layer impact
+
+- **Database:** the migration above, deployed to dev, then prod, after `db:push:prod:dry`.
+- **Service** (`src/lib/supabase-service.ts`):
+  - `getChefChallenge`, `answerChefChallenge`, `redeemPawPrintReward`;
+  - `listPawPrintAwards`, `listPawPrintRedemptions`, `listPawPrintRewards`.
+- **Domain (pure, tested):** new `src/lib/pawPrints.ts`:
+  - balance per giver;
+  - which stamps show as used;
+  - stamp ordering;
+  - a TypeScript reference for the question-rotation rule (verified against the SQL by a dev script, like `mysteryFood.ts` / `verify-mystery-foods.ts`).
+- **API (admin):** new `src/app/api/shop-admin/chef-questions/route.ts`: GET (one recipe's questions), POST (create), PATCH (edit/activate), DELETE. Uses the existing `authorizePlatformAdmin` pattern and the service-role client, like `shop-admin/recipes`.
+- **UI:**
+  - kitchen: challenge badge + pop-up, hand-wash video pop-up;
+  - the new Rewards page;
+  - the new Shop Admin section;
+  - nav and permissions.
+- **AI:** none.
 
 ## Proposed behavior
 
-*To be written once the open questions are answered.*
+### A. The challenge in the kitchen
+1. **Where:** only on an **interactive** recipe scene (one with `effects`; Shop Kitchen Rule 21), during **prep**. That means a recipe is selected, the stove hasn't been tapped, and no cook is running, including the time after every ingredient is in the pot (1, 1a).
+2. **Checking availability:** when such a scene opens, the kitchen calls `get_chef_challenge(recipe)`. If it returns a challenge, a small **paw badge** (`shrewy_paw_badge.png`) shows over the painted chef's tap area, with bilingual ARIA "Chef's challenge: tap Shrewy" (1b). Any refusal means no badge, and taps keep today's chat lines (1e, 2c).
+3. **Tapping Shrewy while the badge shows** opens the **challenge pop-up** (portal, dimmed backdrop, like the dish reveal). Ingredient dragging pauses underneath it (1c). The pop-up shows:
+   - Shrewy's sprite in the `careful` pose with an **offer** line (6);
+   - the Chinese question (no pinyin) and its 3–4 options as large tappable buttons (3);
+   - a Close button.
+4. **Closing without answering** costs nothing. The badge stays, the same question comes back on the next tap, and Shrewy says the **dismiss** line in the scene bubble (1c, 6).
+5. **Answering** calls `answer_chef_challenge`. The buttons lock while it's in flight.
+   - **Correct:** the chosen option turns green. Shrewy switches to `celebrate` with a **correct** line, a paw stamp "thumps" onto a small paper strip, the celebration chime plays, and "+1" shows next to the collected count (7d).
+   - **Wrong:** the chosen option is marked wrong and the correct one is highlighted. Shrewy shows `idle` with a **wrong** line, and there's no retry (5).
+   - **Either way:** the pop-up then shows a **Done** button. The badge disappears, the challenge for this cook is used (1d), and taps go back to chat lines.
+6. **If the answer call fails** (network or server error), the pop-up shows a bilingual "Couldn't check your answer. Try again." with a retry. A failure never awards anything and never blocks cooking.
+7. **Leaving the scene** (cooking, Cancel, leaving the page) closes the pop-up. An unanswered challenge stays open on the server and comes back next time.
+
+### B. The Rewards page (`/words/shop/rewards`)
+1. **Nav:** "Rewards" / 奖励, right after Shop Kitchen. **Child and platform admin only**; parents are route-blocked, and the link is hidden for them (10). `canAccessRoute` gains the path next to `/words/shop/kitchen`.
+2. **Header:** Shrewy's signature (`shrewy_signature.png`), **Collected N** and **Available M**.
+3. **Stamp sheet:** a cream paper card with a neat grid of `shrewy_paw.png` stamps, one per award, oldest first. It's about 5 per row on a typical screen, fewer on a narrow phone, and more on wide screens (7b).
+   - **Used stamps:** the oldest *spent* ones (count = total cost redeemed) look used: faded and desaturated, with a small "redeemed" mark (7a).
+   - **No stamps yet:** an empty sheet with a hint, e.g. "Cook a recipe with Shrewy's challenge to earn paw prints!"
+4. **Tapping any stamp**, used ones included, opens a small detail card: the date earned, the recipe's localized title, and "From Chef Shrewy" (7b).
+5. **Rewards list:** for launch, one card, **"Shrewy washes his hands"**, cost **10**. It has a short description and a still frame or the paw icon.
+   - **States:** *Redeem* (enough paw prints), *Need N more* (disabled), *Unlocked ✓* (already redeemed).
+   - **Redeem** opens a confirmation ("Spend 10 paw prints?"), then calls `redeem_paw_print_reward`. On success the card flips to Unlocked and Available drops by 10. Server refusals map to bilingual messages.
+6. The layout leaves room for a section per future character (7c), but only Shrewy's renders now.
+
+### C. The hand-wash reward
+1. **When it plays:** once the child has redeemed `shrewy-hand-wash`, **every time a recipe is chosen** in the Recipe Book (any recipe, any scene). It plays once, **can't be skipped**, has no on/off switch, and plays even with reduced motion (8a).
+2. **Flow:** the book closes → a pop-up plays `/video/shrewy_hand_wash.mp4` (16:9, centered on a dimmed backdrop, no close button) → on `ended`, the flow continues as today: the special-ingredient picker if any, otherwise the kitchen and Shrewy's start line. Deselecting a recipe doesn't play it (8a, 8c).
+3. **Sound:** the video plays with its sound, and the kitchen music dips while it plays (`setKitchenMusicDucked`, as under the dish reveal). The music mute doesn't silence it (item R).
+4. **Never blocks:** if playback hasn't started within ~2 s, or errors, the pop-up closes and the flow continues as if it had finished. If the browser refuses to play with sound, it retries muted once before giving up.
+5. **Knowing it's unlocked:** the kitchen loads the child's redemptions with its other data.
+
+### D. Shop Admin: curating questions
+1. **New third section:** "Chef Challenges — Curate Recipe Questions", below "Link Ingredients To Recipes". It has the same card style and Expand/Collapse. **All three sections start collapsed** (2a); `isRecipeSectionCollapsed` now defaults to `true`.
+2. **Recipe picker:** like "Selected recipe: …", listing every recipe (2a layout). The section then lists that recipe's questions in `display_order`, each with its prompt, the correct answer marked, the wrong answers, and an active toggle.
+3. **Editing:** add, edit, activate/deactivate and delete, one question at a time (2f). The form has a prompt plus a **correct answer** field and **2–3 wrong answer** fields.
+   - **Validation:** no blanks, no duplicates, length limits.
+   - **Delete:** asks for confirmation, since it's destructive for content the owner wrote by hand.
+4. **Preview:** shows the question as the child will see it: shuffled options in the challenge pop-up's style (2f).
+5. **A note in the section:** questions only appear for recipes with an **interactive scene** (today: Crystal Pear Dew). That way the admin isn't surprised when questions for other recipes never show up.
+
+### E. Strings
+- **Bilingual EN/ZH** for all UI copy, in the feature's strings files:
+  - kitchen and chef: `kitchen.strings.ts` / `kitchenChef.strings.ts` (the `challenge` lines from decision 6);
+  - the new `rewards.strings.ts`;
+  - Shop Admin's existing strings.
+- **Parity tests** for each touched file.
+- **Questions and options are Chinese only** (2b). They're content, not UI copy.
 
 ## Edge cases
-
-*To be written.* Known so far:
-- The child cancels cooking mid-challenge.
-- A plain recipe scene (no chef interaction today).
-- A child with too little saved content to build a question.
-- Offline, or a failed RPC during an award.
+- **No unlocked recipe has questions:** no badge anywhere; the Rewards page just shows an empty sheet.
+- **A recipe's last active question is deactivated mid-round:** `no_questions`, so no badge. Reactivating it resumes the same round.
+- **A question is edited after being issued:** the open attempt shows the edited text and is checked against the edited correct answer, since it reads by `question_id`. A deleted question with an open attempt closes that attempt unanswered: no award, and the next call issues a new one.
+- **Two devices, same child:** the open-attempt unique index plus `for update` locking means only one answer counts, and the other gets `already_answered`.
+- **Answer, then Cancel the cook:** no new challenge for that recipe until it's cooked once (the `cook_required` rule).
+- **Not enough paw prints, or redeeming twice:** the server refuses; the UI disables the button anyway.
+- **The video file is missing or fails:** cooking continues (C4).
+- **Platform admin testing:** the admin can play and earn like a child (same role rule as the kitchen). The debug page could later grant paw prints, but that's not in scope.
 
 ## Risks
-
-*To be written.* Known so far:
-- Farming (limits).
-- Forged awards (server-side checking).
-- Distraction from the cooking flow.
+- **Farming:** handled by one attempt per cook (server rule) plus no awards without a server-checked answer.
+- **Answer leakage:** handled by the question table being unreadable to children; options are shuffled; the answer is only returned after answering.
+- **The unskippable video gets tiresome:** an accepted owner decision; revisit if the child complains.
+- **Reduced-motion exception:** accepted for the current single-child usage; revisit if more families join.
+- **Interactive-scene-only availability:** today that's one recipe, so earning is slow (10 prints = 10 Crystal Pear Dew cooks). That's acceptable for launch; more interactive scenes widen it.
 
 ## Test plan
-
-*To be written.*
+- **Unit:** `pawPrints.ts`: balance per giver, used-stamp derivation, ordering, the rotation reference (rounds, no repeat within a round, new or deactivated questions mid-round).
+- **Unit:** the admin draft validation (blank or duplicate answers, 2–3 wrong answers, length limits).
+- **Unit:** the kitchen helpers: when the badge shows (interactive scene, prep phase, challenge available, not yet answered this cook), and the video-gate decision (unlocked + recipe chosen).
+- **Unit:** strings parity for every touched or new strings file. Rewards page helpers (stamp detail formatting, reward card state).
+- **API route:** the chef-questions route: success, plus 401/403 for a non-admin, plus validation errors (mocked Supabase).
+- **Live on dev:** `scripts/verify-rls.ts` gains a section showing that a child JWT:
+  - can't read `chef_challenge_questions`;
+  - can't insert, update or delete any of the five tables;
+  - can only read their own family's rows.
+- **Live on dev:** new `scripts/verify-chef-challenge.ts`. It runs as a throwaway child and checks:
+  - issue/answer/award;
+  - the same open attempt is returned;
+  - `already_answered`, `cook_required` and `not_unlocked`;
+  - round rotation with no repeats;
+  - redeem and its refusals;
+  - balances.
+  It cleans up after itself.
+- **Manual QA in the browser:**
+  - Crystal Pear Dew: the badge appears during prep; close/reopen shows the same question; a correct answer gives the stamp, chime and +1, and a wrong one shows the answer; the badge is gone after answering.
+  - Rewards: the grid, tapping stamps, redeeming at 10.
+  - The hand-wash video plays on the next recipe choice, can't be skipped, ducks the music, and doesn't block when the file is renamed.
+  - Shop Admin: collapsed sections, curating questions, preview.
+  - Phone width.
+- **Before push:** `tsc`, `eslint`, `npm test`, `check:encoding`.
 
 ## Acceptance criteria
-
-*To be written.*
+- [ ] Migration deployed to dev (then prod after review); `verify:rls` passes the new section (existing known failures unchanged); `verify-chef-challenge` all green on dev.
+- [ ] Badge and challenge work only on interactive scenes during prep, once per cook, with every decision 1–6 behavior above.
+- [ ] Paw prints are earned only through a server-checked correct answer; children can't read answers or write any of the five new tables.
+- [ ] The Rewards page is in the nav after Shop Kitchen for child/admin only, shows the counts, grid, used stamps and tap details, and redeems the hand-wash reward for 10.
+- [ ] The hand-wash video plays after every recipe choice once unlocked, unskippable, music ducked, never blocking.
+- [ ] The Shop Admin question section works (add/edit/toggle/delete/preview, one recipe at a time), with all three sections collapsed on load.
+- [ ] Bilingual UI with parity tests; questions Chinese only.
+- [ ] `tsc`, `eslint`, `npm test`, `check:encoding` pass.
+- [ ] `0_ARCHITECTURE.md` updated at ship: data schema (five tables), RLS, system guarantees, Shop Kitchen rules (challenge + video), a new Rewards Rules section, Shop Admin rules, the permission matrix, and the localStorage note if any. Roadmap row T updated.
 
 ## Appendix A — Video prompt: "Shrewy washes his hands" (reward 8)
 
