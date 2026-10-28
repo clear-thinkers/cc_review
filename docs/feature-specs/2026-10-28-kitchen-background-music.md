@@ -4,6 +4,8 @@ Roadmap item **R**. A small presentational add-on to Shop Kitchen (item J); no s
 
 ## Status
 
+**Shipped 2026-10-28** (commit `7666640`); owner re-QA passed after the same-day fix in `docs/fix-log/build-fix-log-2026-10-28-kitchen-music-silent-after-return.md`. Observed: on a first visit the track takes ~5 s to start while the file downloads; accepted.
+
 Approved 2026-10-28 (scope confirmed by the owner: add as item R with a spec; mute covers the music only; the track is instrumental).
 
 ## Problem
@@ -56,11 +58,11 @@ UI only: new `kitchenMusic.sound.ts`, new `useKitchenMusic.ts`, edits to `Kitche
 
 ## Acceptance criteria
 
-- [ ] Music loops quietly on the kitchen page and nowhere else.
-- [ ] Mute toggle works, is bilingual, and is remembered per profile.
-- [ ] Music dips during the dish reveal; the chime is unchanged.
-- [ ] No console errors other than a warning when autoplay/playback fails.
-- [ ] `tsc`, `eslint`, `npm test`, `check:encoding` pass.
+- [x] Music loops quietly on the kitchen page and nowhere else.
+- [x] Mute toggle works, is bilingual, and is remembered per profile.
+- [x] Music dips during the dish reveal; the chime is unchanged.
+- [x] No console errors other than a warning when autoplay/playback fails.
+- [x] `tsc`, `eslint`, `npm test`, `check:encoding` pass.
 
 ## Open questions
 

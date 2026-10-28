@@ -4,7 +4,9 @@ Extends roadmap item **O** (Kitchen Chef, `2026-10-24-kitchen-chef-dialogue.md`)
 
 ## Handoff — current state (update before ending a session)
 
-- **Built:** lines **#1, #3, #4** (all tap lines). Tests, `tsc` and `eslint` pass. In-browser QA of #3/#4 is possible now with dev child 瓜瓜 (see Testing); #1 has no qualifying dev child yet.
+- **Status (2026-10-28): deferred by the owner.** Recorded as roadmap item **S** (partly shipped, rest deferred). Don't resume until the owner un-defers it. The built lines are documented in `0_ARCHITECTURE.md` Shop Kitchen Rule 20.
+- **Recipe scenes — no decision needed here (2026-10-28):** "Scope and boundaries" below says shelf lines don't play in a recipe's special scene. That holds for a plain scene (Rainbow Macarons: no chef tap at all). In an interactive scene (Crystal Pear Dew) a tap currently uses the same pool, so a shelf line can show there. The owner has decided that tapping the chef during cooking will become the chef challenge (roadmap item T, `2026-10-28-chef-challenge-paw-prints.md`), so this is interim behavior that T replaces. When resuming S, check what T settled for taps during cooking. See `0_ARCHITECTURE.md` Shop Kitchen Rule 21.
+- **Built:** lines **#1, #3, #4** (all tap lines; shipped 2026-10-27, commit `0fdc339`). Tests, `tsc` and `eslint` pass. In-browser QA of #3/#4 is possible now with dev child 瓜瓜 (see Testing); #1 has no qualifying dev child yet.
 - **Next:**
   1. Switch line selection to **rotation** (see Behavior rules). This changes built code: today's pick is random with no immediate repeat.
   2. #2 → #5 / #6 → #9 / #10 / #11 as tap lines (same pattern as the built ones).
