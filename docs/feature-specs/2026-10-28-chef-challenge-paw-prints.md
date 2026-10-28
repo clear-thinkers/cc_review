@@ -100,32 +100,36 @@ While cooking, tapping Chef Shrewy only gets a chat line. The owner wants that m
 
    **Follow-ups this raises:**
    - **7a. Spending vs. the sheet — decided 2026-10-28:** the sheet keeps **every print ever earned**, as a lifetime collection. Spent prints stay on it but look "used" (faded, or under a small "redeemed" mark; exact look to be designed). A separate "available to spend" number shows what's left. Spending never removes a stamp from the child's collection.
-   - **7b. Sheet layout — decided 2026-10-28: a neat grid** of stamps on the paper sheet, not scattered. Still open (minor):
-     - stamps per row/page on a phone vs. a desktop;
-     - whether tapping a stamp shows when and for which recipe it was earned.
+   - **7b. Sheet layout — decided 2026-10-28:** a **neat grid** of stamps on the paper sheet, not scattered.
+     - **Columns:** about **5 per row**, adjusting to screen width (proposed: fewer on a narrow phone, 5 on a typical screen, more on a wide desktop).
+     - **Tapping any stamp, used ones included,** shows **when** it was earned, **for which recipe**, and **from whom** (the giver, e.g. Chef Shrewy). So each ledger row stores its date, recipe and giver (Data and security).
    - **7c. Art and givers — decided 2026-10-28:**
      - **Each stamp is the paw only.** The **signature is shown for who gave it**: the sheet displays the giver's signature ("Chef Shrewy ♡" with the whisk) alongside that giver's prints, not on every stamp.
      - **Future givers:** the owner plans signature collectibles from **other characters** later. So every paw print records **who gave it** (a giver/character key; `shrewy` for now). Each giver has its own stamp art and signature art, and the sheet groups prints by giver.
      - Proposed: build a small character catalog in code now (Shrewy only) so a new character doesn't need a migration. **Balances are separate per character** (decided 2026-10-28). Shrewy's paw prints are spent only on Shrewy's rewards, and each future character has its own tokens and its own redemption list.
      - **Source art:** copied to `public/paw-prints/_staging/chef-shrewy-stamp-source.jpg` (local only, since `_staging` folders are git-ignored; 2048×2048 JPEG; paw, hat, sparkles, splatter and signature on cream paper).
-     - **Still needed**, derived from it:
-       - a transparent paw-only PNG (paw pad with hat, stripes and blush; whether the sparkles and splatter stay is the owner's call);
-       - a transparent signature PNG ("Chef Shrewy ♡" + whisk);
-       - a small version of the paw for the badge over Shrewy (1b).
-     - Finals go to `public/paw-prints/` through the repo's usual transparency step.
+     - **Final art, cut from the source 2026-10-28** (all real RGBA PNGs with transparent corners, checked on dark and cream backgrounds):
+       - `public/paw-prints/shrewy_paw.png`: 512×512, the paw stamp. Pads, chef's hat, stripes and blush; the sparkles and splatter were dropped. The hat's white is kept solid. Pale crayon specks inside the pads are part of the texture.
+       - `public/paw-prints/shrewy_paw_badge.png`: 128×128, the same paw for the badge over Shrewy (1b).
+       - `public/paw-prints/shrewy_signature.png`: 1024×356, "Chef Shrewy ♡" with the whisk and the rainbow smudges under the letters, with open letter loops.
+     - **How they were made:** the repo's `normalize-reward-icon.mjs` targets checkerboard or black backgrounds, so it doesn't fit this cream paper. Instead the paper was separated by colour distance from the paper tone. For the paw, the shapes were filled solid and small flecks dropped; the signature kept its open loops. Soft edges are unblended from the paper so there's no cream fringe.
+     - **"Used" look (7a):** proposed in CSS (reduced opacity/desaturation plus a small mark), so no extra art is needed.
    - **7d. Earning moment:** when a correct answer earns a print, is there an animation, such as the stamp thumping onto a mini sheet in the pop-up, plus a Shrewy celebrate line?
 8. **The redemption catalog** (per character, since balances are separate — 7c). Still being thought through by the owner. **First reward, decided 2026-10-28:**
    - **"Shrewy washes his hands" — 10 paw prints.** The idea came from the owner's child, who wants Shrewy clean before he cooks.
    - Once unlocked, a short video of Shrewy washing his hands at the sink plays **before the cooking scene starts**.
 
-   **Design deferred by the owner (2026-10-28)** — the questions below are parked until the owner returns to them. A prompt for generating the video is in the appendix.
+   **Design partly decided (2026-10-28)**: 8a is decided, 8b is delivered and settled, and 8c/8d are proposed. A prompt for generating the video is in the appendix.
 
    **Open for this reward:**
-   - **8a. When it plays:**
-     - when an interactive recipe scene opens (a recipe was just selected)?
-     - before every cook, in every scene?
-     - Every time, or with an on/off toggle after unlocking?
-     - Can the child tap to skip it?
+   - **8a. When it plays — decided 2026-10-28:**
+     - It plays **once, right after a recipe is chosen** in the Recipe Book, every time a recipe is chosen.
+     - It applies to **every cookable recipe**, in any scene (default, plain or interactive), not only interactive ones.
+     - It **can't be skipped.** There's no on/off switch either; once unlocked, it always plays.
+     - It plays only after the reward has been redeemed. Before that, choosing a recipe works exactly as today.
+     - **Proposed order:** the book closes → the video plays (~6 s) → then whatever follows today: the special-ingredient picker if the child has any special ingredients, otherwise the kitchen with Shrewy's start line (Shop Kitchen Rules 18 and 21). Picking the selected recipe again to deselect it doesn't play the video.
+     - **Must never block cooking:** if the video can't load or play (network error, a browser refusing playback), the flow carries on as if it had finished, perhaps after a short timeout (proposed ~2 s to start). Choosing a recipe is a tap, so the browser normally allows playback with sound.
+     - **Music:** the kitchen music dips (or pauses) while the video's own sound plays, then comes back. The kitchen music mute doesn't affect the video's sound (item R: the mute covers the music only).
    - **8b. The video file:**
      - **Delivered 2026-10-28:** `public/video/shrewy_hand_wash.mp4`, reviewed the same day.
        - **Specs:** 6.0 s, 1280×720 (16:9, not the 1:1 asked for), 24 fps, H.264 High + AAC stereo, `moov` before `mdat` (streams while downloading), 2.73 MB.
@@ -138,8 +142,8 @@ While cooking, tapping Chef Shrewy only gets a chat line. The owner wants that m
      - With sound? If so, the kitchen music should dip while it plays, the same way it does under the dish reveal.
      - Format: MP4 (H.264). It lives in `public/video/` (the owner's choice), not `public/kitchen/`.
      - Size matters: the music track already takes ~5 s to load on a first visit.
-     - Reduced-motion users: proposed to skip the video.
-   - **8c. Placement:** full-screen over the scene, or played in place over the sink area of the artwork?
+     - **Reduced-motion users — decided 2026-10-28:** the video plays regardless of the device's reduce-motion setting. The owner's reason: the app currently has one active child user, who doesn't need it. This is a deliberate exception to the kitchen's other animations, which respect reduced motion (Shop Kitchen Rules 18, 21). Revisit if the app opens to more families.
+   - **8c. Placement (proposed):** since it plays in every scene, and each scene's artwork puts the sink in a different spot (or has none), a **pop-up over the kitchen** fits best: the 16:9 video centered on a dimmed backdrop, the same style as the dish reveal, with no close button.
    - **8d. Permanent?** Proposed: redeeming unlocks it **for good**; it is not consumed.
 
    **Still open for the whole catalog:**
