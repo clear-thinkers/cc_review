@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-10-24 (Mystery Foods — items L/M/N; child-created sessions + reward picks — item P)_
+_Last updated: 2026-10-28 (Shop Kitchen background music — item R). Previously: 2026-10-24 (Mystery Foods — items L/M/N; child-created sessions + reward picks — item P)_
 
 ---
 
@@ -421,6 +421,8 @@ These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature
 17. **Mystery ingredients and foods in the kitchen (2026-10-24).** The fridge shows mystery ingredients like any other (they are catalog rows) with a "Mystery" badge. A mystery food, once auto-unlocked (Recipe Shop Rule 24), appears in the Recipe Book and cooks through the unchanged `cook_shop_recipe` — which consumes exactly one food's worth of each base ingredient per cook; leftover sets allow repeat cooks, and a cook without a full set returns `insufficient_ingredients`.
 
 18. **Chef Shrewy / 鼩仔 (2026-10-24, roadmap item O; spec `docs/feature-specs/2026-10-24-kitchen-chef-dialogue.md`).** A tabby-cat chef overlays the kitchen illustration (`KitchenChef.tsx`, a percentage box that stands him on the middle rung of the ladder painted into all three scene images — no separate artwork needed; only a body-sized transparent button takes clicks, so the neighbouring fridge/stove hotspots are never blocked) and reacts to four moments with a pose (`public/kitchen/chef_<pose>.png`, 512×512 transparent PNGs) and a speech bubble: **unlock** (`amazed`) — a mystery food unlocked since the child's last visit, announced once per food per profile (a `localStorage` "seen" flag keyed per user; losing it only repeats one line); **start** (`careful`) — played when the child returns to the scene with a recipe chosen (closing the recipe book or the special-ingredients picker, since both are full-screen modals); **success** (`celebrate`) — after a successful cook; **tap** (`hungry` when any dish is served, `idle` otherwise). Lines live in `kitchenChef.strings.ts` (EN + ZH, no migration): a generic set per trigger (3 variants; 2 for tapEmpty; 1 unlock fallback) plus per-recipe overrides keyed by slug (`crystal-dumpling` ships with its own four). A recipe's own lines win for unlock/start/success; tapServed pools the generic lines with every served recipe's own tap lines. The chosen line never repeats the previous one, shows for 5 s (`CHEF_LINE_DURATION_MS`) then returns to idle, taps are rate-limited to 1.2 s (`CHEF_TAP_COOLDOWN_MS`), the bubble is `pointer-events-none` so it can never block a hotspot, and a × button hides/shows the chef. Purely presentational — the chef never reads or writes cooking, ingredient, coin, or unlock state.
+
+19. **Background music (2026-10-28, roadmap item R; spec `docs/feature-specs/2026-10-28-kitchen-background-music.md`).** While the kitchen page is showing, `public/sound/kitchen_01.mp3` (instrumental) loops at volume 0.3 (`kitchenMusic.sound.ts`, one cached `HTMLAudioElement`, same pattern as `shared/coins.sound.ts`), driven by `useKitchenMusic`. It tries to start at once and, if the browser blocks autoplay, starts on the next tap or key press; a blocked or failed play never surfaces an error. It pauses when the child leaves the page or the tab is hidden, resumes from the same position (each start/stop is one `startKitchenMusicPlayback` call; a stopped one never pauses after stopping, so it can't silence a newer one — `docs/fix-log/build-fix-log-2026-10-28-kitchen-music-silent-after-return.md`), and drops to 0.1 while the dish-reveal popup (`KitchenDishReveal`) is open. A 🔊/🔇 toggle in the page header (outside the illustration, so it never covers a hotspot or the chef) mutes **the music only** — the celebration chime is unaffected. The choice is remembered per profile per device in `localStorage` (`hq-kitchen-music-muted:<userId>`, `"1"` = muted), read through `useSyncExternalStore` so the server render is always "not muted" and hydration never mismatches. Purely presentational — no data reads or writes.
 
 ### Debug Tools Rules (`/words/debug`)
 
@@ -1009,6 +1011,10 @@ All tables have RLS enabled. Policies are applied based on JWT `app_metadata` cl
 **Phase 1 localStorage authentication has been replaced by Supabase Auth (Feature 4).** The following keys are no longer in use. All auth state is managed by the Supabase client session and React context (`AuthProvider`).
 
 Retired keys: `sessionToken`, `selectedAvatarId`, `sessionCreatedAt`, `storedPinHash`, `lastSelectedAvatarId`, `migration_completed`.
+
+**Current (non-auth) keys** — per-device, per-profile UI preferences only; losing one is harmless and nothing here is a source of truth for data:
+- `hq-kitchen-chef-seen-unlocks:<userId>` — mystery-food unlocks the chef has already announced (Shop Kitchen Rule 18).
+- `hq-kitchen-music-muted:<userId>` — kitchen background-music mute choice (Shop Kitchen Rule 19).
 
 ### Database State Management (Retired)
 

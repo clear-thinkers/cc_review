@@ -1,5 +1,5 @@
 /**
- * Shop Kitchen Strings — Last updated: 2026-08-23
+ * Shop Kitchen Strings — Last updated: 2026-10-28
  * All user-facing text for /words/shop/kitchen (feature spec 2026-08-23-kitchen-page.md).
  */
 export const kitchenStrings = {
@@ -10,6 +10,12 @@ export const kitchenStrings = {
       "Click the fridge to see what you've collected, open the recipe book to pick something to make, then click the stovetop or the oven to cook it.",
     loading: "Loading your kitchen…",
     loadError: "Could not load the kitchen. Please try again.",
+
+    // Section: Background Music (spec 2026-10-28-kitchen-background-music.md)
+    musicOnLabel: "Music on",
+    musicOffLabel: "Music off",
+    musicMuteAria: "Turn the kitchen music off",
+    musicUnmuteAria: "Turn the kitchen music on",
 
     // Section: Fridge
     fridgeLabel: "Fridge",
@@ -99,6 +105,12 @@ export const kitchenStrings = {
     pageDescription: "点冰箱查看你收集的食材,打开食谱书选一道菜,然后点炉灶或烤箱做出来。",
     loading: "正在加载你的厨房…",
     loadError: "无法加载厨房,请重试。",
+
+    // Section: Background Music (spec 2026-10-28-kitchen-background-music.md)
+    musicOnLabel: "音乐:开",
+    musicOffLabel: "音乐:关",
+    musicMuteAria: "关掉厨房音乐",
+    musicUnmuteAria: "打开厨房音乐",
 
     // Section: Fridge
     fridgeLabel: "冰箱",

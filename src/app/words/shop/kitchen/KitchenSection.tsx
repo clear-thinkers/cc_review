@@ -47,6 +47,7 @@ import {
   serializeSeenUnlockIds,
 } from "./kitchenChef.utils";
 import { useKitchenChef } from "./useKitchenChef";
+import { useKitchenMusic } from "./useKitchenMusic";
 import {
   buildCountertopTiles,
   buildShelfTilesByFoodType,
@@ -689,6 +690,13 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     title: string;
     recipeSlug: string;
   } | null>(null);
+  // Background music (spec 2026-10-28): plays only on this page, dips under the
+  // dish-reveal chime; the mute toggle covers the music, not the chime.
+  const music = useKitchenMusic({
+    userId,
+    active: vm.page === "shopKitchen",
+    ducked: dishReveal !== null,
+  });
 
   useEffect(() => {
     if (vm.page !== "shopKitchen") return;
@@ -1078,7 +1086,19 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   return (
     <section className="space-y-4 rounded-lg border p-4">
       <div className="space-y-2">
-        <h2 className="font-medium">{str.pageTitle}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-medium">{str.pageTitle}</h2>
+          <button
+            type="button"
+            onClick={music.toggleMuted}
+            aria-label={music.isMuted ? str.musicUnmuteAria : str.musicMuteAria}
+            title={music.isMuted ? str.musicUnmuteAria : str.musicMuteAria}
+            className="btn-nav inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1 text-sm font-semibold hover:bg-[#fff1cd]"
+          >
+            <span aria-hidden="true">{music.isMuted ? "🔇" : "🔊"}</span>
+            {music.isMuted ? str.musicOffLabel : str.musicOnLabel}
+          </button>
+        </div>
         <p className="max-w-3xl text-sm text-gray-700">{str.pageDescription}</p>
       </div>
 
