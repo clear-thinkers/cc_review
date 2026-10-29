@@ -4,6 +4,8 @@ Roadmap item **T**. Builds on Shop Kitchen (item J), the kitchen chef (item O) a
 
 ## Status
 
+**Shipped 2026-10-29.** Owner QA passed on dev. All five migrations are on dev and prod, and 65 owner-reviewed questions with 小知识 are live on prod. The decisions and follow-ups below are the build record.
+
 **Full design drafted 2026-10-28 and approved by the owner the same day,** including the one-per-cook rule (`cook_required`), no scheduler impact (Q4), a separate economy (Q9), and confirm-on-delete for questions. **Authorized by the owner 2026-10-28 and built on dev the same day.** Migration `20261028160000` is on dev only; `verify:chef-challenge` passes 30/30 and `verify:rls` Section 13 12/12. **Recipe Book marker (authorized 2026-10-29):** the kitchen's Recipe Book marks each recipe where the child can actually meet the challenge (an interactive scene **and** active questions) with the small paw badge. The marker updates automatically as scenes or questions are added or removed. Migration `20261029170000` adds `chef_challenge_recipe_ids()`, which returns recipe ids only.
 
 **Art update (owner, 2026-10-29), superseding decision 7c's art:**
