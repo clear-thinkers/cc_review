@@ -1786,6 +1786,13 @@ export async function redeemPawPrintReward(rewardKey: string): Promise<RedeemPaw
   return normalizeRedeemPawPrintRewardResult(data);
 }
 
+/** Recipes with at least one active chef-challenge question -- ids only, never question content. */
+export async function listChefChallengeRecipeIds(): Promise<string[]> {
+  const { data, error } = await supabase.rpc("chef_challenge_recipe_ids");
+  if (error) throw new Error(`listChefChallengeRecipeIds: ${error.message}`);
+  return Array.isArray(data) ? data.filter((id): id is string => typeof id === "string") : [];
+}
+
 interface SupabasePawPrintAwardRow {
   id: string;
   user_id: string;

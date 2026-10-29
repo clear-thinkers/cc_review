@@ -402,6 +402,9 @@ These rules govern the platform-admin recipe metadata editor:
     - **Collapsed on load:** all three sections now start collapsed; the recipe section used to start open.
     - **Editing:** pick a recipe, then add, edit, activate/deactivate or delete its questions, one at a time.
       - Each question has a Chinese prompt (≤ 200 chars), one correct answer and 2–3 distinct wrong answers (each ≤ 60 chars), validated by `validateChefChallengeQuestionDraft`.
+      - An optional 小知识 (`explanation`, ≤ 300 chars, added 2026-10-29) is edited in the same form, shown in the list (or tagged "No fun fact yet"), and shown in the preview.
+      - Bulk-authored questions live in `content/chef-challenges/questions.zh.json` and are imported with `npm run seed:chef-challenge-questions` (`0_BUILD_CONVENTIONS.md §10`).
+      - Once imported, **the database (as reviewed in Shop Admin) is the source of truth**. `--export` writes it back to the file; new questions are imported per recipe with `--recipe`. A whole-file import would re-add questions deleted in Shop Admin (fix log `build-fix-log-2026-10-29-question-import-readded-deleted-questions.md`).
       - **Delete asks for confirmation**: a deliberate exception to the no-dialog default (`0_BUILD_CONVENTIONS.md §5`), since these are hand-written questions.
       - **Preview** renders the same `ChefChallengeCard` the kitchen uses.
     - **Access:** every call goes through `/api/shop-admin/chef-questions` (GET/POST/PATCH/DELETE; platform admin checked from the token's own claims via `getJwtAppMetadataUserId`, not `user.app_metadata`; service-role client). Children can't read the question table at all.
@@ -456,9 +459,17 @@ These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature
       - Shrewy's sprite in the moment's pose (`CHEF_CHALLENGE_POSES`: offer `careful`, correct `celebrate`, wrong `idle`), since the scene's chef is painted and can't change pose;
       - a speech-bubble line from `kitchenChef.strings.ts` `challenge`;
       - the Chinese-only question with its options shuffled by the server.
-    - **Closing without answering** costs nothing: the same challenge comes back, and Shrewy says a `dismiss` line in the scene bubble (`useKitchenChef.sayLine`).
-    - **Answering** calls `answer_chef_challenge`. The correct answer is returned only after answering. Correct: the option turns green, a paw stamp thumps in, the celebration chime plays, and the count is shown. Wrong: the correct option is highlighted and Shrewy says a gentle line, with no retry. Either way, closing re-asks the server, which now answers `cook_required`, so the badge goes away until the recipe is actually cooked (the one-per-cook rule).
+    - **Three questions per challenge (owner, 2026-10-29; migrations `20261029150000`, `20261029160000`).** A challenge asks up to 3 questions, drawn at random from **all** of the recipe's active questions (no rotation between challenges), never repeating within one challenge. A recipe with fewer than 3 asks them all. Questions come one at a time, with progress shown as "第 n/total 题".
+    - **Closing mid-way** costs nothing: the next tap resumes with the same open question, or the next unanswered one. Shrewy says a `dismiss` line in the scene bubble (`useKitchenChef.sayLine`).
+    - **Answering** calls `answer_chef_challenge`. The correct answer and the question's 小知识 (`explanation`, if any) are returned only after answering, and the pop-up shows them under the options.
+      - **Correct with more to come:** a `nextCorrect` line (pose `amazed`) and a "下一题" button that asks `get_chef_challenge` for the next question.
+      - **Wrong:** the correct option is highlighted, Shrewy says a gentle `wrong` line, and **the challenge ends** with no paw print.
+      - **The last correct answer** of a fully correct challenge: a paw stamp thumps in, the celebration chime plays, and the count is shown (`correct` lines).
+      - **Once the challenge ends**, closing re-asks the server, which answers `cook_required`, so the badge goes away until the recipe is actually cooked (the one-per-cook rule).
     - **A failed answer call** shows a retry and never awards anything.
+    - **Recipe Book marker (2026-10-29, migration `20261029170000`):** an unlocked recipe card shows the small paw badge (title/alt "这道菜有鼩仔挑战") when the child can actually meet the challenge on it: an interactive scene **and** at least one active question (`recipeOffersChefChallenge`, `kitchen.types.ts`).
+      - The question part comes from `chef_challenge_recipe_ids()`, loaded with the kitchen's other data; a failed read just shows no markers.
+      - Adding a scene or questions marks a recipe automatically; removing them unmarks it.
     - **The hand-wash video:** once the child has redeemed `shrewy-hand-wash` (read with the kitchen's other data via `listPawPrintRedemptions`, never failing the kitchen), **every new recipe choice** in the Recipe Book (any recipe, any scene) plays `/video/shrewy_hand_wash.mp4` in `HandWashVideoModal` before the usual next step (special-ingredient picker or start line, `continueAfterRecipeChosen`).
       - It can't be skipped (no close button, the backdrop does nothing) and plays even with reduced motion. Both are owner decisions, made for the current single-child usage.
       - Deselecting a recipe doesn't play it.
@@ -472,10 +483,10 @@ These rules govern the Rewards page added 2026-10-28 (roadmap item T; `docs/feat
 1. `/words/shop/rewards` ("Rewards" / 奖励 in the nav, right after Shop Kitchen) is **child + platform admin only**, matching `/words/shop` and `/words/shop/kitchen`. Parents are route-blocked and don't see a child's paw prints or redemptions.
 2. **Paw prints are a separate economy:** they are never converted to or from coins or ingredients, and nothing here touches `wallets`, scheduler state or quiz data. They're earned only through Shop Kitchen Rule 22 and spent only through `redeem_paw_print_reward`.
 3. **Balances are per giver** (character). Collected = the giver's `paw_print_awards` rows; available = collected minus the summed `cost` of that giver's `paw_print_redemptions` (`computePawPrintBalance`, `src/lib/pawPrints.ts`). Only Chef Shrewy (`shrewy`) gives paw prints today; the giver column leaves room for other characters' tokens.
-4. **The stamp sheet:** a cream paper card with Shrewy's signature (`/paw-prints/shrewy_signature.png`) and a neat grid of `/paw-prints/shrewy_paw.png` stamps, one per award, oldest first, about 5 per row on a typical screen (3 on a phone, 6 on wide screens).
+4. **The stamp sheet:** a cream paper card headed "Chef Shrewy's paw prints" / "鼩仔的爪印" with the small paw badge beside it (no separate signature or "from" line), and a neat grid of `/paw-prints/shrewy_paw.png` stamps, one per award, oldest first, about 5 per row on a typical screen (3 on a phone, 6 on wide screens).
    - **Spending never removes a stamp:** the oldest spent ones render faded with a "Redeemed" label (`buildPawPrintStamps`).
    - **Tapping any stamp**, used ones included, shows when it was earned, the recipe's localized title, and the giver.
-5. **The reward list** comes from the server catalog `paw_print_rewards` (launch: `shrewy-hand-wash`, 10 paw prints), with copy per reward key in `rewards.strings.ts`.
+5. **The reward list** comes from the server catalog `paw_print_rewards` (launch: `shrewy-hand-wash`, **2 paw prints** since 2026-10-29, was 10), with copy per reward key in `rewards.strings.ts`.
    - **Card states** (`resolveRewardCardState`): *Redeem*, *Need N more* (disabled), or *Unlocked*.
    - **Redeem** asks for confirmation, then calls `redeem_paw_print_reward`. Redemption is permanent (unique per child and reward); the price is never sent by the client.
 
@@ -489,6 +500,10 @@ These rules govern the platform-admin maintenance page:
 4. Ingredient-audit actions may edit or clear broken ingredient icon paths. Reward-audit actions may edit, create, or delete reward icon rules.
 5. Debug maintenance actions must not modify scheduler state, words, flashcard content, or quiz results.
 6. **Ingredient-quantity editor (2026-10-27, for kitchen testing).** `/api/debug/shop-ingredient-quantities` lets a platform admin set **their own** active profile's spendable count of any catalog ingredient (mystery ones included). The profile comes from the verified token's own claims and the family from its `users` row, never from the request. Changes are append-only: raising inserts `shop_ingredient_purchases` rows with `coins_spent = 0` (attributed to a recipe that uses the ingredient), and lowering inserts `shop_ingredient_consumptions` rows whose `cooked_dish_id` matches no dish. This is the one sanctioned writer of those ledgers outside their RPCs, and the one way a mystery ingredient reaches a purchase row (an exception to Recipe Shop Rule 25). After a raise, each active mystery food using the ingredient is passed to `unlock_shop_recipe` **as the caller**, so that RPC remains the only writer of `shop_recipe_unlocks`. No wallet, coin-history, or unlock row is written directly.
+   - **Bulk add (2026-10-29, for testing):** a second request shape, `{ addToKeys, amount }`, adds `amount` (1–99) to every listed ingredient in one call. Each is capped at 99, the single editor's ceiling (`planDebugBulkIngredientAdd`).
+     - The page sends whatever its filter is showing, so with no filter that's every ingredient; "Mystery only" or a search narrows it.
+     - It uses the same append-only ledger writes and the same mystery-food unlock pass as the single editor (`applyLedgerChanges`, inserts chunked at 1,000 rows).
+     - An ingredient no recipe uses can't be attributed to a purchase row, so it is skipped and listed in the result rather than failing the batch.
 
 ### Login & Avatar Protection Rules (`/login`)
 
@@ -980,6 +995,7 @@ A child's spendable count of ingredient X is `count(shop_ingredient_rewards wher
 | `prompt` | text | Chinese only; 1–200 chars |
 | `correct_answer` | text | 1–60 chars |
 | `wrong_answers` | jsonb | Array of 2–3 strings (distinctness validated by the API route) |
+| `explanation` | text (nullable) | 小知识: Chinese, child-facing, 1–300 chars; shown after answering, right or wrong. Added 2026-10-29 (migration `20261029120000`) |
 | `is_active` | boolean | Default `true`; inactive questions are never issued |
 | `display_order` | integer | Admin list order within a recipe |
 | `created_at` / `updated_at` | timestamptz | |
@@ -993,7 +1009,7 @@ A child's spendable count of ingredient X is `count(shop_ingredient_rewards wher
 | `user_id` / `family_id` | uuid | Cascade on delete |
 | `recipe_id` | uuid (nullable) | Foreign key → `shop_recipes.id`; set null on delete |
 | `question_id` | uuid (nullable) | Foreign key → `chef_challenge_questions.id`; set null on delete |
-| `round` | integer | ≥ 1; per child and recipe, no question repeats within a round |
+| `round` | integer | ≥ 1; numbers a child's **challenges** for a recipe since 2026-10-29: every attempt of one challenge shares its round (originally a rotation round) |
 | `issued_at` / `answered_at` | timestamptz | `answered_at` null = still open |
 | `chosen_answer` / `is_correct` | text / boolean | Null until answered (checked together) |
 | **Constraint** | | At most one open attempt per `(user_id, recipe_id)` (partial unique index) |
@@ -1011,7 +1027,7 @@ A child's spendable count of ingredient X is `count(shop_ingredient_rewards wher
 | `earned_at` | timestamptz | Server timestamp |
 | **RLS Guarantee** | | Family-scoped read; **no client insert/update/delete** — `answer_chef_challenge` is the only writer |
 
-**`paw_print_rewards` table** — the reward catalog (2026-10-28). Seeded by migration with `shrewy-hand-wash` (giver `shrewy`, cost 10)
+**`paw_print_rewards` table** — the reward catalog (2026-10-28). Seeded by migration with `shrewy-hand-wash` (giver `shrewy`; cost 10, lowered to 2 on 2026-10-29)
 
 | Field | Type | Notes |
 |---|---|---|
@@ -1184,9 +1200,11 @@ These are the technical behaviors the system upholds. They are the factual basis
 6c. **Mystery rewards and unlocks are server-decided and atomic per call.** `reward_session_ingredients` is the only path that grants mystery ingredients: it re-derives win/non-win from the persisted session, is idempotent per `quiz_session_id`, inserts the ledger rows, and triggers any resulting unlock through `unlock_shop_recipe` in the same call. The client never supplies which ingredients are granted, whether a session was a win, or whether a food unlocks. Its helpers `shop_ingredient_available_count` and `shop_recipe_base_requirements` are read-only (`security invoker`). **Updated 2026-10-24 (item P):** the grant now happens at *claim* time — `reward_session_ingredients` only creates a stored offer, and `claim_session_ingredient_offer` (security definer, row-locked, one claim per offer) grants the child's validated pick and triggers the unlock.
 6d. **Packaged-session creation is role-scoped at the database.** Parents and the platform admin may create any session; a child may create only a character session attributed to themselves and extend/delete only their own (additive RLS policies, `verify-rls.ts` Section 12). A session's reward size is derived server-side from its saved Tested Count — never from the packaged target count or anything the client sends.
 6e. **Paw prints are server-decided and unforgeable (2026-10-28, roadmap item T).**
-    - **Issuing:** `get_chef_challenge` (security definer) checks role (child or platform admin), recipe unlock, active questions and the one-per-cook rule (after answering, `cook_required` until a newer `shop_cooked_dishes` row for that recipe). It returns the child's open challenge unchanged or issues the next question in the round, serialized per child and recipe. It never returns the correct answer.
-    - **Answering:** `answer_chef_challenge` locks the caller's own open attempt, accepts one answer, compares it (trimmed) with the stored correct answer, and on a correct answer inserts exactly one `paw_print_awards` row.
+    - **Issuing:** `get_chef_challenge` (security definer) checks role (child or platform admin), recipe unlock and active questions. It returns the open question unchanged, or the next random question of a challenge in progress. Once a challenge is over, the one-per-cook rule applies: `cook_required` until a newer `shop_cooked_dishes` row for that recipe, then a new challenge. Calls are serialized per child and recipe, and it never returns the correct answer.
+    - **When a challenge is over:** it has a wrong answer, it has earned its paw print, or it has `min(3, correct + active questions not yet asked)` correct answers (`chef_challenge_progress`; TypeScript reference `isChefChallengeFinished` / `earnsPawPrint`). An earned challenge stays finished even if questions are added later (fix log `build-fix-log-2026-10-29-chef-challenge-reopened-after-new-questions.md`).
+    - **Answering:** `answer_chef_challenge` locks the caller's own open attempt, accepts one answer, and compares it (trimmed) with the stored correct answer. Only the answer that completes a fully correct challenge inserts its single `paw_print_awards` row. It returns the correct answer and the 小知识 only now; `get_chef_challenge` never includes either.
     - **Redeeming:** `redeem_paw_print_reward` takes the price from the server catalog, serializes per child and giver, and refuses duplicates and overspending.
+    - **Recipe ids only:** `chef_challenge_recipe_ids()` (security definer, signed-in callers) returns only the ids of recipes with active questions, never a prompt, option or answer.
     - **No other path:** no client can write any of the five tables. `scripts/verify-chef-challenge.ts` checks the flow (including the SQL rotation against `pickNextChallengeQuestion`), and `verify-rls.ts` Section 13 checks the policies.
 7. **Shop writes do not affect learning state.** Shop unlocks, spend history, coin redemptions, ingredient catalog edits, recipe metadata edits, and Shop Kitchen cooking/shelf moves never update `words`, `flashcard_contents`, scheduler fields, or quiz-session grading data.
 7a. **`quiz_sessions.coins_earned` is immutable.** Coin redemptions decrement `wallets.total_coins` only. The per-session earned totals in `quiz_sessions` are never modified by any redemption path.

@@ -6,7 +6,9 @@ import {
   findMysteryRecipesUsingIngredient,
   findRecipeIdUsingIngredient,
   normalizeDebugIngredientLabel,
+  normalizeDebugBulkAddAmount,
   normalizeDebugIngredientTargetQuantity,
+  planDebugBulkIngredientAdd,
   planDebugIngredientQuantityChange,
   type DebugQuantityRecipe,
 } from "@/lib/debugIngredientQuantities";
@@ -160,70 +162,77 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-export async function PATCH(request: NextRequest): Promise<NextResponse> {
-  const { caller, error } = await authorizeCaller(request);
-  if (!caller) return error!;
+type LedgerChange = { key: string; add: number; remove: number };
 
-  let body: { ingredientKey?: unknown; quantity?: unknown };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+async function insertInChunks(
+  adminClient: ServiceClient,
+  table: string,
+  rows: Record<string, unknown>[]
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += 1000) {
+    const { error } = await adminClient.from(table).insert(rows.slice(i, i + 1000));
+    if (error) throw new Error(`${table}: ${error.message}`);
   }
+}
 
-  const ingredientKey = canonicalizeShopIngredientKey(typeof body.ingredientKey === "string" ? body.ingredientKey : "");
-  const target = normalizeDebugIngredientTargetQuantity(body.quantity);
-  if (!ingredientKey || target === null) {
-    return NextResponse.json({ error: "ingredientKey and a valid quantity are required." }, { status: 400 });
-  }
+/**
+ * Appends the ledger rows for each change (free purchases to raise, orphan consumptions
+ * to lower -- nothing is deleted), then offers every active mystery food that uses a
+ * raised ingredient to unlock_shop_recipe AS the caller. Raises for an ingredient no
+ * recipe uses can't be attributed to a purchase row, so they're returned as skipped.
+ */
+async function applyLedgerChanges(
+  caller: Caller,
+  changes: readonly LedgerChange[]
+): Promise<{ skipped: string[]; unlockedRecipes: NonNullable<DebugShopIngredientQuantitiesResponse["unlockedRecipes"]> }> {
+  const { recipes, rows } = await loadRecipes(caller.adminClient);
+  const skipped: string[] = [];
+  const purchaseRows: Record<string, unknown>[] = [];
+  const consumptionRows: Record<string, unknown>[] = [];
+  const raisedKeys: string[] = [];
 
-  try {
-    const before = await loadResponse(caller);
-    const item = before.items.find((candidate) => candidate.key === ingredientKey);
-    if (!item) {
-      return NextResponse.json({ error: `Unknown ingredient: ${ingredientKey}` }, { status: 400 });
-    }
-
-    const { add, remove } = planDebugIngredientQuantityChange(item.quantity, target);
-    const { recipes, rows } = await loadRecipes(caller.adminClient);
-
-    if (add > 0) {
-      const recipeId = findRecipeIdUsingIngredient(recipes, ingredientKey);
+  for (const change of changes) {
+    if (change.add > 0) {
+      const recipeId = findRecipeIdUsingIngredient(recipes, change.key);
       if (!recipeId) {
-        return NextResponse.json(
-          { error: `No recipe uses ${ingredientKey}, so there is nothing to attribute a purchase row to.` },
-          { status: 400 }
-        );
+        skipped.push(change.key);
+        continue;
       }
-      const { error: insertError } = await caller.adminClient.from("shop_ingredient_purchases").insert(
-        Array.from({ length: add }, () => ({
+      raisedKeys.push(change.key);
+      for (let i = 0; i < change.add; i += 1) {
+        purchaseRows.push({
           user_id: caller.userId,
           family_id: caller.familyId,
           recipe_id: recipeId,
-          ingredient_key: ingredientKey,
+          ingredient_key: change.key,
           coins_spent: 0,
-        }))
-      );
-      if (insertError) throw new Error(`shop_ingredient_purchases: ${insertError.message}`);
+        });
+      }
     }
-
-    if (remove > 0) {
+    if (change.remove > 0) {
       const cookedDishId = randomUUID();
-      const { error: insertError } = await caller.adminClient.from("shop_ingredient_consumptions").insert(
-        Array.from({ length: remove }, () => ({
+      for (let i = 0; i < change.remove; i += 1) {
+        consumptionRows.push({
           user_id: caller.userId,
           family_id: caller.familyId,
-          ingredient_key: ingredientKey,
+          ingredient_key: change.key,
           cooked_dish_id: cookedDishId,
-        }))
-      );
-      if (insertError) throw new Error(`shop_ingredient_consumptions: ${insertError.message}`);
+        });
+      }
     }
+  }
 
-    const unlockedRecipes: NonNullable<DebugShopIngredientQuantitiesResponse["unlockedRecipes"]> = [];
-    if (add > 0) {
-      const callerClient = getCallerScopedSupabaseClient(caller.token);
-      for (const recipe of findMysteryRecipesUsingIngredient(recipes, ingredientKey)) {
+  await insertInChunks(caller.adminClient, "shop_ingredient_purchases", purchaseRows);
+  await insertInChunks(caller.adminClient, "shop_ingredient_consumptions", consumptionRows);
+
+  const unlockedRecipes: NonNullable<DebugShopIngredientQuantitiesResponse["unlockedRecipes"]> = [];
+  if (raisedKeys.length > 0) {
+    const callerClient = getCallerScopedSupabaseClient(caller.token);
+    const triedRecipeIds = new Set<string>();
+    for (const key of raisedKeys) {
+      for (const recipe of findMysteryRecipesUsingIngredient(recipes, key)) {
+        if (triedRecipeIds.has(recipe.id)) continue;
+        triedRecipeIds.add(recipe.id);
         // Returns mystery_not_ready / already_unlocked without writing anything.
         const { data } = await callerClient.rpc("unlock_shop_recipe", { p_recipe_id: recipe.id });
         if ((data as { code?: unknown } | null)?.code === "unlocked") {
@@ -234,6 +243,70 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           });
         }
       }
+    }
+  }
+
+  return { skipped, unlockedRecipes };
+}
+
+/**
+ * Two request shapes:
+ *   { ingredientKey, quantity }  set one ingredient to `quantity` (0-99)
+ *   { addToKeys, amount }        add `amount` (1-99) to each listed ingredient, capped at 99
+ *                                (the debug page sends whatever its filter is showing)
+ */
+export async function PATCH(request: NextRequest): Promise<NextResponse> {
+  const { caller, error } = await authorizeCaller(request);
+  if (!caller) return error!;
+
+  let body: { ingredientKey?: unknown; quantity?: unknown; addToKeys?: unknown; amount?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  try {
+    if (body.addToKeys !== undefined) {
+      const amount = normalizeDebugBulkAddAmount(body.amount);
+      const keys = Array.isArray(body.addToKeys)
+        ? body.addToKeys.filter((key): key is string => typeof key === "string")
+        : [];
+      if (amount === null || keys.length === 0) {
+        return NextResponse.json({ error: "addToKeys and an amount from 1 to 99 are required." }, { status: 400 });
+      }
+      const before = await loadResponse(caller);
+      const plan = planDebugBulkIngredientAdd(before.items, keys, amount);
+      const { skipped, unlockedRecipes } = await applyLedgerChanges(
+        caller,
+        plan.map((change) => ({ ...change, remove: 0 }))
+      );
+      return NextResponse.json({
+        ...(await loadResponse(caller)),
+        unlockedRecipes,
+        bulk: { changedCount: plan.length - skipped.length, skippedKeys: skipped },
+      });
+    }
+
+    const ingredientKey = canonicalizeShopIngredientKey(typeof body.ingredientKey === "string" ? body.ingredientKey : "");
+    const target = normalizeDebugIngredientTargetQuantity(body.quantity);
+    if (!ingredientKey || target === null) {
+      return NextResponse.json({ error: "ingredientKey and a valid quantity are required." }, { status: 400 });
+    }
+
+    const before = await loadResponse(caller);
+    const item = before.items.find((candidate) => candidate.key === ingredientKey);
+    if (!item) {
+      return NextResponse.json({ error: `Unknown ingredient: ${ingredientKey}` }, { status: 400 });
+    }
+
+    const { add, remove } = planDebugIngredientQuantityChange(item.quantity, target);
+    const { skipped, unlockedRecipes } = await applyLedgerChanges(caller, [{ key: ingredientKey, add, remove }]);
+    if (skipped.length > 0) {
+      return NextResponse.json(
+        { error: `No recipe uses ${ingredientKey}, so there is nothing to attribute a purchase row to.` },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({ ...(await loadResponse(caller)), unlockedRecipes });

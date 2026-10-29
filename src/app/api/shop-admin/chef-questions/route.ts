@@ -30,6 +30,7 @@ interface QuestionRow {
   prompt: string;
   correct_answer: string;
   wrong_answers: unknown;
+  explanation: string | null;
   is_active: boolean;
   display_order: number;
 }
@@ -43,6 +44,7 @@ function toQuestion(row: QuestionRow): ChefChallengeQuestion {
     wrongAnswers: Array.isArray(row.wrong_answers)
       ? row.wrong_answers.filter((answer): answer is string => typeof answer === "string")
       : [],
+    explanation: row.explanation,
     isActive: row.is_active,
     displayOrder: row.display_order,
   };
@@ -92,7 +94,7 @@ async function authorizePlatformAdmin(
 async function listForRecipe(adminClient: ServiceClient, recipeId: string): Promise<NextResponse> {
   const { data, error } = await adminClient
     .from("chef_challenge_questions")
-    .select("id, recipe_id, prompt, correct_answer, wrong_answers, is_active, display_order")
+    .select("id, recipe_id, prompt, correct_answer, wrong_answers, explanation, is_active, display_order")
     .eq("recipe_id", recipeId)
     .order("display_order", { ascending: true })
     .order("created_at", { ascending: true });
@@ -119,6 +121,7 @@ async function readValidatedDraft(
     wrongAnswers: Array.isArray(draftBody.wrongAnswers)
       ? draftBody.wrongAnswers.filter((answer): answer is string => typeof answer === "string")
       : [],
+    explanation: typeof draftBody.explanation === "string" ? draftBody.explanation : "",
     isActive: draftBody.isActive !== false,
   });
   const problem = validateChefChallengeQuestionDraft(draft);
@@ -154,6 +157,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     prompt: draft.prompt,
     correct_answer: draft.correctAnswer,
     wrong_answers: draft.wrongAnswers,
+    explanation: draft.explanation || null,
     is_active: draft.isActive,
     display_order: nextOrder,
   });
@@ -174,6 +178,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       prompt: draft.prompt,
       correct_answer: draft.correctAnswer,
       wrong_answers: draft.wrongAnswers,
+      explanation: draft.explanation || null,
       is_active: draft.isActive,
       updated_at: new Date().toISOString(),
     })

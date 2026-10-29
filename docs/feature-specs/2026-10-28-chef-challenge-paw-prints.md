@@ -4,7 +4,21 @@ Roadmap item **T**. Builds on Shop Kitchen (item J), the kitchen chef (item O) a
 
 ## Status
 
-**Full design drafted 2026-10-28 and approved by the owner the same day,** including the one-per-cook rule (`cook_required`), no scheduler impact (Q4), a separate economy (Q9), and confirm-on-delete for questions. **Authorized by the owner 2026-10-28 and built on dev the same day.** Migration `20261028160000` is on dev only; `verify:chef-challenge` passes 30/30 and `verify:rls` Section 13 12/12. Pending: in-browser QA by the owner, then the prod migration. Shipped behavior is recorded in `0_ARCHITECTURE.md` (Shop Kitchen Rule 22, Rewards Rules, Shop Admin Rule 13, data schema, guarantee 6e). All owner decisions are recorded inline under Open questions. The sections from "Data and security" down turn them into the build design. **Not authorized for build yet:** this feature needs a schema migration and a new page, both `AI_CONTRACT.md §2` boundaries. Implementation starts only after the spec is approved and the owner's reply contains the word "authorized".
+**Full design drafted 2026-10-28 and approved by the owner the same day,** including the one-per-cook rule (`cook_required`), no scheduler impact (Q4), a separate economy (Q9), and confirm-on-delete for questions. **Authorized by the owner 2026-10-28 and built on dev the same day.** Migration `20261028160000` is on dev only; `verify:chef-challenge` passes 30/30 and `verify:rls` Section 13 12/12. **Recipe Book marker (authorized 2026-10-29):** the kitchen's Recipe Book marks each recipe where the child can actually meet the challenge (an interactive scene **and** active questions) with the small paw badge. The marker updates automatically as scenes or questions are added or removed. Migration `20261029170000` adds `chef_challenge_recipe_ids()`, which returns recipe ids only.
+
+**Art update (owner, 2026-10-29), superseding decision 7c's art:**
+- **New stamp:** a round sage-green badge with a paw, a chef's hat on top, sparkles and leaves. Source: `public/paw-prints/_staging/chef-shrewy-stamp-v2-source.jpg`, local only. It's cut to `shrewy_paw.png` (512) and `shrewy_paw_badge.png` (128).
+- **No signature:** the owner found the signature image too messy, so `shrewy_signature.png` was removed. A "来自" line isn't needed either: the sheet's heading "鼩仔的爪印" plus the small paw badge beside it is enough.
+- **Givers:** the rule that every paw print records its giver is unchanged.
+
+**Three questions per challenge (authorized 2026-10-29), superseding decisions 1d, 2d, 5 and the hand-wash price.**
+- **The challenge:** still one per cook. It asks up to **3 questions**, drawn at random from all of the recipe's active questions (the per-child rotation is dropped), never repeating within one challenge; a recipe with fewer than 3 asks them all.
+- **Answering:** questions come one at a time. A **wrong answer shows that question's answer and ends the challenge**. Only a **fully correct** challenge earns **1 paw print**. Closing mid-way resumes later.
+- **Price:** "Shrewy washes his hands" now costs **2** paw prints (was 10).
+- **Migrations:** `20261029150000` and `20261029160000`. The second is a fix so a finished challenge can't reopen; see the fix log.
+- **Behavior sections below:** where they describe one question per challenge or round rotation, this paragraph and `0_ARCHITECTURE.md` Shop Kitchen Rule 22 / guarantee 6e are authoritative.
+
+**Follow-up authorized 2026-10-29:** each question may carry a 小知识 (`explanation`, Chinese, ≤ 300 chars), shown to the child after answering, right or wrong. It's stored in a new column (migration `20261029120000`), returned only by `answer_chef_challenge`, and edited in Shop Admin. 66 curated questions with 小知识 (`content/chef-challenges/questions.zh.json`) are imported to dev. Pending: in-browser QA by the owner, then the prod migrations (both) and the question import. Shipped behavior is recorded in `0_ARCHITECTURE.md` (Shop Kitchen Rule 22, Rewards Rules, Shop Admin Rule 13, data schema, guarantee 6e). All owner decisions are recorded inline under Open questions. The sections from "Data and security" down turn them into the build design. **Not authorized for build yet:** this feature needs a schema migration and a new page, both `AI_CONTRACT.md §2` boundaries. Implementation starts only after the spec is approved and the owner's reply contains the word "authorized".
 
 ## Problem
 
@@ -75,9 +89,9 @@ While cooking, tapping Chef Shrewy only gets a chat line. The owner wants that m
 
    | Moment | Where | Pose | EN | ZH |
    |---|---|---|---|---|
-   | **Offer** — pop-up opens | pop-up | `careful` | Chef's challenge! Answer my question and I'll give you my paw print! | 大厨挑战！答对我的问题，就送你一个爪印！ |
-   | | | | Before we cook, a little culture quiz! Ready? | 开火之前，先来一道文化小问题！准备好了吗？ |
-   | | | | Psst... I have a secret question for you. Get it right for a paw print! | 嘘……我有一个秘密问题，答对就送你爪印哦！ |
+   | **Offer** — pop-up opens | pop-up | `careful` | Chef's challenge! Get them all right and I'll give you my paw print! | 大厨挑战！全部答对，就送你一个爪印！ |
+   | | | | Before we cook, a little culture quiz! Get them all right for a paw print! | 开火之前，先来几道文化小问题！全部答对就能得到一个爪印哦！ |
+   | | | | Psst... I have a secret question for you. Get them all right for a paw print! | 嘘……我有一个秘密问题，全部答对就能得到一个爪印哦！ |
    | **Correct** — paw print earned | pop-up | `celebrate` | Paw-fect! Here's my paw print for you! | 答对啦！送你我的爪印！ |
    | | | | You know so much! Stamp! One paw print for you! | 你懂得真多！啪——盖个爪印给你！ |
    | | | | Wow, a true little culture chef! Take my paw print! | 哇，真是文化小厨神！我的爪印送给你！ |

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getShopRecipeContentForLocale } from "@/lib/shop";
 import type { ShopRecipe } from "@/lib/shop.types";
 import {
+  CHEF_CHALLENGE_EXPLANATION_MAX,
   CHEF_CHALLENGE_WRONG_MAX,
   normalizeChefChallengeQuestionDraft,
   shuffleChallengeOptions,
@@ -32,13 +33,20 @@ import {
 type ShopAdminStrings = (typeof wordsStrings)["en"]["shopAdmin"];
 type Locale = "en" | "zh";
 type Notice = { kind: "success" | "error"; message: string } | null;
-type Editor = { id: string | null; prompt: string; correctAnswer: string; wrongAnswers: string[]; isActive: boolean };
+type Editor = {
+  id: string | null;
+  prompt: string;
+  correctAnswer: string;
+  wrongAnswers: string[];
+  explanation: string;
+  isActive: boolean;
+};
 
 const SECTION_CONTENT_ID = "shop-admin-chef-challenges-content";
 const ENDPOINT = "/api/shop-admin/chef-questions";
 
 function emptyEditor(): Editor {
-  return { id: null, prompt: "", correctAnswer: "", wrongAnswers: ["", "", ""], isActive: true };
+  return { id: null, prompt: "", correctAnswer: "", wrongAnswers: ["", "", ""], explanation: "", isActive: true };
 }
 
 function editorFor(question: ChefChallengeQuestion): Editor {
@@ -49,6 +57,7 @@ function editorFor(question: ChefChallengeQuestion): Editor {
     prompt: question.prompt,
     correctAnswer: question.correctAnswer,
     wrongAnswers: wrong,
+    explanation: question.explanation ?? "",
     isActive: question.isActive,
   };
 }
@@ -59,6 +68,7 @@ function draftOf(editor: Editor, recipeId: string): ChefChallengeQuestionDraft {
     prompt: editor.prompt,
     correctAnswer: editor.correctAnswer,
     wrongAnswers: editor.wrongAnswers,
+    explanation: editor.explanation,
     isActive: editor.isActive,
   });
 }
@@ -295,6 +305,17 @@ export default function ChefChallengeQuestionsSection({
                 </label>
               ))}
             </div>
+            <label className="block">
+              <span className={LABEL}>{str.explanationLabel}</span>
+              <textarea
+                lang="zh"
+                rows={3}
+                maxLength={CHEF_CHALLENGE_EXPLANATION_MAX}
+                value={editor.explanation}
+                onChange={(event) => setEditor({ ...editor, explanation: event.target.value })}
+                className={INPUT}
+              />
+            </label>
             <label className="flex items-center gap-2 text-sm text-[var(--shop-admin-text-dark)]">
               <input
                 type="checkbox"
@@ -355,6 +376,15 @@ export default function ChefChallengeQuestionsSection({
                         </span>
                       ))}
                     </div>
+                    {question.explanation ? (
+                      <p lang="zh" className="text-sm leading-6 text-[var(--shop-admin-support-text)]">
+                        💡 {question.explanation}
+                      </p>
+                    ) : (
+                      <span className="inline-block rounded-full bg-[var(--shop-admin-badge-soft-bg)] px-2.5 py-1 text-[11px] font-semibold text-[var(--shop-admin-badge-soft-text)]">
+                        {str.noExplanationBadge}
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -417,6 +447,16 @@ export default function ChefChallengeQuestionsSection({
                         correctAnswerLabel={kitchenStrings[locale].challengeCorrectAnswerLabel}
                         onChoose={() => undefined}
                       />
+                      {preview.question.explanation ? (
+                        <div className="mt-4 rounded-2xl border border-dashed border-[#dcc38a] bg-white px-4 py-3">
+                          <p className="text-xs font-bold text-[#8b6f2f]">
+                            {str.previewExplanationHeading} · {kitchenStrings[locale].challengeExplanationLabel}
+                          </p>
+                          <p lang="zh" className="mt-1 text-base leading-relaxed text-[#3f3218]">
+                            {preview.question.explanation}
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}

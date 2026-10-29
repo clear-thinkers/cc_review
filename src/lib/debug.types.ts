@@ -70,4 +70,6 @@ export type DebugShopIngredientQuantitiesResponse = {
   items: DebugShopIngredientQuantityItem[];
   /** Mystery foods this change unlocked for the caller (PATCH only). */
   unlockedRecipes?: { slug: string; title: ShopLocalizedValue<string> }[];
+  /** Bulk "add N to every shown ingredient" result (PATCH with addToKeys only). */
+  bulk?: { changedCount: number; skippedKeys: string[] };
 };

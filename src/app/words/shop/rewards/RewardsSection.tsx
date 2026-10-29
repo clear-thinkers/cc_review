@@ -23,9 +23,9 @@ import { rewardsStrings, type RewardsLocaleStrings } from "./rewards.strings";
 
 type LoadState = "loading" | "ready" | "error";
 
-/** Art per giver; only Shrewy gives paw prints today (spec decision 7c). */
+/** Stamp art per giver; only Shrewy gives paw prints today (spec decision 7c). */
 const GIVER_ART = {
-  shrewy: { stamp: "/paw-prints/shrewy_paw.png", signature: "/paw-prints/shrewy_signature.png" },
+  shrewy: { stamp: "/paw-prints/shrewy_paw.png", badge: "/paw-prints/shrewy_paw_badge.png" },
 } as const;
 
 /** A still for each catalog reward's card. */
@@ -150,13 +150,10 @@ export default function RewardsSection({ vm }: { vm: WordsWorkspaceVM }) {
           <div className="rounded-[1.5rem] border-2 border-[#dcc38a] bg-[#fffaf0] p-5 shadow-[0_16px_34px_rgba(115,92,40,0.08)]">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-[#6a5530]">{str.collectionHeading}</h3>
-                <img
-                  src={GIVER_ART.shrewy.signature}
-                  alt={str.giverNames.shrewy}
-                  draggable={false}
-                  className="mt-1 h-12 w-auto select-none sm:h-14"
-                />
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-[#6a5530]">
+                  {str.collectionHeading}
+                  <img src={GIVER_ART.shrewy.badge} alt="" aria-hidden="true" draggable={false} className="h-7 w-7 select-none" />
+                </h3>
               </div>
               <div className="flex gap-3 text-sm">
                 <span className="rounded-full border border-[#dcc38a] bg-white px-4 py-2 font-semibold text-[#8b6f2f]">
@@ -230,7 +227,7 @@ export default function RewardsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       <p className="text-sm text-gray-700">{copy.description}</p>
                       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                         <span className="flex items-center gap-1.5 text-sm font-semibold text-[#8b6f2f]">
-                          <img src={GIVER_ART.shrewy.stamp} alt="" aria-hidden="true" className="h-6 w-6" />
+                          <img src={GIVER_ART.shrewy.badge} alt="" aria-hidden="true" className="h-6 w-6" />
                           {fill(str.costTemplate, { cost: String(reward.cost) })}
                         </span>
                         {state === "unlocked" ? (

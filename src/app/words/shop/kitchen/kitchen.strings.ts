@@ -112,6 +112,10 @@ export const kitchenStrings = {
     challengeCorrectAnswerLabel: "The answer is:",
     challengePawCountTemplate: "Paw prints: {count}",
     challengePawEarned: "+1 paw print",
+    challengeExplanationLabel: "Did you know?",
+    challengeProgressTemplate: "Question {n} of {total}",
+    challengeNext: "Next question",
+    recipeHasChallenge: "Chef Shrewy has a challenge for this recipe",
 
     // Section: Hand-wash reward video
     handWashAria: "Chef Shrewy is washing his hands",
@@ -224,6 +228,10 @@ export const kitchenStrings = {
     challengeCorrectAnswerLabel: "正确答案是：",
     challengePawCountTemplate: "爪印：{count}",
     challengePawEarned: "+1 个爪印",
+    challengeExplanationLabel: "小知识",
+    challengeProgressTemplate: "第 {n}/{total} 题",
+    challengeNext: "下一题",
+    recipeHasChallenge: "这道菜有鼩仔挑战",
 
     // Section: Hand-wash reward video
     handWashAria: "鼩仔正在洗手",

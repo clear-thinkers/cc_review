@@ -54,6 +54,7 @@ const QUESTION_ROW = {
   prompt: "中秋节吃什么？",
   correct_answer: "月饼",
   wrong_answers: ["粽子", "汤圆"],
+  explanation: "中秋节吃月饼，象征团圆。",
   is_active: true,
   display_order: 0,
 };
@@ -63,6 +64,7 @@ const VALID_DRAFT = {
   prompt: "中秋节吃什么？",
   correctAnswer: "月饼",
   wrongAnswers: ["粽子", "汤圆", ""],
+  explanation: "  中秋节吃月饼。 ",
   isActive: true,
 };
 
@@ -111,6 +113,7 @@ describe("/api/shop-admin/chef-questions", () => {
           prompt: "中秋节吃什么？",
           correctAnswer: "月饼",
           wrongAnswers: ["粽子", "汤圆"],
+          explanation: "中秋节吃月饼，象征团圆。",
           isActive: true,
           displayOrder: 0,
         },
@@ -131,6 +134,7 @@ describe("/api/shop-admin/chef-questions", () => {
     expect(response.status).toBe(200);
     const insert = calls.find((call) => call.startsWith("insert:"));
     expect(insert).toContain('"wrong_answers":["粽子","汤圆"]');
+    expect(insert).toContain('"explanation":"中秋节吃月饼。"');
   });
 
   it("rejects an invalid draft with its validation code", async () => {
@@ -142,6 +146,25 @@ describe("/api/shop-admin/chef-questions", () => {
     );
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: "duplicate_answer" });
+  });
+
+  it("stores a blank explanation as null", async () => {
+    const calls: string[] = [];
+    mockTables({ isAdmin: true, calls });
+    await POST(
+      request("POST", "/api/shop-admin/chef-questions", makeToken("admin-1"), { draft: { ...VALID_DRAFT, explanation: "  " } })
+    );
+    expect(calls.find((call) => call.startsWith("insert:"))).toContain('"explanation":null');
+  });
+
+  it("rejects an over-long explanation", async () => {
+    mockTables({ isAdmin: true });
+    const response = await POST(
+      request("POST", "/api/shop-admin/chef-questions", makeToken("admin-1"), {
+        draft: { ...VALID_DRAFT, explanation: "知".repeat(301) },
+      })
+    );
+    expect(await response.json()).toMatchObject({ code: "explanation_too_long" });
   });
 
   it("requires an id to edit", async () => {

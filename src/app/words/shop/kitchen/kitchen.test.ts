@@ -12,6 +12,7 @@ import {
   isChefChallengePrepPhase,
   isKitchenScenePrepComplete,
   KITCHEN_SCENE_IMAGE_PATHS,
+  recipeOffersChefChallenge,
   shouldPlayHandWashVideo,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
@@ -491,3 +492,21 @@ describe("hand-wash reward video (roadmap item T)", () => {
     expect(HAND_WASH_VIDEO_SRC).toBe("/video/shrewy_hand_wash.mp4");
   });
 });
+
+describe("Recipe Book challenge marker (roadmap item T)", () => {
+  const withQuestions = new Set(["id-pear", "id-macarons", "id-zongzi"]);
+
+  it("marks a recipe with an interactive scene and active questions", () => {
+    expect(recipeOffersChefChallenge({ id: "id-pear", slug: "crystal-pear-dew" }, withQuestions)).toBe(true);
+  });
+
+  it("does not mark an interactive scene without questions", () => {
+    expect(recipeOffersChefChallenge({ id: "id-pear", slug: "crystal-pear-dew" }, new Set())).toBe(false);
+  });
+
+  it("does not mark a recipe with questions but no interactive scene", () => {
+    expect(recipeOffersChefChallenge({ id: "id-macarons", slug: "rainbow-macarons" }, withQuestions)).toBe(false);
+    expect(recipeOffersChefChallenge({ id: "id-zongzi", slug: "zongzi" }, withQuestions)).toBe(false);
+  });
+});
+

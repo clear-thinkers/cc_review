@@ -5,7 +5,7 @@
  * existing ledgers -- never deleting -- so the kitchen's availability math
  * (rewards + purchases - consumptions) needs no special case.
  *
- * Last updated: 2026-10-27
+ * Last updated: 2026-10-29 (bulk "add N to every shown ingredient")
  */
 import type { DebugShopIngredientQuantityItem } from "./debug.types";
 import { buildShopIngredientAvailabilityMap, SHOP_INGREDIENT_QUANTITY_MAX } from "./shop";
@@ -25,6 +25,29 @@ export function planDebugIngredientQuantityChange(
   target: number
 ): { add: number; remove: number } {
   return target >= current ? { add: target - current, remove: 0 } : { add: 0, remove: current - target };
+}
+
+/** The bulk amount: a whole number from 1 to SHOP_INGREDIENT_QUANTITY_MAX, or null. */
+export function normalizeDebugBulkAddAmount(raw: unknown): number | null {
+  const amount = normalizeDebugIngredientTargetQuantity(raw);
+  return amount !== null && amount > 0 ? amount : null;
+}
+
+/**
+ * "Add N to every shown ingredient": one free-purchase count per requested key, each
+ * capped so the ingredient never passes SHOP_INGREDIENT_QUANTITY_MAX (the single
+ * editor's ceiling). Unknown keys and already-full ingredients are left out.
+ */
+export function planDebugBulkIngredientAdd(
+  items: readonly Pick<DebugShopIngredientQuantityItem, "key" | "quantity">[],
+  keys: readonly string[],
+  amount: number
+): Array<{ key: string; add: number }> {
+  const wanted = new Set(keys.map((key) => canonicalizeShopIngredientKey(key)));
+  return items
+    .filter((item) => wanted.has(item.key))
+    .map((item) => ({ key: item.key, add: Math.max(Math.min(amount, SHOP_INGREDIENT_QUANTITY_MAX - item.quantity), 0) }))
+    .filter((change) => change.add > 0);
 }
 
 export type DebugQuantityRecipe = {

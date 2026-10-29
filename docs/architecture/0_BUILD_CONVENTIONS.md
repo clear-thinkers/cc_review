@@ -417,16 +417,47 @@ Count history: 79/81 (2026-08-23, before the Section 10 fix deployed) → 80/81 
 - **Refusals:** role (`forbidden`), `not_unlocked`, `no_questions`.
 - **The challenge:** a child can't read the question bank; a challenge has every option and no answer field; asking again returns the same open challenge.
 - **Answering:** a wrong answer reveals the correct one and awards nothing; `already_answered`; the one-per-cook rule (`cook_required` until a newer cooked dish).
-- **Rotation:** every issued question is checked against the TypeScript reference `pickNextChallengeQuestion` (`src/lib/pawPrints.ts`), covering round 1 without repeats and round 2 not opening with the last question. A deactivated question's open challenge is replaced.
+- **Three-question challenges (since 2026-10-29):** question 1/2/3 one at a time with no repeats; closing mid-way resumes; a wrong answer ends the challenge; a recipe with only 2 active questions asks 2; a finished short challenge doesn't reopen when questions come back; a deactivated open question is replaced. Every answer's finished / paw-print verdict is checked against the TypeScript reference `isChefChallengeFinished` / `earnsPawPrint` (`src/lib/pawPrints.ts`).
 - **Awards:** an award records its giver, recipe and attempt.
-- **Redemption:** `unknown_reward`, `insufficient_paw_prints`, success at exactly 10, `already_redeemed`, parent `forbidden`.
+- **Redemption:** `unknown_reward`, `insufficient_paw_prints`, success at exactly 2 (the price since 2026-10-29), `already_redeemed`, parent `forbidden`.
 - **Direct writes:** none are possible.
 
 **When to use:** After any change to `get_chef_challenge`, `answer_chef_challenge`, `redeem_paw_print_reward`, the five paw-print tables, or the rotation rule.
 
 **Env vars required:** same three as `verify-rls.ts`. Dev only, no `--prod` flag.
 
-**Key behaviours:** creates throwaway families/users and one temporary, **inactive** recipe (slug `zz-test-…`) with its own questions, and simulates a cook by inserting a `shop_cooked_dishes` row with the service role. Everything is removed in a `finally` block. Last run: **30/30 on 2026-10-28**, with no leftover rows.
+**Key behaviours:** creates throwaway families/users and one temporary, **inactive** recipe (slug `zz-test-…`) with its own questions, and simulates a cook by inserting a `shop_cooked_dishes` row with the service role. Everything is removed in a `finally` block. It also checks that 小知识 never comes back before answering and does after. It also checks that `chef_challenge_recipe_ids` lists a recipe only once it has questions, and returns ids only. Last run: **38/38 on 2026-10-29**, with no leftover rows.
+
+---
+
+### `scripts/seed-chef-challenge-questions.ts`
+
+**npm command:** `npm run seed:chef-challenge-questions` (dev, whole file). Flags after `--`:
+- `--dry-run`: report only, and list every question that would be added.
+- `--recipe <slug>[,<slug>]`: import only those recipes.
+- `--export`: write the database's questions back to the content file.
+- `prod` / `--env prod`: target production.
+
+**Purpose:** Imports Chef Shrewy's curated questions (roadmap item T) from `content/chef-challenges/questions.zh.json` into `chef_challenge_questions`, and exports them back.
+
+**Workflow:** once questions are in the database, **Shop Admin is the source of truth** and the file is a copy.
+1. After reviewing in Shop Admin, run `--export`.
+2. Add new questions to the file and import them with `--recipe <slug>`, checking the `--dry-run` listing first.
+3. To fill another environment (e.g. prod), export from the reviewed one and import the whole file there.
+
+A whole-file import into a database where questions were deleted re-adds them (fix log `build-fix-log-2026-10-29-question-import-readded-deleted-questions.md`).
+
+**Key behaviours:**
+- Validates every question before writing anything: a known recipe slug, and the same rules as Shop Admin's editor (`validateChefChallengeQuestionDraft`). One bad row aborts the run.
+- Idempotent: a question whose recipe already has the same prompt is skipped. New ones are appended after a recipe's existing questions, in file order.
+- 小知识 (`explanation`, migration `20261029120000`) is imported with new questions, and filled in on existing questions that have none. A 小知识 already set, e.g. edited in Shop Admin, is never overwritten.
+
+**Env vars required:** `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (from `.env.local`, or `.env.production.local` with `prod` / `--env prod`).
+
+**Last runs (dev, 2026-10-29):**
+- 66 added, then their 小知识 filled in once the column existed.
+- 5 盖浇饭 questions added for `fried-egg-over-rice`. That run also re-added 5 questions the owner had deleted; they were removed again (fix log above).
+- Re-exported: the file now holds the owner-reviewed 67.
 
 ---
 

@@ -8,7 +8,9 @@ import {
   normalizeChefChallengeQuestionDraft,
   normalizeGetChefChallengeResult,
   normalizeRedeemPawPrintRewardResult,
-  pickNextChallengeQuestion,
+  chefChallengeSize,
+  earnsPawPrint,
+  isChefChallengeFinished,
   resolveRewardCardState,
   SHREWY_HAND_WASH_REWARD_KEY,
   shuffleChallengeOptions,
@@ -30,6 +32,7 @@ function draft(overrides: Partial<ChefChallengeQuestionDraft> = {}): ChefChallen
     prompt: "中秋节吃什么？",
     correctAnswer: "月饼",
     wrongAnswers: ["粽子", "汤圆"],
+    explanation: "中秋节吃月饼，象征团圆。",
     isActive: true,
     ...overrides,
   };
@@ -77,45 +80,38 @@ describe("reward card state", () => {
   });
 });
 
-describe("question rotation reference", () => {
-  const ids = ["q1", "q2", "q3"];
-
-  it("returns null when the recipe has no active questions", () => {
-    expect(pickNextChallengeQuestion({ activeQuestionIds: [], attempts: [] })).toBeNull();
+describe("three-question challenges", () => {
+  it("asks 3 questions, or every question when a recipe has fewer", () => {
+    expect(chefChallengeSize({ correct: 0, unasked: 8 })).toBe(3);
+    expect(chefChallengeSize({ correct: 0, unasked: 2 })).toBe(2);
+    expect(chefChallengeSize({ correct: 1, unasked: 1 })).toBe(2);
   });
 
-  it("starts in round 1 with every question eligible", () => {
-    expect(pickNextChallengeQuestion({ activeQuestionIds: ids, attempts: [] })).toEqual({ round: 1, eligible: ids });
+  it("ends at once on a wrong answer, with no paw print", () => {
+    const progress = { correct: 1, wrong: 1, unasked: 6 };
+    expect(isChefChallengeFinished(progress)).toBe(true);
+    expect(earnsPawPrint(progress)).toBe(false);
   });
 
-  it("never repeats a question within a round", () => {
-    const attempts = [
-      { questionId: "q1", round: 1, issuedAt: 1 },
-      { questionId: "q3", round: 1, issuedAt: 2 },
-    ];
-    expect(pickNextChallengeQuestion({ activeQuestionIds: ids, attempts })).toEqual({ round: 1, eligible: ["q2"] });
+  it("keeps going until every question is answered correctly, then earns a paw print", () => {
+    expect(isChefChallengeFinished({ correct: 2, wrong: 0, unasked: 6 })).toBe(false);
+    expect(earnsPawPrint({ correct: 2, wrong: 0, unasked: 6 })).toBe(false);
+    expect(isChefChallengeFinished({ correct: 3, wrong: 0, unasked: 5 })).toBe(true);
+    expect(earnsPawPrint({ correct: 3, wrong: 0, unasked: 5 })).toBe(true);
   });
 
-  it("starts a new round once all are asked, avoiding the question just asked", () => {
-    const attempts = [
-      { questionId: "q1", round: 1, issuedAt: 1 },
-      { questionId: "q2", round: 1, issuedAt: 2 },
-      { questionId: "q3", round: 1, issuedAt: 3 },
-    ];
-    expect(pickNextChallengeQuestion({ activeQuestionIds: ids, attempts })).toEqual({ round: 2, eligible: ["q1", "q2"] });
+  it("finishes a short recipe's challenge once all its questions are right", () => {
+    expect(earnsPawPrint({ correct: 2, wrong: 0, unasked: 0 })).toBe(true);
   });
 
-  it("lets a recipe with one question repeat it each round", () => {
-    const attempts = [{ questionId: "q1", round: 1, issuedAt: 1 }];
-    expect(pickNextChallengeQuestion({ activeQuestionIds: ["q1"], attempts })).toEqual({ round: 2, eligible: ["q1"] });
+  it("shrinks gracefully when questions are deactivated mid-challenge", () => {
+    expect(isChefChallengeFinished({ correct: 1, wrong: 0, unasked: 0 })).toBe(true);
   });
 
-  it("adds a question created mid-round to the current round and skips deactivated ones", () => {
-    const attempts = [{ questionId: "q1", round: 1, issuedAt: 1 }];
-    expect(pickNextChallengeQuestion({ activeQuestionIds: ["q1", "q4"], attempts })).toEqual({
-      round: 1,
-      eligible: ["q4"],
-    });
+  it("stays finished once its paw print is earned, even if questions are added later", () => {
+    const reopened = { correct: 2, wrong: 0, unasked: 3, alreadyEarned: true };
+    expect(isChefChallengeFinished(reopened)).toBe(true);
+    expect(earnsPawPrint(reopened)).toBe(false);
   });
 });
 
@@ -145,6 +141,13 @@ describe("admin question drafts", () => {
     expect(validateChefChallengeQuestionDraft(draft({ correctAnswer: "答".repeat(61) }))).toBe("answer_too_long");
   });
 
+  it("treats the explanation as optional but limits its length", () => {
+    expect(validateChefChallengeQuestionDraft(draft({ explanation: "" }))).toBeNull();
+    expect(validateChefChallengeQuestionDraft(draft({ explanation: "知".repeat(300) }))).toBeNull();
+    expect(validateChefChallengeQuestionDraft(draft({ explanation: "知".repeat(301) }))).toBe("explanation_too_long");
+    expect(normalizeChefChallengeQuestionDraft(draft({ explanation: "  小知识 " })).explanation).toBe("小知识");
+  });
+
   it("shuffles every option exactly once", () => {
     const options = shuffleChallengeOptions("月饼", ["粽子", "汤圆"], () => 0);
     expect(options.slice().sort()).toEqual(["月饼", "汤圆", "粽子"].sort());
@@ -154,8 +157,18 @@ describe("admin question drafts", () => {
 describe("RPC result normalizers", () => {
   it("reads a challenge without any answer marker", () => {
     expect(
-      normalizeGetChefChallengeResult({ success: true, attemptId: "a1", prompt: "问", options: ["x", "y", "z"] })
-    ).toEqual({ success: true, challenge: { attemptId: "a1", prompt: "问", options: ["x", "y", "z"] } });
+      normalizeGetChefChallengeResult({
+        success: true,
+        attemptId: "a1",
+        prompt: "问",
+        options: ["x", "y", "z"],
+        questionNumber: 2,
+        questionCount: 3,
+      })
+    ).toEqual({
+      success: true,
+      challenge: { attemptId: "a1", prompt: "问", options: ["x", "y", "z"], questionNumber: 2, questionCount: 3 },
+    });
   });
 
   it("maps known refusal codes and falls back to unknown", () => {
@@ -174,7 +187,40 @@ describe("RPC result normalizers", () => {
   it("reads an answer result with its balance", () => {
     expect(
       normalizeAnswerChefChallengeResult({ success: true, isCorrect: true, correctAnswer: "月饼", collected: 3, available: "2" })
-    ).toEqual({ success: true, isCorrect: true, correctAnswer: "月饼", balance: { collected: 3, available: 2 } });
+    ).toEqual({
+      success: true,
+      isCorrect: true,
+      correctAnswer: "月饼",
+      explanation: null,
+      questionNumber: 1,
+      questionCount: 1,
+      challengeFinished: false,
+      pawPrintEarned: false,
+      balance: { collected: 3, available: 2 },
+    });
+    expect(
+      normalizeAnswerChefChallengeResult({
+        success: true,
+        isCorrect: true,
+        correctAnswer: "月饼",
+        questionNumber: 3,
+        questionCount: 3,
+        challengeFinished: true,
+        pawPrintEarned: true,
+        collected: 4,
+        available: 4,
+      })
+    ).toMatchObject({ questionNumber: 3, questionCount: 3, challengeFinished: true, pawPrintEarned: true });
+    expect(
+      normalizeAnswerChefChallengeResult({
+        success: true,
+        isCorrect: false,
+        correctAnswer: "月饼",
+        explanation: "中秋节吃月饼。",
+        collected: 0,
+        available: 0,
+      })
+    ).toMatchObject({ explanation: "中秋节吃月饼。" });
     expect(normalizeAnswerChefChallengeResult({ success: false, code: "already_answered" })).toEqual({
       success: false,
       code: "already_answered",

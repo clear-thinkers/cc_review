@@ -19,6 +19,7 @@ describe("pawPrints types", () => {
       prompt: "问",
       correctAnswer: "对",
       wrongAnswers: ["错1", "错2"],
+      explanation: null,
       isActive: true,
       displayOrder: 0,
     };
@@ -28,11 +29,21 @@ describe("pawPrints types", () => {
 
   it("constructs both arms of every RPC result", () => {
     const got: GetChefChallengeResult[] = [
-      { success: true, challenge: { attemptId: "a", prompt: "问", options: ["x", "y"] } },
+      { success: true, challenge: { attemptId: "a", prompt: "问", options: ["x", "y"], questionNumber: 1, questionCount: 3 } },
       { success: false, code: "cook_required" },
     ];
     const answered: AnswerChefChallengeResult[] = [
-      { success: true, isCorrect: false, correctAnswer: "对", balance: { collected: 0, available: 0 } },
+      {
+        success: true,
+        isCorrect: false,
+        correctAnswer: "对",
+        explanation: "小知识",
+        questionNumber: 1,
+        questionCount: 3,
+        challengeFinished: true,
+        pawPrintEarned: false,
+        balance: { collected: 0, available: 0 },
+      },
       { success: false, code: "already_answered" },
     ];
     const redeemed: RedeemPawPrintRewardResult[] = [

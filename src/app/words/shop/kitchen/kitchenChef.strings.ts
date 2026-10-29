@@ -47,10 +47,11 @@ export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChef
     },
     challenge: {
       offer: [
-        "Chef's challenge! Answer my question and I'll give you my paw print!",
-        "Before we cook, a little culture quiz! Ready?",
-        "Psst... I have a secret question for you. Get it right for a paw print!",
+        "Chef's challenge! Get them all right and I'll give you my paw print!",
+        "Before we cook, a little culture quiz! Get them all right for a paw print!",
+        "Psst... I have a secret question for you. Get them all right for a paw print!",
       ],
+      nextCorrect: ["Correct! On to the next one!", "Nice one! Keep going!", "You got it! Here comes another!"],
       correct: [
         "Paw-fect! Here's my paw print for you!",
         "You know so much! Stamp! One paw print for you!",
@@ -100,10 +101,11 @@ export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChef
     },
     challenge: {
       offer: [
-        "大厨挑战！答对我的问题，就送你一个爪印！",
-        "开火之前，先来一道文化小问题！准备好了吗？",
-        "嘘……我有一个秘密问题，答对就送你爪印哦！",
+        "大厨挑战！全部答对，就送你一个爪印！",
+        "开火之前，先来几道文化小问题！全部答对就能得到一个爪印哦！",
+        "嘘……我有一个秘密问题，全部答对就能得到一个爪印哦！",
       ],
+      nextCorrect: ["答对啦！下一题！", "真棒！继续加油！", "对啦！再来一道！"],
       correct: ["答对啦！送你我的爪印！", "你懂得真多！啪——盖个爪印给你！", "哇，真是文化小厨神！我的爪印送给你！"],
       wrong: [
         "哎呀，这次没答对！现在你知道答案啦，下次再来！",

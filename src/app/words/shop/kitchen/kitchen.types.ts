@@ -249,6 +249,20 @@ export function isChefChallengePrepPhase(params: {
   );
 }
 
+/**
+ * Whether the child can actually meet Chef Shrewy's challenge on this recipe, for the
+ * Recipe Book's paw marker (2026-10-29): it needs an interactive scene (a
+ * RECIPE_KITCHEN_SCENES entry with `effects`) AND at least one active question
+ * (`questionRecipeIds`, from chef_challenge_recipe_ids). Adding a scene to a recipe that
+ * has questions, or questions to a recipe that has a scene, marks it automatically.
+ */
+export function recipeOffersChefChallenge(
+  recipe: { id: string; slug: string },
+  questionRecipeIds: ReadonlySet<string>
+): boolean {
+  return Boolean(RECIPE_KITCHEN_SCENES[recipe.slug]?.effects) && questionRecipeIds.has(recipe.id);
+}
+
 /** The hand-wash video plays after every new recipe choice once unlocked; deselecting never plays it. */
 export function shouldPlayHandWashVideo(params: { isUnlocked: boolean; isDeselecting: boolean }): boolean {
   return params.isUnlocked && !params.isDeselecting;

@@ -22,6 +22,7 @@
     "verify:mystery-foods": "tsx scripts/verify-mystery-foods.ts",
     "verify:chef-challenge": "tsx scripts/verify-chef-challenge.ts",
     "seed:admin": "node scripts/seed-platform-admin.mjs",
+    "seed:chef-challenge-questions": "tsx scripts/seed-chef-challenge-questions.ts",
     "db:push": "supabase db push --include-all",
     "db:status": "supabase migration list",
     "db:push:prod": "node scripts/db-push-prod.mjs",

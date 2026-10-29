@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 import { useLocale } from "@/app/shared/locale";
 import { useSession } from "@/lib/authContext";
-import { normalizeDebugIngredientTargetQuantity } from "@/lib/debugIngredientQuantities";
+import { normalizeDebugBulkAddAmount, normalizeDebugIngredientTargetQuantity } from "@/lib/debugIngredientQuantities";
 import { SHOP_INGREDIENT_QUANTITY_MAX } from "@/lib/shop";
 import type {
   DebugErrorResponse,
@@ -55,6 +55,8 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
   const [loadingQuantities, setLoadingQuantities] = useState(false);
   const [savingQuantityKey, setSavingQuantityKey] = useState<string | null>(null);
   const [quantityNotice, setQuantityNotice] = useState<DebugToolMessage | null>(null);
+  const [bulkAddAmount, setBulkAddAmount] = useState("10");
+  const [bulkAdding, setBulkAdding] = useState(false);
 
   if (page !== "debug") return null;
 
@@ -122,6 +124,37 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
       });
     } finally {
       setSavingQuantityKey(null);
+    }
+  }
+
+  // Adds the same amount to every ingredient the filter is showing (all of them when unfiltered).
+  async function handleBulkAdd(): Promise<void> {
+    const amount = normalizeDebugBulkAddAmount(bulkAddAmount);
+    if (amount === null) {
+      setQuantityNotice({ tone: "error", text: s.ingredientQtyBulkInvalid(SHOP_INGREDIENT_QUANTITY_MAX) });
+      return;
+    }
+
+    setBulkAdding(true);
+    setQuantityNotice(null);
+    try {
+      const json = await requestQuantities({
+        method: "PATCH",
+        body: JSON.stringify({ addToKeys: visibleQuantityItems.map((item) => item.key), amount }),
+      });
+      applyQuantityResponse(json);
+      const parts = [s.ingredientQtyBulkDone(amount, json.bulk?.changedCount ?? 0)];
+      if (json.bulk && json.bulk.skippedKeys.length > 0) parts.push(s.ingredientQtyBulkSkipped(json.bulk.skippedKeys.join(", ")));
+      const unlocked = (json.unlockedRecipes ?? []).map((recipe) => recipe.title[locale]);
+      if (unlocked.length > 0) parts.push(s.ingredientQtyUnlocked(unlocked.join(", ")));
+      setQuantityNotice({ tone: "success", text: parts.join(" ") });
+    } catch (error) {
+      setQuantityNotice({
+        tone: "error",
+        text: s.ingredientQtyError(error instanceof Error ? error.message : String(error)),
+      });
+    } finally {
+      setBulkAdding(false);
     }
   }
 
@@ -574,6 +607,26 @@ export default function DebugSection({ vm }: { vm: WordsWorkspaceVM }): ReactEle
                   />
                   <span>{s.ingredientQtyMysteryOnly}</span>
                 </label>
+                <label className="flex items-center gap-2">
+                  <span>{s.ingredientQtyBulkLabel}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={SHOP_INGREDIENT_QUANTITY_MAX}
+                    value={bulkAddAmount}
+                    onChange={(event) => setBulkAddAmount(event.target.value)}
+                    className="w-20 rounded-md border px-2 py-1"
+                  />
+                </label>
+                <button
+                  type="button"
+                  title={s.ingredientQtyBulkTooltip}
+                  disabled={bulkAdding || savingQuantityKey !== null || visibleQuantityItems.length === 0}
+                  onClick={() => void handleBulkAdd()}
+                  className="rounded border-2 px-3 py-1 text-sm font-medium btn-primary disabled:opacity-50"
+                >
+                  {bulkAdding ? s.ingredientQtyBulkAdding : s.ingredientQtyBulkButton(visibleQuantityItems.length)}
+                </button>
               </div>
 
               <div className="mt-3 max-h-96 overflow-auto rounded-md border">

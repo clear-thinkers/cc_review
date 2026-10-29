@@ -3,12 +3,13 @@
  * docs/feature-specs/2026-10-28-chef-challenge-paw-prints.md).
  *
  * Balances, which stamps show as used, reward-card state, admin draft validation, RPC
- * result normalizers, and a TypeScript reference for the question rotation that
- * `get_chef_challenge` runs in SQL (scripts/verify-chef-challenge.ts checks the two agree).
+ * result normalizers, and a TypeScript reference for when a challenge ends and earns a
+ * paw print, which `answer_chef_challenge` computes in SQL (scripts/verify-chef-challenge.ts
+ * checks the two agree).
  */
 import type {
   AnswerChefChallengeResult,
-  ChallengeRotationAttempt,
+  ChefChallengeProgress,
   ChefChallengeQuestionDraft,
   ChefChallengeQuestionDraftError,
   GetChefChallengeFailureCode,
@@ -33,6 +34,10 @@ export const CHEF_CHALLENGE_PROMPT_MAX = 200;
 export const CHEF_CHALLENGE_ANSWER_MAX = 60;
 export const CHEF_CHALLENGE_WRONG_MIN = 2;
 export const CHEF_CHALLENGE_WRONG_MAX = 3;
+/** Questions per challenge (owner decision 2026-10-29). */
+export const CHEF_CHALLENGE_SIZE = 3;
+/** 小知识 limit (the DB allows 300; authors are asked to aim for 50-120). */
+export const CHEF_CHALLENGE_EXPLANATION_MAX = 300;
 
 export function isPawPrintGiver(value: unknown): value is PawPrintGiver {
   return typeof value === "string" && (PAW_PRINT_GIVERS as readonly string[]).includes(value);
@@ -85,28 +90,28 @@ export function hasRedeemedReward(redemptions: readonly PawPrintRedemption[], re
 }
 
 /**
- * Reference for `get_chef_challenge`'s rotation: the questions eligible right now, and
- * the round they'd be asked in. Within a round no question repeats; once every active
- * question has been asked the next round starts, avoiding the question just asked when
- * there's another (decision 2d). The server then picks one of `eligible` at random.
+ * How many questions a challenge asks: 3, or fewer when the recipe has fewer active
+ * questions left to ask (owner decision 2026-10-29). Mirrors the SQL in
+ * get_chef_challenge / answer_chef_challenge: min(3, correct so far + active questions
+ * not yet asked in this challenge), so deactivating a question mid-way never strands it.
  */
-export function pickNextChallengeQuestion(params: {
-  activeQuestionIds: readonly string[];
-  attempts: readonly ChallengeRotationAttempt[];
-}): { round: number; eligible: string[] } | null {
-  const { activeQuestionIds, attempts } = params;
-  if (activeQuestionIds.length === 0) return null;
+export function chefChallengeSize(progress: Pick<ChefChallengeProgress, "correct" | "unasked">): number {
+  return Math.min(CHEF_CHALLENGE_SIZE, progress.correct + progress.unasked);
+}
 
-  const round = attempts.reduce((max, attempt) => Math.max(max, attempt.round), 1);
-  const askedThisRound = new Set(
-    attempts.filter((attempt) => attempt.round === round).map((attempt) => attempt.questionId)
-  );
-  const remaining = activeQuestionIds.filter((id) => !askedThisRound.has(id));
-  if (remaining.length > 0) return { round, eligible: remaining };
+/**
+ * A wrong answer ends a challenge at once; otherwise it ends when every question is
+ * answered correctly. Once it has earned its paw print it stays finished, even if the
+ * admin later adds or reactivates questions (fix 2026-10-29: the size is recomputed from
+ * the active questions, so without this a finished short challenge could reopen).
+ */
+export function isChefChallengeFinished(progress: ChefChallengeProgress): boolean {
+  return progress.alreadyEarned === true || progress.wrong > 0 || progress.correct >= chefChallengeSize(progress);
+}
 
-  const last = attempts.slice().sort((a, b) => b.issuedAt - a.issuedAt)[0]?.questionId ?? null;
-  const fresh = activeQuestionIds.filter((id) => id !== last);
-  return { round: round + 1, eligible: fresh.length > 0 ? fresh : [...activeQuestionIds] };
+/** The answer that finishes a challenge with no wrong answer earns its one paw print. */
+export function earnsPawPrint(progress: ChefChallengeProgress): boolean {
+  return progress.alreadyEarned !== true && progress.wrong === 0 && isChefChallengeFinished(progress);
 }
 
 /** Trims every field and drops empty wrong-answer slots (the form shows 3; 2 may be filled). */
@@ -116,6 +121,7 @@ export function normalizeChefChallengeQuestionDraft(draft: ChefChallengeQuestion
     prompt: draft.prompt.trim(),
     correctAnswer: draft.correctAnswer.trim(),
     wrongAnswers: draft.wrongAnswers.map((answer) => answer.trim()).filter((answer) => answer !== ""),
+    explanation: draft.explanation.trim(),
     isActive: draft.isActive,
   };
 }
@@ -135,6 +141,7 @@ export function validateChefChallengeQuestionDraft(
   const all = [draft.correctAnswer, ...draft.wrongAnswers];
   if (all.some((answer) => answer.length > CHEF_CHALLENGE_ANSWER_MAX)) return "answer_too_long";
   if (new Set(all).size !== all.length) return "duplicate_answer";
+  if (draft.explanation.length > CHEF_CHALLENGE_EXPLANATION_MAX) return "explanation_too_long";
   return null;
 }
 
@@ -188,7 +195,17 @@ export function normalizeGetChefChallengeResult(data: unknown): GetChefChallenge
       ? row.options.filter((option): option is string => typeof option === "string")
       : [];
     if (typeof row.attemptId === "string" && typeof row.prompt === "string" && options.length >= 2) {
-      return { success: true, challenge: { attemptId: row.attemptId, prompt: row.prompt, options } };
+      const questionCount = Math.max(asCount(row.questionCount), 1);
+      return {
+        success: true,
+        challenge: {
+          attemptId: row.attemptId,
+          prompt: row.prompt,
+          options,
+          questionNumber: Math.min(Math.max(asCount(row.questionNumber), 1), questionCount),
+          questionCount,
+        },
+      };
     }
     return { success: false, code: "unknown" };
   }
@@ -202,6 +219,11 @@ export function normalizeAnswerChefChallengeResult(data: unknown): AnswerChefCha
       success: true,
       isCorrect: row.isCorrect,
       correctAnswer: row.correctAnswer,
+      explanation: typeof row.explanation === "string" && row.explanation.trim() !== "" ? row.explanation : null,
+      questionNumber: Math.max(asCount(row.questionNumber), 1),
+      questionCount: Math.max(asCount(row.questionCount), 1),
+      challengeFinished: row.challengeFinished === true,
+      pawPrintEarned: row.pawPrintEarned === true,
       balance: { collected: asCount(row.collected), available: asCount(row.available) },
     };
   }

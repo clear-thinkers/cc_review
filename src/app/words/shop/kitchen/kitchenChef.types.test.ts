@@ -51,7 +51,7 @@ describe("kitchenChef types", () => {
         foodTypes: { drinks: "drinks", hotmeal: "hot meals", desserts: "desserts" },
         lines: { foodTypeImbalance: "So many {have}!", favoriteAgain: "{dish}!", favoriteSpecialty: "{dish}!!" },
       },
-      challenge: { offer: ["Quiz!"], correct: ["Yes!"], wrong: ["Next time!"], dismiss: ["Later!"] },
+      challenge: { offer: ["Quiz!"], nextCorrect: ["Next!"], correct: ["Yes!"], wrong: ["Next time!"], dismiss: ["Later!"] },
     };
     expect(pose).toBe("idle");
     expect(strings.generic[trigger]).toEqual(["b"]);
@@ -60,6 +60,6 @@ describe("kitchenChef types", () => {
   });
 
   it("gives each challenge moment a pose, and never a sad one for a wrong answer", () => {
-    expect(CHEF_CHALLENGE_POSES).toEqual({ offer: "careful", correct: "celebrate", wrong: "idle" });
+    expect(CHEF_CHALLENGE_POSES).toEqual({ offer: "careful", nextCorrect: "amazed", correct: "celebrate", wrong: "idle" });
   });
 });

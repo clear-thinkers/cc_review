@@ -4,7 +4,9 @@ import {
   findMysteryRecipesUsingIngredient,
   findRecipeIdUsingIngredient,
   normalizeDebugIngredientLabel,
+  normalizeDebugBulkAddAmount,
   normalizeDebugIngredientTargetQuantity,
+  planDebugBulkIngredientAdd,
   planDebugIngredientQuantityChange,
   type DebugQuantityRecipe,
 } from "./debugIngredientQuantities";
@@ -29,6 +31,35 @@ describe("planDebugIngredientQuantityChange", () => {
     expect(planDebugIngredientQuantityChange(1, 4)).toEqual({ add: 3, remove: 0 });
     expect(planDebugIngredientQuantityChange(5, 2)).toEqual({ add: 0, remove: 3 });
     expect(planDebugIngredientQuantityChange(3, 3)).toEqual({ add: 0, remove: 0 });
+  });
+});
+
+describe("bulk add to every shown ingredient", () => {
+  const items = [
+    { key: "egg", quantity: 0 },
+    { key: "milk", quantity: 95 },
+    { key: "sugar", quantity: SHOP_INGREDIENT_QUANTITY_MAX },
+    { key: "flour", quantity: 2 },
+  ];
+
+  it("accepts 1 to the max, never 0 or junk", () => {
+    expect(normalizeDebugBulkAddAmount("10")).toBe(10);
+    expect(normalizeDebugBulkAddAmount(SHOP_INGREDIENT_QUANTITY_MAX)).toBe(SHOP_INGREDIENT_QUANTITY_MAX);
+    expect(normalizeDebugBulkAddAmount(0)).toBeNull();
+    expect(normalizeDebugBulkAddAmount("-3")).toBeNull();
+    expect(normalizeDebugBulkAddAmount("2.5")).toBeNull();
+    expect(normalizeDebugBulkAddAmount(SHOP_INGREDIENT_QUANTITY_MAX + 1)).toBeNull();
+  });
+
+  it("adds the amount to each requested ingredient, capped at the max, skipping full ones", () => {
+    expect(planDebugBulkIngredientAdd(items, ["egg", "milk", "sugar"], 10)).toEqual([
+      { key: "egg", add: 10 },
+      { key: "milk", add: SHOP_INGREDIENT_QUANTITY_MAX - 95 },
+    ]);
+  });
+
+  it("only touches the requested keys and ignores unknown ones", () => {
+    expect(planDebugBulkIngredientAdd(items, ["flour", "no-such-thing"], 3)).toEqual([{ key: "flour", add: 3 }]);
   });
 });
 

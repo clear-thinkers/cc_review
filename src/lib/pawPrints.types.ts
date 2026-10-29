@@ -40,8 +40,18 @@ export type PawPrintStamp = { award: PawPrintAward; isUsed: boolean };
 
 export type PawPrintRewardCardState = "redeemable" | "needMore" | "unlocked";
 
-/** A challenge as the child sees it: never includes which option is correct. */
-export type ChefChallenge = { attemptId: string; prompt: string; options: string[] };
+/**
+ * The current question of a challenge, as the child sees it: never includes which option
+ * is correct. A challenge asks up to 3 questions one at a time (questionNumber of
+ * questionCount).
+ */
+export type ChefChallenge = {
+  attemptId: string;
+  prompt: string;
+  options: string[];
+  questionNumber: number;
+  questionCount: number;
+};
 
 export type GetChefChallengeFailureCode = "forbidden" | "not_unlocked" | "no_questions" | "cook_required" | "unknown";
 
@@ -57,7 +67,21 @@ export type AnswerChefChallengeFailureCode =
   | "unknown";
 
 export type AnswerChefChallengeResult =
-  | { success: true; isCorrect: boolean; correctAnswer: string; balance: PawPrintBalance }
+  | {
+      success: true;
+      isCorrect: boolean;
+      correctAnswer: string;
+      /** 小知识, shown after answering either way; null when the question has none. */
+      explanation: string | null;
+      /** This question's place in the challenge (1-based) and the challenge's size. */
+      questionNumber: number;
+      questionCount: number;
+      /** A wrong answer, or the last correct one, ends the challenge. */
+      challengeFinished: boolean;
+      /** True only on the last answer of a fully correct challenge. */
+      pawPrintEarned: boolean;
+      balance: PawPrintBalance;
+    }
   | { success: false; code: AnswerChefChallengeFailureCode };
 
 export type RedeemPawPrintRewardFailureCode =
@@ -78,6 +102,8 @@ export type ChefChallengeQuestion = {
   prompt: string;
   correctAnswer: string;
   wrongAnswers: string[];
+  /** 小知识: Chinese, child-facing, shown after answering; null when not written yet. */
+  explanation: string | null;
   isActive: boolean;
   displayOrder: number;
 };
@@ -88,6 +114,8 @@ export type ChefChallengeQuestionDraft = {
   prompt: string;
   correctAnswer: string;
   wrongAnswers: string[];
+  /** Optional; blank means none. */
+  explanation: string;
   isActive: boolean;
 };
 
@@ -99,10 +127,17 @@ export type ChefChallengeQuestionDraftError =
   | "answer_too_long"
   | "wrong_answer_count"
   | "blank_wrong_answer"
-  | "duplicate_answer";
+  | "duplicate_answer"
+  | "explanation_too_long";
 
 /** What every /api/shop-admin/chef-questions call returns: the recipe's full question list. */
 export type ChefChallengeQuestionsResponse = { questions: ChefChallengeQuestion[] };
 
-/** Pure reference for the server's question rotation (see pickNextChallengeQuestion). */
-export type ChallengeRotationAttempt = { questionId: string | null; round: number; issuedAt: number };
+/** One challenge's progress, as get/answer_chef_challenge compute it (see isChefChallengeFinished). */
+export type ChefChallengeProgress = {
+  correct: number;
+  wrong: number;
+  unasked: number;
+  /** This challenge already earned its paw print, so it stays finished even if questions are added later. */
+  alreadyEarned?: boolean;
+};

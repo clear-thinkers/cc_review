@@ -24,6 +24,7 @@ import {
 import {
   cookShopRecipe,
   getChefChallenge,
+  listChefChallengeRecipeIds,
   listPawPrintRedemptions,
   listShopCookedDishes,
   listShopIngredientConsumptions,
@@ -65,6 +66,7 @@ import {
   buildKitchenScenePrepTokens,
   isChefChallengePrepPhase,
   isKitchenScenePrepComplete,
+  recipeOffersChefChallenge,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
   resolveKitchenScene,
@@ -233,12 +235,15 @@ function RecipeBookModal({
   ingredientRecordsByKey,
   selectedRecipeId,
   onSelectRecipe,
+  challengeRecipeIds,
   locale,
   strings,
   onClose,
 }: {
   recipes: ShopRecipe[];
   unlockedRecipeIds: ReadonlySet<string>;
+  /** Recipes with active chef-challenge questions (ids only). */
+  challengeRecipeIds: ReadonlySet<string>;
   availabilityByKey: ReadonlyMap<string, number>;
   ingredientRecordsByKey: ReadonlyMap<string, ShopIngredientPrice>;
   selectedRecipeId: string | null;
@@ -319,8 +324,19 @@ function RecipeBookModal({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-base font-semibold text-gray-900">{localized.title}</span>
-                      <span className="rounded-full border border-[#dcc38a] bg-[#fcf8ef] px-2 py-0.5 text-[11px] font-semibold uppercase text-[#6a5530]">
-                        {applianceLabel}
+                      <span className="flex items-center gap-1.5">
+                        {recipeOffersChefChallenge(recipe, challengeRecipeIds) ? (
+                          <img
+                            src="/paw-prints/shrewy_paw_badge.png"
+                            alt={strings.recipeHasChallenge}
+                            title={strings.recipeHasChallenge}
+                            draggable={false}
+                            className="h-7 w-7 select-none"
+                          />
+                        ) : null}
+                        <span className="rounded-full border border-[#dcc38a] bg-[#fcf8ef] px-2 py-0.5 text-[11px] font-semibold uppercase text-[#6a5530]">
+                          {applianceLabel}
+                        </span>
                       </span>
                     </div>
                     <div className="text-xs text-gray-600">
@@ -707,6 +723,8 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [isChallengeOpen, setIsChallengeOpen] = useState(false);
   const [challengeRefresh, setChallengeRefresh] = useState(0);
   const [isHandWashUnlocked, setIsHandWashUnlocked] = useState(false);
+  // Recipes with active challenge questions, for the Recipe Book's paw marker.
+  const [challengeRecipeIds, setChallengeRecipeIds] = useState<ReadonlySet<string>>(new Set());
   // The recipe just chosen while the hand-wash video plays; the usual next step waits for it.
   const [handWashRecipe, setHandWashRecipe] = useState<ShopRecipe | null>(null);
   // Background music (spec 2026-10-28): plays only on this page, dips under the
@@ -745,12 +763,19 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
         setDishes(dishRows);
         setLoadState("ready");
 
-        // The hand-wash reward is a nice-to-have: if this read fails the kitchen still works.
+        // The hand-wash reward and the challenge markers are nice-to-haves: if these reads
+        // fail the kitchen still works.
         try {
           const redemptions = await listPawPrintRedemptions();
           if (!isCancelled) setIsHandWashUnlocked(hasRedeemedReward(redemptions, SHREWY_HAND_WASH_REWARD_KEY));
         } catch (error) {
           console.error("Failed to load paw-print redemptions:", error);
+        }
+        try {
+          const recipeIds = await listChefChallengeRecipeIds();
+          if (!isCancelled) setChallengeRecipeIds(new Set(recipeIds));
+        } catch (error) {
+          console.error("Failed to load chef-challenge recipes:", error);
         }
 
         // A mystery food unlocks during a quiz, not here, so the chef announces any
@@ -995,13 +1020,14 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     chef.tap(servedRecipeSlugs, shelfChefReactions);
   }
 
-  function handleChallengeClosed(answered: boolean): void {
+  function handleChallengeClosed(finished: boolean): void {
     setIsChallengeOpen(false);
-    if (!answered) {
+    if (!finished) {
       const lines = chefStrings.challenge.dismiss;
       chef.sayLine(lines[Math.floor(Math.random() * lines.length)] ?? "");
     }
-    // Re-ask the server: after an answer it reports cook_required, so the badge goes away.
+    // Re-ask the server: mid-challenge it hands back the next unanswered question (so the
+    // badge stays); once the challenge is over it reports cook_required and the badge goes.
     setChallengeRefresh((current) => current + 1);
   }
 
@@ -1405,6 +1431,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
           ingredientRecordsByKey={ingredientRecordsByKey}
           selectedRecipeId={selectedRecipeId}
           onSelectRecipe={handleSelectRecipeFromBook}
+          challengeRecipeIds={challengeRecipeIds}
           locale={locale}
           strings={str}
           onClose={() => {
@@ -1414,8 +1441,9 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
         />
       ) : null}
 
-      {isChallengeOpen && activeChallenge ? (
+      {isChallengeOpen && activeChallenge && selectedRecipeId ? (
         <ChefChallengeModal
+          recipeId={selectedRecipeId}
           challenge={activeChallenge}
           strings={str}
           chefStrings={chefStrings}

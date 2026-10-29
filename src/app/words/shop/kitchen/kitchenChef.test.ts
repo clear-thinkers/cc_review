@@ -371,7 +371,7 @@ describe("findFavoriteRecipeId", () => {
 describe("chef challenge lines (roadmap item T)", () => {
   it("has non-empty lines for every challenge moment in both locales", () => {
     for (const locale of ["en", "zh"] as const) {
-      for (const moment of ["offer", "correct", "wrong", "dismiss"] as const) {
+      for (const moment of ["offer", "nextCorrect", "correct", "wrong", "dismiss"] as const) {
         const lines = kitchenChefStrings[locale].challenge[moment];
         expect(lines.length).toBeGreaterThan(0);
         expect(lines.every((line) => line.trim() !== "")).toBe(true);

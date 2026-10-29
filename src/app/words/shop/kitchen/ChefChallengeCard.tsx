@@ -4,6 +4,8 @@ import type { ChefPose } from "./kitchenChef.types";
 
 export interface ChefChallengeCardProps {
   title: string;
+  /** e.g. "第 2/3 题"; omitted in the admin preview. */
+  progressLabel?: string;
   pose: ChefPose;
   line: string;
   prompt: string;
@@ -14,6 +16,9 @@ export interface ChefChallengeCardProps {
   correctAnswer: string | null;
   disabled: boolean;
   correctAnswerLabel: string;
+  /** 小知识, shown once answered (right or wrong) when the question has one. */
+  explanation?: string | null;
+  explanationLabel?: string;
   onChoose: (option: string) => void;
 }
 
@@ -37,6 +42,7 @@ function optionClass(option: string, chosen: string | null, correct: string | nu
  */
 export default function ChefChallengeCard({
   title,
+  progressLabel,
   pose,
   line,
   prompt,
@@ -45,11 +51,16 @@ export default function ChefChallengeCard({
   correctAnswer,
   disabled,
   correctAnswerLabel,
+  explanation = null,
+  explanationLabel = "",
   onChoose,
 }: ChefChallengeCardProps) {
   return (
     <div className="space-y-4">
-      <h2 className="text-center text-xl font-bold text-[#5c4720]">{title}</h2>
+      <div className="text-center">
+        <h2 className="text-xl font-bold text-[#5c4720]">{title}</h2>
+        {progressLabel ? <p className="mt-1 text-sm font-semibold text-[#8b6f2f]">{progressLabel}</p> : null}
+      </div>
 
       <div className="flex items-end gap-3">
         <img
@@ -91,6 +102,15 @@ export default function ChefChallengeCard({
         <p className="text-center text-sm font-semibold text-emerald-800">
           {correctAnswerLabel} <span lang="zh">{correctAnswer}</span>
         </p>
+      ) : null}
+
+      {correctAnswer !== null && explanation ? (
+        <div className="rounded-2xl border border-[#e8dcc0] bg-white px-4 py-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-[#8b6f2f]">{explanationLabel}</p>
+          <p lang="zh" className="mt-1 text-base leading-relaxed text-[#3f3218]">
+            {explanation}
+          </p>
+        </div>
       ) : null}
     </div>
   );

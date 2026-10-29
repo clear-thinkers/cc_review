@@ -103,16 +103,19 @@ export type KitchenChefLocaleStrings = {
   /**
    * Chef challenge lines (roadmap item T, 2026-10-28; spec decision 6). Shown in the
    * challenge pop-up beside his sprite (the scene's chef is painted, so poses change
-   * there), except `dismiss`, which plays in the scene bubble.
+   * there), except `dismiss`, which plays in the scene bubble. Since a challenge became
+   * three questions (2026-10-29): `nextCorrect` after a correct answer with more to come,
+   * `correct` after the last one (the paw print), `wrong` when a wrong answer ends it.
    */
   challenge: Record<ChefChallengeMoment, string[]>;
 };
 
-export type ChefChallengeMoment = "offer" | "correct" | "wrong" | "dismiss";
+export type ChefChallengeMoment = "offer" | "nextCorrect" | "correct" | "wrong" | "dismiss";
 
 /** The sprite pose the challenge pop-up shows for each moment (wrong is a gentle idle, never sad). */
 export const CHEF_CHALLENGE_POSES: Readonly<Record<Exclude<ChefChallengeMoment, "dismiss">, ChefPose>> = {
   offer: "careful",
+  nextCorrect: "amazed",
   correct: "celebrate",
   wrong: "idle",
 };

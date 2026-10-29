@@ -5,9 +5,10 @@
  *
  * Exercises get_chef_challenge / answer_chef_challenge / redeem_paw_print_reward against a
  * live Supabase DEV project as real child JWTs: unlock and role checks, the hidden answer,
- * the reused open challenge, the one-per-cook rule, round rotation (checked against the
- * TypeScript reference pickNextChallengeQuestion in src/lib/pawPrints.ts), awards and
- * balances, and redemption with its refusals.
+ * three-question challenges (one at a time, resumable, no repeats, a wrong answer ends
+ * them, fewer than 3 when a recipe has fewer), the one-per-cook rule, the paw print for a
+ * fully correct challenge -- every verdict checked against the TypeScript reference
+ * isChefChallengeFinished / earnsPawPrint in src/lib/pawPrints.ts -- and redemption.
  *
  * It creates throwaway families/users and one TEMPORARY, inactive recipe (slug prefixed
  * `zz-test-`) with its own questions. Everything is removed in a finally block.
@@ -20,7 +21,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { existsSync, readFileSync } from 'node:fs';
-import { pickNextChallengeQuestion } from '../src/lib/pawPrints';
+import { earnsPawPrint, isChefChallengeFinished } from '../src/lib/pawPrints';
 
 // ─── env ───────────────────────────────────────────────────────────────────
 try {
@@ -149,23 +150,51 @@ async function activeQuestionIds(): Promise<string[]> {
   return (data ?? []).map((row) => row.id as string);
 }
 
-/** Issues a challenge and checks the SQL picked a question the TypeScript reference allows. */
-async function issueAndCheckRotation(person: Person, label: string): Promise<Rpc> {
-  // Only called when a NEW challenge is due, so any open attempt is about to be dropped
-  // by the server (its question was deactivated) -- leave it out, as the server does.
-  const before = (await attemptsOf(person.userId)).filter((a) => a.answered_at !== null);
-  const expected = pickNextChallengeQuestion({
-    activeQuestionIds: await activeQuestionIds(),
-    attempts: before.map((a) => ({ questionId: a.question_id, round: a.round, issuedAt: Date.parse(a.issued_at) })),
-  });
-  const result = await getChallenge(person);
-  const issued = (await attemptsOf(person.userId)).find((a) => a.id === result.attemptId);
+/** The latest challenge's progress as the TypeScript reference sees it, from the raw rows. */
+async function referenceProgress(
+  userId: string,
+  justAnsweredAttemptId: unknown
+): Promise<{ correct: number; wrong: number; unasked: number; alreadyEarned: boolean }> {
+  const attempts = await attemptsOf(userId);
+  const round = Math.max(...attempts.map((a) => a.round));
+  const inRound = attempts.filter((a) => a.round === round);
+  const asked = new Set(inRound.map((a) => a.question_id));
+  const { data: answers } = await admin
+    .from('chef_challenge_attempts')
+    .select('is_correct')
+    .eq('user_id', userId)
+    .eq('recipe_id', tempRecipeId)
+    .eq('round', round)
+    .not('answered_at', 'is', null);
+  // Earned BEFORE this answer: any award on the challenge's other attempts.
+  const otherIds = inRound.map((a) => a.id).filter((id) => id !== justAnsweredAttemptId);
+  const { data: earlierAwards } = otherIds.length
+    ? await admin.from('paw_print_awards').select('id').in('attempt_id', otherIds)
+    : { data: [] };
+  return {
+    alreadyEarned: (earlierAwards ?? []).length > 0,
+    correct: (answers ?? []).filter((a) => a.is_correct === true).length,
+    wrong: (answers ?? []).filter((a) => a.is_correct === false).length,
+    unasked: (await activeQuestionIds()).filter((id) => !asked.has(id)).length,
+  };
+}
+
+/** Answers, then checks the SQL's finished / paw-print verdict against the TypeScript reference. */
+async function answerAndCheck(person: Person, attemptId: unknown, value: string, label: string): Promise<Rpc> {
+  const result = await answer(person, attemptId, value);
+  const progress = await referenceProgress(person.userId, attemptId);
   check(
-    `${label}: SQL rotation agrees with pickNextChallengeQuestion`,
-    Boolean(result.success && issued && expected && expected.eligible.includes(issued.question_id ?? '') && issued.round === expected.round),
-    `expected ${show(expected)}, issued ${show(issued)}`
+    `${label}: SQL agrees with isChefChallengeFinished / earnsPawPrint`,
+    result.success === true &&
+      result.challengeFinished === isChefChallengeFinished(progress) &&
+      result.pawPrintEarned === earnsPawPrint(progress),
+    `sql ${show({ finished: result.challengeFinished, earned: result.pawPrintEarned })}, reference ${show(progress)}`
   );
   return result;
+}
+
+async function correctOf(attemptId: unknown): Promise<string> {
+  return (await questionOf(attemptId)).correct_answer;
 }
 
 async function cook(person: Person): Promise<void> {
@@ -232,97 +261,126 @@ async function run(): Promise<void> {
   check('a parent is forbidden', (await getChallenge(parent)).code === 'forbidden');
   check('a child who has not unlocked the recipe gets not_unlocked', (await getChallenge(childB)).code === 'not_unlocked');
   check('a recipe with no questions gets no_questions', (await getChallenge(childA)).code === 'no_questions');
+  const { data: idsBefore } = await childA.client.rpc('chef_challenge_recipe_ids');
+  check('chef_challenge_recipe_ids leaves out a recipe with no questions', Array.isArray(idsBefore) && !idsBefore.includes(tempRecipeId), show(idsBefore));
 
-  const { data: seeded, error: seedErr } = await admin
-    .from('chef_challenge_questions')
-    .insert([
-      { recipe_id: tempRecipeId, prompt: '问题一', correct_answer: '对一', wrong_answers: ['错一甲', '错一乙'], display_order: 0 },
-      { recipe_id: tempRecipeId, prompt: '问题二', correct_answer: '对二', wrong_answers: ['错二甲', '错二乙', '错二丙'], display_order: 1 },
-      { recipe_id: tempRecipeId, prompt: '问题三', correct_answer: '对三', wrong_answers: ['错三甲', '错三乙'], display_order: 2 },
-    ])
-    .select('id');
+  const seedRows = ['一', '二', '三', '四', '五'].map((n, i) => ({
+    recipe_id: tempRecipeId,
+    prompt: `问题${n}`,
+    correct_answer: `对${n}`,
+    wrong_answers: [`错${n}甲`, `错${n}乙`],
+    explanation: `小知识${n}`,
+    display_order: i,
+  }));
+  const { data: seeded, error: seedErr } = await admin.from('chef_challenge_questions').insert(seedRows).select('id');
   if (seedErr || !seeded) throw new Error(`questions: ${seedErr?.message}`);
+  const { data: idsAfter } = await childA.client.rpc('chef_challenge_recipe_ids');
+  check(
+    'chef_challenge_recipe_ids lists it once it has questions, and returns ids only',
+    Array.isArray(idsAfter) && idsAfter.includes(tempRecipeId) && idsAfter.every((id: unknown) => typeof id === 'string' && /^[0-9a-f-]{36}$/.test(id)),
+    show(idsAfter)
+  );
 
-  console.log('\n■ Issue, hidden answer, reuse');
+  console.log('\n■ A fully correct challenge (3 questions, one at a time)');
   const { data: visible } = await childA.client.from('chef_challenge_questions').select('id');
   check('a child cannot read the question bank at all', (visible ?? []).length === 0, show(visible));
 
-  const first = await issueAndCheckRotation(childA, 'first challenge');
-  const firstQuestion = await questionOf(first.attemptId);
-  const options = (first.options ?? []) as string[];
+  const q1 = await getChallenge(childA);
+  const q1Question = await questionOf(q1.attemptId);
   check(
-    'the challenge has every option, shuffled, and no answer field',
-    options.length === 1 + firstQuestion.wrong_answers.length &&
-      options.includes(firstQuestion.correct_answer) &&
-      !('correctAnswer' in first) &&
-      !('correct_answer' in first),
-    show(first)
+    'question 1 of 3: every option, shuffled, and no answer or 小知识',
+    q1.questionNumber === 1 &&
+      q1.questionCount === 3 &&
+      ((q1.options ?? []) as string[]).includes(q1Question.correct_answer) &&
+      !('correctAnswer' in q1) &&
+      !('explanation' in q1),
+    show(q1)
   );
-  const again = await getChallenge(childA);
-  check('asking again returns the same open challenge', again.attemptId === first.attemptId, show(again));
+  check('asking again returns the same open question', (await getChallenge(childA)).attemptId === q1.attemptId);
+  check('another child cannot answer it', (await answer(childB, q1.attemptId, q1Question.correct_answer)).code === 'no_attempt');
 
-  console.log('\n■ Answering and the one-per-cook rule');
-  const wrongPick = firstQuestion.wrong_answers[0];
-  const wrong = await answer(childA, first.attemptId, wrongPick);
+  const a1 = await answerAndCheck(childA, q1.attemptId, q1Question.correct_answer, 'answer 1 (correct)');
   check(
-    'a wrong answer is marked wrong, reveals the correct one, and awards nothing',
-    wrong.success && wrong.isCorrect === false && wrong.correctAnswer === firstQuestion.correct_answer && wrong.collected === 0,
-    show(wrong)
+    'a correct answer with more to come: not finished, no paw print, 小知识 shown',
+    a1.isCorrect === true && a1.challengeFinished === false && a1.pawPrintEarned === false && a1.explanation === '小知识' + q1Question.correct_answer.slice(1),
+    show(a1)
   );
-  check('answering twice is refused', (await answer(childA, first.attemptId, firstQuestion.correct_answer)).code === 'already_answered');
-  check('no new challenge until the recipe is cooked', (await getChallenge(childA)).code === 'cook_required');
+  check('answering twice is refused', (await answer(childA, q1.attemptId, q1Question.correct_answer)).code === 'already_answered');
 
-  await cook(childA);
-  const second = await issueAndCheckRotation(childA, 'after a cook');
-  const secondQuestion = await questionOf(second.attemptId);
-  check('round 1 does not repeat the first question', secondQuestion.id !== firstQuestion.id);
-  check('another child cannot answer it', (await answer(childB, second.attemptId, secondQuestion.correct_answer)).code === 'no_attempt');
-  const right = await answer(childA, second.attemptId, ` ${secondQuestion.correct_answer} `);
-  check('a correct answer (whitespace ignored) earns one paw print', right.isCorrect === true && right.collected === 1 && right.available === 1, show(right));
+  const q2 = await getChallenge(childA);
+  check('the next question is question 2 of 3, a different one', q2.questionNumber === 2 && q2.questionCount === 3 && (await questionOf(q2.attemptId)).id !== q1Question.id, show(q2));
+  check('closing mid-way and coming back resumes the same question', (await getChallenge(childA)).attemptId === q2.attemptId);
+  await answerAndCheck(childA, q2.attemptId, await correctOf(q2.attemptId), 'answer 2 (correct)');
+
+  const q3 = await getChallenge(childA);
+  const askedInFirst = new Set([q1Question.id, (await questionOf(q2.attemptId)).id, (await questionOf(q3.attemptId)).id]);
+  check('question 3 of 3, and no question repeats within the challenge', q3.questionNumber === 3 && askedInFirst.size === 3, show(q3));
+  const a3 = await answerAndCheck(childA, q3.attemptId, ` ${await correctOf(q3.attemptId)} `, 'answer 3 (correct)');
+  check(
+    'the last correct answer (whitespace ignored) finishes the challenge and earns 1 paw print',
+    a3.challengeFinished === true && a3.pawPrintEarned === true && a3.collected === 1 && a3.available === 1,
+    show(a3)
+  );
   const { data: awardRows } = await admin.from('paw_print_awards').select('giver, recipe_id, attempt_id').eq('user_id', childA.userId);
   check(
-    'the award records its giver, recipe and attempt',
-    (awardRows ?? []).length === 1 &&
-      awardRows?.[0].giver === 'shrewy' &&
-      awardRows?.[0].recipe_id === tempRecipeId &&
-      awardRows?.[0].attempt_id === second.attemptId,
+    'the award records its giver, recipe and the last attempt',
+    (awardRows ?? []).length === 1 && awardRows?.[0].giver === 'shrewy' && awardRows?.[0].recipe_id === tempRecipeId && awardRows?.[0].attempt_id === q3.attemptId,
     show(awardRows)
   );
-
-  console.log('\n■ Rounds');
-  await cook(childA);
-  const third = await issueAndCheckRotation(childA, 'third challenge');
-  const thirdQuestion = await questionOf(third.attemptId);
-  check('round 1 asks all three distinct questions', new Set([firstQuestion.id, secondQuestion.id, thirdQuestion.id]).size === 3);
-  await answer(childA, third.attemptId, thirdQuestion.correct_answer);
-  await cook(childA);
-  const fourth = await issueAndCheckRotation(childA, 'new round');
-  const fourthAttempt = (await attemptsOf(childA.userId)).find((a) => a.id === fourth.attemptId);
-  check('the fourth challenge starts round 2', fourthAttempt?.round === 2, show(fourthAttempt));
-  check('round 2 does not open with the question just asked', fourthAttempt?.question_id !== thirdQuestion.id);
-
-  console.log('\n■ A deactivated question');
-  await admin.from('chef_challenge_questions').update({ is_active: false }).eq('id', fourthAttempt?.question_id);
-  const replaced = await issueAndCheckRotation(childA, 'after deactivation');
-  const replacedQuestion = await questionOf(replaced.attemptId);
-  check(
-    'an open challenge whose question was deactivated is replaced',
-    replaced.attemptId !== fourth.attemptId && replacedQuestion.id !== fourthAttempt?.question_id,
-    show(replaced)
-  );
-  check(
-    'the dropped challenge left no trace',
-    !(await attemptsOf(childA.userId)).some((a) => a.id === fourth.attemptId)
-  );
-
-  console.log('\n■ Redemption');
-  check('an unknown reward is refused', (await rpc(childA, 'redeem_paw_print_reward', { p_reward_key: 'nope' })).code === 'unknown_reward');
+  check('no new challenge until the recipe is cooked', (await getChallenge(childA)).code === 'cook_required');
   const short = await rpc(childA, 'redeem_paw_print_reward', { p_reward_key: 'shrewy-hand-wash' });
-  check('redeeming with too few paw prints is refused', short.code === 'insufficient_paw_prints' && short.available === 2, show(short));
-  const topUp = Array.from({ length: 8 }, () => ({ user_id: childA.userId, family_id: childA.familyId, giver: 'shrewy' }));
-  await admin.from('paw_print_awards').insert(topUp);
+  check('1 paw print is not enough for the 2-print reward', short.code === 'insufficient_paw_prints' && short.available === 1, show(short));
+
+  console.log('\n■ A wrong answer ends the challenge');
+  await cook(childA);
+  const w1 = await getChallenge(childA);
+  check('after a cook, a new challenge starts at question 1', w1.success === true && w1.questionNumber === 1, show(w1));
+  const w1Question = await questionOf(w1.attemptId);
+  const wrong = await answerAndCheck(childA, w1.attemptId, w1Question.wrong_answers[0], 'wrong answer');
+  check(
+    'a wrong answer shows the correct one and its 小知识, ends the challenge, and awards nothing',
+    wrong.isCorrect === false &&
+      wrong.correctAnswer === w1Question.correct_answer &&
+      typeof wrong.explanation === 'string' &&
+      wrong.challengeFinished === true &&
+      wrong.pawPrintEarned === false &&
+      wrong.collected === 1,
+    show(wrong)
+  );
+  check('no more questions after a wrong answer, until the next cook', (await getChallenge(childA)).code === 'cook_required');
+
+  console.log('\n■ A recipe with fewer than 3 questions');
+  await cook(childA);
+  await admin.from('chef_challenge_questions').update({ is_active: false }).in('id', seeded.slice(2).map((row) => row.id));
+  const s1 = await getChallenge(childA);
+  check('only 2 active questions: the challenge asks 2', s1.questionNumber === 1 && s1.questionCount === 2, show(s1));
+  await answerAndCheck(childA, s1.attemptId, await correctOf(s1.attemptId), 'short challenge, answer 1');
+  const s2 = await getChallenge(childA);
+  const s2Answer = await answerAndCheck(childA, s2.attemptId, await correctOf(s2.attemptId), 'short challenge, answer 2');
+  check('answering both correctly earns the paw print', s2Answer.pawPrintEarned === true && s2Answer.collected === 2, show(s2Answer));
+
+  console.log('\n■ A question deactivated mid-challenge');
+  await cook(childA);
+  await admin.from('chef_challenge_questions').update({ is_active: true }).eq('recipe_id', tempRecipeId);
+  const d1 = await getChallenge(childA);
+  await admin.from('chef_challenge_questions').update({ is_active: false }).eq('id', (await questionOf(d1.attemptId)).id);
+  const d1b = await getChallenge(childA);
+  check(
+    'a finished short challenge does not reopen when questions come back: a new 3-question challenge starts',
+    d1.success === true && d1.questionNumber === 1 && d1.questionCount === 3,
+    show(d1)
+  );
+  check(
+    'an open question whose question was deactivated is replaced, still question 1',
+    d1b.success === true && d1b.attemptId !== d1.attemptId && d1b.questionNumber === 1,
+    show(d1b)
+  );
+  check('the dropped question left no trace', !(await attemptsOf(childA.userId)).some((a) => a.id === d1.attemptId));
+
+  console.log('\n■ Redemption (now 2 paw prints)');
+  check('an unknown reward is refused', (await rpc(childA, 'redeem_paw_print_reward', { p_reward_key: 'nope' })).code === 'unknown_reward');
   const redeemed = await rpc(childA, 'redeem_paw_print_reward', { p_reward_key: 'shrewy-hand-wash' });
-  check('redeeming at exactly 10 succeeds and leaves 0', redeemed.success === true && redeemed.available === 0, show(redeemed));
+  check('redeeming at exactly 2 succeeds and leaves 0', redeemed.success === true && redeemed.available === 0, show(redeemed));
   check(
     'redeeming the same reward again is refused',
     (await rpc(childA, 'redeem_paw_print_reward', { p_reward_key: 'shrewy-hand-wash' })).code === 'already_redeemed'
@@ -336,7 +394,7 @@ async function run(): Promise<void> {
   check('a child cannot insert a paw print directly', Boolean(awardInsertErr), 'insert succeeded');
   const { data: costRows } = await childA.client.from('paw_print_rewards').update({ cost: 1 }).eq('reward_key', 'shrewy-hand-wash').select();
   const { data: catalog } = await admin.from('paw_print_rewards').select('cost').eq('reward_key', 'shrewy-hand-wash').single();
-  check('a child cannot change a reward price', (costRows ?? []).length === 0 && catalog?.cost === 10, show({ costRows, catalog }));
+  check('a child cannot change a reward price (still 2)', (costRows ?? []).length === 0 && catalog?.cost === 2, show({ costRows, catalog }));
 }
 
 async function cleanup(): Promise<void> {
