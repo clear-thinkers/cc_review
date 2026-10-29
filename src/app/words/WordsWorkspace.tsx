@@ -13,6 +13,7 @@ import PromptsSection from "./prompts/PromptsSection";
 import ResultsSection from "./results/ResultsSection";
 import ShopSection from "./shop/ShopSection";
 import KitchenSection from "./shop/kitchen/KitchenSection";
+import RewardsSection from "./shop/rewards/RewardsSection";
 import ShopAdminSection from "./shop-admin/ShopAdminSection";
 import DueReviewSection from "./review/DueReviewSection";
 import FillTestReviewSection from "./review/fill-test/FillTestReviewSection";
@@ -42,6 +43,7 @@ export default function WordsWorkspace({ page }: { page: WordsSectionPage }) {
       <DueReviewSection vm={vm} />
       <ShopSection vm={vm} />
       <KitchenSection vm={vm} />
+      <RewardsSection vm={vm} />
       <ShopAdminSection vm={vm} />
       <FlashcardReviewSection vm={vm} />
       <FillTestReviewSection vm={vm} />

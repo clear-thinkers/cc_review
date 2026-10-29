@@ -8,8 +8,11 @@ import {
   countTotalCookedDishes,
   buildKitchenScenePrepRequirements,
   buildKitchenScenePrepTokens,
+  HAND_WASH_VIDEO_SRC,
+  isChefChallengePrepPhase,
   isKitchenScenePrepComplete,
   KITCHEN_SCENE_IMAGE_PATHS,
+  shouldPlayHandWashVideo,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
   resolveKitchenScene,
@@ -334,6 +337,13 @@ describe("resolveKitchenScene", () => {
     expect(scene.effects?.ingredientOrigins.length).toBeGreaterThan(0);
   });
 
+  it("gives Golden Mooncake its own scene with a spot for each of its four ingredients", () => {
+    const scene = resolveKitchenScene(0, "golden-mooncake");
+    expect(scene.imagePath).toBe("/kitchen/kitchen_golden_mooncakes.jpg");
+    expect(scene.showChef).toBe(false);
+    expect(scene.effects?.ingredientOrigins).toHaveLength(4);
+  });
+
   it("keeps every scene's painted-chef tap area clear of its hotspots", () => {
     const box = (b: { left: string; top: string; width: string; height: string }) => {
       const [left, top, width, height] = [b.left, b.top, b.width, b.height].map(parseFloat);
@@ -442,5 +452,42 @@ describe("kitchen.strings parity", () => {
     const enKeys = Object.keys(kitchenStrings.en).sort();
     const zhKeys = Object.keys(kitchenStrings.zh).sort();
     expect(enKeys).toEqual(zhKeys);
+  });
+});
+
+describe("chef challenge prep phase (roadmap item T)", () => {
+  const prep = {
+    sceneIsInteractive: true,
+    selectedRecipeId: "crystal-pear-dew",
+    cookingRecipeId: null,
+    isCookCommitting: false,
+    hasDishReveal: false,
+  };
+
+  it("offers the challenge while prepping an interactive scene", () => {
+    expect(isChefChallengePrepPhase(prep)).toBe(true);
+  });
+
+  it("never offers it on a plain or default scene, with no recipe, or once cooking starts", () => {
+    expect(isChefChallengePrepPhase({ ...prep, sceneIsInteractive: false })).toBe(false);
+    expect(isChefChallengePrepPhase({ ...prep, selectedRecipeId: null })).toBe(false);
+    expect(isChefChallengePrepPhase({ ...prep, cookingRecipeId: "crystal-pear-dew" })).toBe(false);
+    expect(isChefChallengePrepPhase({ ...prep, isCookCommitting: true })).toBe(false);
+    expect(isChefChallengePrepPhase({ ...prep, hasDishReveal: true })).toBe(false);
+  });
+});
+
+describe("hand-wash reward video (roadmap item T)", () => {
+  it("plays after a new recipe choice only once unlocked", () => {
+    expect(shouldPlayHandWashVideo({ isUnlocked: true, isDeselecting: false })).toBe(true);
+    expect(shouldPlayHandWashVideo({ isUnlocked: false, isDeselecting: false })).toBe(false);
+  });
+
+  it("never plays when a recipe is deselected", () => {
+    expect(shouldPlayHandWashVideo({ isUnlocked: true, isDeselecting: true })).toBe(false);
+  });
+
+  it("points at the shipped video file", () => {
+    expect(HAND_WASH_VIDEO_SRC).toBe("/video/shrewy_hand_wash.mp4");
   });
 });

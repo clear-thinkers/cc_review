@@ -42,4 +42,10 @@ describe("canAccessRoute", () => {
   it("allows platform admin access to the shop kitchen route regardless of role", () => {
     expect(canAccessRoute("/words/shop/kitchen", "parent", true)).toBe(true);
   });
+
+  it("allows child and platform admin, but not parent, on the rewards route (roadmap item T)", () => {
+    expect(canAccessRoute("/words/shop/rewards", "child", false)).toBe(true);
+    expect(canAccessRoute("/words/shop/rewards", "parent", false)).toBe(false);
+    expect(canAccessRoute("/words/shop/rewards", "parent", true)).toBe(true);
+  });
 });

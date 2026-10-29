@@ -205,6 +205,8 @@ export type KitchenScenePoint = { left: string; top: string };
  */
 export type KitchenSceneEffectsLayout = {
   pot: KitchenSceneHotspot;
+  /** What the painted `pot` actually is, so the prep prompts name the right thing. */
+  vessel: "pot" | "bowl";
   sparkles: readonly KitchenScenePoint[];
   /** Where each prep token sits, in requirement order; cycled if a recipe needs more kinds. */
   ingredientOrigins: readonly KitchenScenePoint[];
@@ -218,6 +220,39 @@ export type KitchenSceneEffectsLayout = {
 
 /** How long the pot bubbles on the stove before the dish is revealed (owner asked for ~3 s, 2026-10-27). */
 export const KITCHEN_SCENE_COOK_MS = 3000;
+
+/** The "Shrewy washes his hands" reward video (roadmap item T, spec section C). */
+export const HAND_WASH_VIDEO_SRC = "/video/shrewy_hand_wash.mp4";
+
+/** If the hand-wash video hasn't started by then, retry muted once, then carry on without it. */
+export const HAND_WASH_VIDEO_START_TIMEOUT_MS = 2000;
+
+/**
+ * When Chef Shrewy's challenge may be offered (spec decisions 1, 1a): only on an
+ * interactive recipe scene, only in the prep phase -- a recipe is chosen and the stove
+ * hasn't been tapped yet (including after every ingredient is in the pot), with no cook
+ * running and no dish reveal up.
+ */
+export function isChefChallengePrepPhase(params: {
+  sceneIsInteractive: boolean;
+  selectedRecipeId: string | null;
+  cookingRecipeId: string | null;
+  isCookCommitting: boolean;
+  hasDishReveal: boolean;
+}): boolean {
+  return (
+    params.sceneIsInteractive &&
+    params.selectedRecipeId !== null &&
+    params.cookingRecipeId === null &&
+    !params.isCookCommitting &&
+    !params.hasDishReveal
+  );
+}
+
+/** The hand-wash video plays after every new recipe choice once unlocked; deselecting never plays it. */
+export function shouldPlayHandWashVideo(params: { isUnlocked: boolean; isDeselecting: boolean }): boolean {
+  return params.isUnlocked && !params.isDeselecting;
+}
 
 /** How long the Finish celebration (confetti + chime) plays before the dish reveal closes. */
 export const KITCHEN_DISH_REVEAL_FINISH_MS = 1800;
@@ -314,6 +349,7 @@ export const RECIPE_KITCHEN_SCENES: Readonly<Record<string, KitchenSceneLayout>>
     },
     effects: {
       pot: { left: "38.5%", top: "35%", width: "9%", height: "8.5%" },
+      vessel: "pot",
       sparkles: [
         { left: "37%", top: "33%" },
         { left: "47.5%", top: "31.5%" },
@@ -333,6 +369,45 @@ export const RECIPE_KITCHEN_SCENES: Readonly<Record<string, KitchenSceneLayout>>
         top: "59%",
         width: "11%",
         height: "26%",
+        bubbleAlign: "right",
+        bubbleBesideOnWide: "right",
+      },
+    },
+  },
+  "golden-mooncake": {
+    imagePath: "/kitchen/kitchen_golden_mooncakes.jpg",
+    aspectRatio: "1024 / 1024",
+    showChef: false,
+    hotspots: {
+      fridge: { left: "5%", top: "37%", width: "19.5%", height: "37%" },
+      book: { left: "47.5%", top: "29%", width: "9%", height: "8%" },
+      stovetop: { left: "33%", top: "36%", width: "15.5%", height: "10%" },
+      oven: { left: "37.5%", top: "47%", width: "11.5%", height: "14.5%" },
+      shelf: { left: "80%", top: "24%", width: "16%", height: "40%" },
+    },
+    effects: {
+      // An oven bake, so the "pot" is the mixing bowl on the island.
+      pot: { left: "55%", top: "53.5%", width: "10.5%", height: "8.5%" },
+      vessel: "bowl",
+      sparkles: [
+        { left: "41%", top: "50%" },
+        { left: "47.5%", top: "48%" },
+        { left: "48%", top: "37%" },
+        { left: "58%", top: "36%" },
+        { left: "67%", top: "48%" },
+      ],
+      // Mooncake's order: lotus paste, salted yolk, pastry flour, osmanthus honey.
+      ingredientOrigins: [
+        { left: "50.5%", top: "58.5%" }, // mooncake mold on the cutting board (no lotus prop in the art)
+        { left: "59%", top: "38%" }, // yolk in its nest
+        { left: "72%", top: "54%" }, // flour on the star dish
+        { left: "74%", top: "45%" }, // honey jar
+      ],
+      chef: {
+        left: "62%",
+        top: "56%",
+        width: "12%",
+        height: "22%",
         bubbleAlign: "right",
         bubbleBesideOnWide: "right",
       },

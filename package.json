@@ -20,6 +20,7 @@
     "verify:rls": "tsx scripts/verify-rls.ts",
     "verify:session-scoped-claims": "tsx scripts/verify-session-scoped-claims.ts",
     "verify:mystery-foods": "tsx scripts/verify-mystery-foods.ts",
+    "verify:chef-challenge": "tsx scripts/verify-chef-challenge.ts",
     "seed:admin": "node scripts/seed-platform-admin.mjs",
     "db:push": "supabase db push --include-all",
     "db:status": "supabase migration list",

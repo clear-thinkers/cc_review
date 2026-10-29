@@ -37,27 +37,25 @@ import {
   type ShopAdminRecipesResponse,
   type ShopRecipeAdminDraft,
 } from "./shopAdmin.types";
+import {
+  PANEL,
+  LABEL,
+  TOGGLE_BUTTON,
+  INPUT,
+  READONLY,
+  SHOP_ADMIN_BUTTON_SECONDARY,
+  SHOP_ADMIN_BUTTON_PRIMARY,
+  SHOP_ADMIN_BUTTON_CAUTION,
+  SHOP_ADMIN_BUTTON_DESTRUCTIVE,
+  SHOP_ADMIN_FILTER_BUTTON_BASE,
+  SHOP_ADMIN_RECIPE_CARD_BUTTON,
+} from "./shopAdmin.styles";
+import ChefChallengeQuestionsSection from "./ChefChallengeQuestionsSection";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type NoticeState = { kind: "success" | "error"; message: string } | null;
 type IngredientUsageFilter = "all" | "base" | "special" | "unused" | "mystery";
 
-const PANEL =
-  "rounded-[1.5rem] border bg-[var(--shop-admin-panel-bg)] p-5 md:p-6 [border-color:var(--shop-admin-panel-border)]";
-const LABEL =
-  "shop-admin-label text-sm font-semibold leading-6 text-[var(--shop-admin-label-text)]";
-const TOGGLE_BUTTON =
-  "btn-nav rounded-full border-2 px-4 py-2 text-sm font-semibold transition hover:bg-[#fff1cd]";
-const INPUT =
-  "mt-2 w-full rounded-xl border bg-white px-4 py-3 text-sm text-[var(--shop-admin-text-dark)] outline-none transition [border-color:var(--shop-admin-input-border)] focus:[border-color:var(--shop-admin-hover-border)] focus:ring-1 focus:ring-[var(--shop-admin-focus-ring)]";
-const READONLY =
-  "mt-2 rounded-xl border bg-[var(--shop-admin-readonly-bg)] px-4 py-3 text-sm text-[var(--shop-admin-readonly-text)] [border-color:var(--shop-admin-readonly-border)]";
-const SHOP_ADMIN_BUTTON_SECONDARY = "btn-secondary rounded-full border-2";
-const SHOP_ADMIN_BUTTON_PRIMARY = "btn-primary rounded-full border-2";
-const SHOP_ADMIN_BUTTON_CAUTION = "btn-caution rounded-full border-2";
-const SHOP_ADMIN_BUTTON_DESTRUCTIVE = "btn-destructive rounded-full border-2";
-const SHOP_ADMIN_FILTER_BUTTON_BASE = "rounded-full border-2 px-4 py-2 text-sm font-semibold transition";
-const SHOP_ADMIN_RECIPE_CARD_BUTTON = "w-full rounded-xl border-2 p-3 text-left transition";
 const INGREDIENT_SECTION_CONTENT_ID = "shop-admin-ingredient-pricing-content";
 const RECIPE_SECTION_CONTENT_ID = "shop-admin-recipe-management-content";
 
@@ -153,7 +151,8 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingIngredients, setIsSavingIngredients] = useState(false);
   const [isIngredientSectionCollapsed, setIsIngredientSectionCollapsed] = useState(true);
-  const [isRecipeSectionCollapsed, setIsRecipeSectionCollapsed] = useState(false);
+  // Every section starts collapsed (2026-10-28, roadmap item T decision 2a).
+  const [isRecipeSectionCollapsed, setIsRecipeSectionCollapsed] = useState(true);
   const [ingredientUsageFilter, setIngredientUsageFilter] =
     useState<IngredientUsageFilter>("all");
 
@@ -1777,6 +1776,13 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         </div>
         </div>
       </section>
+
+      <ChefChallengeQuestionsSection
+        recipes={recipes}
+        locale={locale}
+        strings={strings}
+        accessToken={session?.supabaseSession.access_token ?? ""}
+      />
     </div>
   );
 }

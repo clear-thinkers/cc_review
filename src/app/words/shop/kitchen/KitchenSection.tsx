@@ -23,6 +23,8 @@ import {
 } from "@/lib/shop";
 import {
   cookShopRecipe,
+  getChefChallenge,
+  listPawPrintRedemptions,
   listShopCookedDishes,
   listShopIngredientConsumptions,
   listShopIngredientPrices,
@@ -32,7 +34,11 @@ import {
   listShopRecipes,
   organizeShopKitchenCountertop,
 } from "@/lib/supabase-service";
+import { hasRedeemedReward, SHREWY_HAND_WASH_REWARD_KEY } from "@/lib/pawPrints";
+import type { ChefChallenge } from "@/lib/pawPrints.types";
 import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
+import ChefChallengeModal from "./ChefChallengeModal";
+import HandWashVideoModal from "./HandWashVideoModal";
 import { kitchenStrings } from "./kitchen.strings";
 import KitchenChef from "./KitchenChef";
 import KitchenDishReveal from "./KitchenDishReveal";
@@ -57,6 +63,7 @@ import {
   KITCHEN_SCENE_COOK_MS,
   buildKitchenScenePrepRequirements,
   buildKitchenScenePrepTokens,
+  isChefChallengePrepPhase,
   isKitchenScenePrepComplete,
   resolveApplianceLabel,
   resolveAvailableSpecialIngredients,
@@ -64,6 +71,7 @@ import {
   resolveRecipeDishIconPath,
   SHOP_FOOD_TYPES,
   SHOP_KITCHEN_COUNTERTOP_CAPACITY,
+  shouldPlayHandWashVideo,
   type KitchenSceneLayout,
   type KitchenSpecialIngredientOption,
 } from "./kitchen.types";
@@ -690,12 +698,23 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     title: string;
     recipeSlug: string;
   } | null>(null);
+  // Chef challenge + paw prints (roadmap item T). The challenge is kept with the recipe
+  // it was fetched for, so a stale one never shows for another recipe; the server
+  // (get_chef_challenge) is the source of truth, re-asked on every selection and close.
+  const [challengeState, setChallengeState] = useState<{ recipeId: string; challenge: ChefChallenge | null } | null>(
+    null
+  );
+  const [isChallengeOpen, setIsChallengeOpen] = useState(false);
+  const [challengeRefresh, setChallengeRefresh] = useState(0);
+  const [isHandWashUnlocked, setIsHandWashUnlocked] = useState(false);
+  // The recipe just chosen while the hand-wash video plays; the usual next step waits for it.
+  const [handWashRecipe, setHandWashRecipe] = useState<ShopRecipe | null>(null);
   // Background music (spec 2026-10-28): plays only on this page, dips under the
-  // dish-reveal chime; the mute toggle covers the music, not the chime.
+  // dish-reveal chime and the hand-wash video; the mute toggle covers the music only.
   const music = useKitchenMusic({
     userId,
     active: vm.page === "shopKitchen",
-    ducked: dishReveal !== null,
+    ducked: dishReveal !== null || handWashRecipe !== null,
   });
 
   useEffect(() => {
@@ -725,6 +744,14 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
         setConsumptions(consumptionRows);
         setDishes(dishRows);
         setLoadState("ready");
+
+        // The hand-wash reward is a nice-to-have: if this read fails the kitchen still works.
+        try {
+          const redemptions = await listPawPrintRedemptions();
+          if (!isCancelled) setIsHandWashUnlocked(hasRedeemedReward(redemptions, SHREWY_HAND_WASH_REWARD_KEY));
+        } catch (error) {
+          console.error("Failed to load paw-print redemptions:", error);
+        }
 
         // A mystery food unlocks during a quiz, not here, so the chef announces any
         // newly unlocked one the first time the child comes back to the kitchen.
@@ -832,6 +859,38 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     ? buildKitchenScenePrepTokens(scenePrepRequirements, selectedKitchenScene.effects.ingredientOrigins, scenePrepAdded)
     : [];
   const isScenePrepPending = scenePrepRequirements.length > 0 && !isKitchenScenePrepComplete(scenePrepRequirements, scenePrepAdded);
+  // Each scene names its own vessel (pot, mixing bowl) and the recipe's own appliance.
+  const sceneVesselLabel = selectedKitchenScene.effects?.vessel === "bowl" ? str.prepVesselBowl : str.prepVesselPot;
+  const sceneApplianceLabel = resolveApplianceLabel(selectedRecipe?.cookMethod ?? "stove", str);
+
+  // Chef challenge (roadmap item T): offered only on an interactive scene during prep.
+  const sceneIsInteractive = Boolean(selectedKitchenScene.effects);
+  const isChallengePhase = isChefChallengePrepPhase({
+    sceneIsInteractive,
+    selectedRecipeId,
+    cookingRecipeId,
+    isCookCommitting,
+    hasDishReveal: dishReveal !== null,
+  });
+  const activeChallenge =
+    isChallengePhase && challengeState && challengeState.recipeId === selectedRecipeId ? challengeState.challenge : null;
+
+  useEffect(() => {
+    if (vm.page !== "shopKitchen" || loadState !== "ready" || !sceneIsInteractive || !selectedRecipeId) return;
+    let isCancelled = false;
+    const recipeId = selectedRecipeId;
+    getChefChallenge(recipeId)
+      .then((result) => {
+        if (!isCancelled) setChallengeState({ recipeId, challenge: result.success ? result.challenge : null });
+      })
+      .catch((error) => {
+        console.error("Failed to load Chef Shrewy's challenge:", error);
+        if (!isCancelled) setChallengeState({ recipeId, challenge: null });
+      });
+    return () => {
+      isCancelled = true;
+    };
+  }, [vm.page, loadState, sceneIsInteractive, selectedRecipeId, challengeRefresh]);
   const servedRecipeSlugs = useMemo(
     () =>
       dishes.flatMap((dish) => {
@@ -895,21 +954,55 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     setSelectedRecipeId(recipeId);
     setSelectedSpecialIngredientKeys([]);
 
-    // Ask about special ingredients right away, per the recipe -- but only
-    // if the child actually has at least one of this recipe's special
-    // ingredients to offer; otherwise there's nothing to ask about.
-    const recipe = recipesById.get(recipeId);
+    // Picking a recipe closes the book straight away (2026-10-27). Once the hand-wash
+    // reward is unlocked (roadmap item T), Shrewy washes his hands first and the usual
+    // next step waits for the video to end.
+    const recipe = recipesById.get(recipeId) ?? null;
+    setIsBookOpen(false);
+    if (recipe && shouldPlayHandWashVideo({ isUnlocked: isHandWashUnlocked, isDeselecting: false })) {
+      setHandWashRecipe(recipe);
+      return;
+    }
+    continueAfterRecipeChosen(recipe);
+  }
+
+  // After a recipe is chosen: the special-ingredient picker if the child has any of
+  // this recipe's special ingredients to offer, else back to the kitchen with
+  // Shrewy's start line.
+  function continueAfterRecipeChosen(recipe: ShopRecipe | null): void {
     const localizedSpecialIngredients = recipe
       ? getShopRecipeContentForLocale(recipe, locale).specialIngredients
       : [];
-    // Picking a recipe closes the book straight away (2026-10-27) -- onto the
-    // special-ingredient picker if there's anything to offer, else the kitchen.
-    setIsBookOpen(false);
     if (resolveAvailableSpecialIngredients(localizedSpecialIngredients, availabilityByKey).length > 0) {
       setIsSpecialIngredientsOpen(true);
     } else {
-      announceCookingStart(recipe ?? null);
+      announceCookingStart(recipe);
     }
+  }
+
+  function handleHandWashFinished(): void {
+    const recipe = handWashRecipe;
+    setHandWashRecipe(null);
+    continueAfterRecipeChosen(recipe);
+  }
+
+  // Tapping the painted chef: his challenge while one is on offer, else a chat line.
+  function handleSceneChefTap(): void {
+    if (activeChallenge) {
+      setIsChallengeOpen(true);
+      return;
+    }
+    chef.tap(servedRecipeSlugs, shelfChefReactions);
+  }
+
+  function handleChallengeClosed(answered: boolean): void {
+    setIsChallengeOpen(false);
+    if (!answered) {
+      const lines = chefStrings.challenge.dismiss;
+      chef.sayLine(lines[Math.floor(Math.random() * lines.length)] ?? "");
+    }
+    // Re-ask the server: after an answer it reports cook_required, so the badge goes away.
+    setChallengeRefresh((current) => current + 1);
   }
 
   // The recipe book and special-ingredient picker are full-screen modals, so the
@@ -977,7 +1070,7 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
 
     if (isScenePrepPending) {
-      setNotice({ tone: "error", text: str.prepNotDoneMessage });
+      setNotice({ tone: "error", text: replaceToken(str.prepNotDoneMessage, "{vessel}", sceneVesselLabel) });
       return;
     }
 
@@ -1145,12 +1238,16 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
                     : scenePrepRequirements.length === 0 || dishReveal
                       ? null
                       : isScenePrepPending
-                        ? str.prepDragPrompt
-                        : str.prepDonePrompt
+                        ? replaceToken(str.prepDragPrompt, "{vessel}", sceneVesselLabel)
+                        : replaceToken(str.prepDonePrompt, "{appliance}", sceneApplianceLabel)
                 }
                 tokenAriaLabel={(token) =>
                   replaceToken(
-                    replaceToken(str.prepTokenAriaTemplate, "{ingredient}", token.label),
+                    replaceToken(
+                      replaceToken(str.prepTokenAriaTemplate, "{ingredient}", token.label),
+                      "{vessel}",
+                      sceneVesselLabel
+                    ),
                     "{count}",
                     String(token.remaining)
                   )
@@ -1159,7 +1256,10 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
                 cooking={cookingRecipeId !== null}
                 chefLine={chef.line}
                 chefTapAria={chefStrings.tapAria}
-                onChefTap={() => chef.tap(servedRecipeSlugs, shelfChefReactions)}
+                onChefTap={handleSceneChefTap}
+                chefBadge={
+                  activeChallenge ? { iconPath: "/paw-prints/shrewy_paw_badge.png", ariaLabel: str.challengeBadgeAria } : null
+                }
               />
             ) : null}
 
@@ -1313,6 +1413,17 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
           }}
         />
       ) : null}
+
+      {isChallengeOpen && activeChallenge ? (
+        <ChefChallengeModal
+          challenge={activeChallenge}
+          strings={str}
+          chefStrings={chefStrings}
+          onClose={handleChallengeClosed}
+        />
+      ) : null}
+
+      {handWashRecipe ? <HandWashVideoModal ariaLabel={str.handWashAria} onFinished={handleHandWashFinished} /> : null}
 
       {dishReveal ? (
         <KitchenDishReveal

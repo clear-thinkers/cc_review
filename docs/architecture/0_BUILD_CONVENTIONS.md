@@ -1,6 +1,6 @@
 # Build Conventions — HanziQuest (`cc_review`)
 
-_Last updated: 2026-10-24 (§10 gained `scripts/verify-mystery-foods.ts`; `verify-rls.ts` known state refreshed; item P added Section 12 and reshaped Section 9)_
+_Last updated: 2026-10-28 (§10 gained `scripts/verify-chef-challenge.ts`; `verify-rls.ts` gained Section 13, known state refreshed — item T). Previously: 2026-10-24 (§10 gained `scripts/verify-mystery-foods.ts`; `verify-rls.ts` known state refreshed; item P added Section 12 and reshaped Section 9)_
 
 For authority hierarchy, hard stops, doc update policy, and fix log policy — see `AI_CONTRACT.md`.
 For where to file new documents — see `0_ARCHITECTURE.md §6`.
@@ -391,7 +391,7 @@ Runs against dev only — no `--prod` flag. Never point this at prod without fir
 - Section 6 (`vocab_phrases`/`vocab_phrase_lesson_tags`) — `vocab_phrase_lesson_tags setup: service role INSERT lesson_tag failed: Could not find the 'grade' column of 'lesson_tags' in the schema cache`. Pre-existing since it first appeared, not yet fixed.
 - Section 10 (Shop Kitchen, `shop_ingredient_consumptions`) — `shop_ingredient_consumptions no direct insert: child JWT INSERT SUCCEEDED — cook_shop_recipe is not the only writer!`. Surfaced 2026-08-23 when this script was first run live against dev after the original Shop Kitchen migration shipped. Contradicted `0_ARCHITECTURE.md`'s Shop Kitchen Rules (neither `shop_cooked_dishes` nor `shop_ingredient_consumptions` should have a direct client write policy at all) — a stray insert policy, copied from `shop_ingredient_rewards`' own pattern, was present on `shop_ingredient_consumptions`. **Fixed same day** in `supabase/migrations/20260823020000_shop_kitchen_countertop_redesign.sql` (drops the policy outright) — **confirmed deployed to dev** (`npm run db:status` shows `20260823020000` in both Local and Remote columns), but the script itself has not been re-run since to confirm this failure actually cleared. Treat Section 10 as likely-fixed-but-unverified until someone reruns it.
 
-Count history: 79/81 (2026-08-23, before the Section 10 fix deployed) → 80/81 → 99/100 (2026-10-24, after item P). Re-run the script for a current count rather than assuming either.
+Count history: 79/81 (2026-08-23, before the Section 10 fix deployed) → 80/81 → 99/100 (2026-10-24, after item P) → **111/112 (2026-10-28, after item T added Section 13: chef challenge + paw prints, 12/12)**; the one failure is still the Section 6 lesson-tags setup. Re-run the script for a current count rather than assuming any of these.
 
 ---
 
@@ -406,6 +406,27 @@ Count history: 79/81 (2026-08-23, before the Section 10 fix deployed) → 80/81 
 **Env vars required:** same three as `verify-rls.ts`. Dev only, no `--prod` flag.
 
 **Key behaviours:** creates throwaway families/children and temporary mystery foods/ingredients (keys prefixed `zz-test-`), and **briefly sets the real `crystal-dumpling` recipe inactive** during its first phase so ordering scenarios are deterministic. Everything is restored/removed in a `finally` block; if the process is killed hard, re-run it (or set `shop_recipes.is_active = true` for slug `crystal-dumpling`). Last run: 80/80 on 2026-10-24 (after item P), zero leftover rows.
+
+---
+
+### `scripts/verify-chef-challenge.ts`
+
+**npm command:** `npm run verify:chef-challenge`
+
+**Purpose:** Verifies the chef challenge + paw prints flow (roadmap item T) against a live Supabase **dev** project, as real child and parent JWTs.
+- **Refusals:** role (`forbidden`), `not_unlocked`, `no_questions`.
+- **The challenge:** a child can't read the question bank; a challenge has every option and no answer field; asking again returns the same open challenge.
+- **Answering:** a wrong answer reveals the correct one and awards nothing; `already_answered`; the one-per-cook rule (`cook_required` until a newer cooked dish).
+- **Rotation:** every issued question is checked against the TypeScript reference `pickNextChallengeQuestion` (`src/lib/pawPrints.ts`), covering round 1 without repeats and round 2 not opening with the last question. A deactivated question's open challenge is replaced.
+- **Awards:** an award records its giver, recipe and attempt.
+- **Redemption:** `unknown_reward`, `insufficient_paw_prints`, success at exactly 10, `already_redeemed`, parent `forbidden`.
+- **Direct writes:** none are possible.
+
+**When to use:** After any change to `get_chef_challenge`, `answer_chef_challenge`, `redeem_paw_print_reward`, the five paw-print tables, or the rotation rule.
+
+**Env vars required:** same three as `verify-rls.ts`. Dev only, no `--prod` flag.
+
+**Key behaviours:** creates throwaway families/users and one temporary, **inactive** recipe (slug `zz-test-…`) with its own questions, and simulates a cook by inserting a `shop_cooked_dishes` row with the service role. Everything is removed in a `finally` block. Last run: **30/30 on 2026-10-28**, with no leftover rows.
 
 ---
 

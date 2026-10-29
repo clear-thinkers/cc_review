@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHEF_CHALLENGE_POSES,
   CHEF_LINE_DURATION_MS,
   CHEF_POSE_FOR_TRIGGER,
   CHEF_POSES,
@@ -50,10 +51,15 @@ describe("kitchenChef types", () => {
         foodTypes: { drinks: "drinks", hotmeal: "hot meals", desserts: "desserts" },
         lines: { foodTypeImbalance: "So many {have}!", favoriteAgain: "{dish}!", favoriteSpecialty: "{dish}!!" },
       },
+      challenge: { offer: ["Quiz!"], correct: ["Yes!"], wrong: ["Next time!"], dismiss: ["Later!"] },
     };
     expect(pose).toBe("idle");
     expect(strings.generic[trigger]).toEqual(["b"]);
     expect(strings.recipes.soup.start).toEqual(["Soup time!"]);
     expect(strings.recipes.soup.success).toBeUndefined();
+  });
+
+  it("gives each challenge moment a pose, and never a sad one for a wrong answer", () => {
+    expect(CHEF_CHALLENGE_POSES).toEqual({ offer: "careful", correct: "celebrate", wrong: "idle" });
   });
 });

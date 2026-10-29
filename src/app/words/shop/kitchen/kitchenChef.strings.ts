@@ -1,11 +1,12 @@
 import type { KitchenChefLocaleStrings } from "./kitchenChef.types";
 
 /**
- * Kitchen Chef Strings — Last updated: 2026-10-26
+ * Kitchen Chef Strings — Last updated: 2026-10-28
  * Chef Shrewy's lines (roadmap item O, docs/feature-specs/2026-10-24-kitchen-chef-dialogue.md).
  * No generic line names a food, an ingredient, or coins. Recipe-specific lines
  * override the generic set per trigger. Shelf-aware lines (`shelf`) may name food
- * types and dishes (owner-approved 2026-10-26).
+ * types and dishes (owner-approved 2026-10-26). Challenge lines (`challenge`, roadmap
+ * item T, 2026-10-28) are spec decision 6 of 2026-10-28-chef-challenge-paw-prints.md.
  */
 export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChefLocaleStrings } = {
   en: {
@@ -44,6 +45,24 @@ export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChef
         favoriteSpecialty: "I think {dish} is our specialty now!",
       },
     },
+    challenge: {
+      offer: [
+        "Chef's challenge! Answer my question and I'll give you my paw print!",
+        "Before we cook, a little culture quiz! Ready?",
+        "Psst... I have a secret question for you. Get it right for a paw print!",
+      ],
+      correct: [
+        "Paw-fect! Here's my paw print for you!",
+        "You know so much! Stamp! One paw print for you!",
+        "Wow, a true little culture chef! Take my paw print!",
+      ],
+      wrong: [
+        "Oops, not this time! Now you know the answer. Try again next time!",
+        "So close! Remember this one, and we'll try again next cook!",
+        "That was a tricky one! Let's try again next time!",
+      ],
+      dismiss: ["No rush! Tap me when you're ready."],
+    },
   },
   zh: {
     chefName: "鼩仔",
@@ -78,6 +97,20 @@ export const kitchenChefStrings: { en: KitchenChefLocaleStrings; zh: KitchenChef
         favoriteAgain: "又是{dish}？你真的超爱它耶！",
         favoriteSpecialty: "{dish}已经是我们的招牌菜啦！",
       },
+    },
+    challenge: {
+      offer: [
+        "大厨挑战！答对我的问题，就送你一个爪印！",
+        "开火之前，先来一道文化小问题！准备好了吗？",
+        "嘘……我有一个秘密问题，答对就送你爪印哦！",
+      ],
+      correct: ["答对啦！送你我的爪印！", "你懂得真多！啪——盖个爪印给你！", "哇，真是文化小厨神！我的爪印送给你！"],
+      wrong: [
+        "哎呀，这次没答对！现在你知道答案啦，下次再来！",
+        "差一点点！记住这个答案，下次做菜再挑战！",
+        "这题有点难哦！下次再试试吧！",
+      ],
+      dismiss: ["不着急！准备好了再点我哦。"],
     },
   },
 };

@@ -25,6 +25,9 @@
  *                                       extend / delete only their OWN sessions, a parent's
  *                                       stay out of reach, cross-family isolation, and the
  *                                       offers table has no client writes)
+ *   ✅ chef challenge + paw prints  → Section 13 (children can't read the question bank,
+ *                                       no client writes on any of the five tables, family-
+ *                                       scoped ledger reads, catalog readable when signed in)
  *   ✅ shop_ingredient_purchases RLS → Section 11 (family-scoped read incl. cross-family
  *                                       isolation, user-scoped insert, no update/delete —
  *                                       same shape as shop_ingredient_rewards)
@@ -1987,6 +1990,151 @@ async function section12_childPackagedSessions(): Promise<void> {
 }
 
 // ─── Cleanup ───────────────────────────────────────────────────────────────
+// ─── Section 13: chef challenge + paw prints ────────────────────────────────
+//
+// Roadmap item T (feature spec 2026-10-28-chef-challenge-paw-prints.md). Five tables, all
+// RPC-only writers: a child must never read the question bank (the answers live there),
+// never write any of the five tables, and only read their own family's attempts, awards
+// and redemptions. The reward catalog is readable by everyone signed in.
+async function section13_chefChallengePawPrints(): Promise<void> {
+  console.log('\n■ Section 13: chef challenge + paw prints');
+
+  if (!testFamilyAId || !testFamilyBId || !familyAParentClient || !familyAChildClient || !testChildAUserId) {
+    fail('section13 setup incomplete — Section 2/4 must have succeeded');
+    return;
+  }
+
+  // ── Setup: a throwaway recipe with one question, and one award for Family A's child ──
+  const testRecipeSlug = `${TEST_TAG}_s13_recipe`;
+  const { data: recipeRow, error: recipeErr } = await admin
+    .from('shop_recipes')
+    .insert({
+      slug: testRecipeSlug,
+      title: testRecipeSlug,
+      display_order: 999913,
+      is_active: false,
+      intro: 'test',
+      unlock_cost_coins: 0,
+      base_ingredients: [],
+      variant_icon_rules: [],
+    })
+    .select('id')
+    .single();
+  if (recipeErr || !recipeRow) {
+    fail('section13 setup: service role INSERT shop_recipes', recipeErr?.message);
+    return;
+  }
+  const testRecipeId = (recipeRow as { id: string }).id;
+
+  const { error: questionErr } = await admin.from('chef_challenge_questions').insert({
+    recipe_id: testRecipeId,
+    prompt: '测试题',
+    correct_answer: '对',
+    wrong_answers: ['错甲', '错乙'],
+  });
+  if (questionErr) fail('section13 setup: service role INSERT chef_challenge_questions', questionErr.message);
+
+  const { error: awardErr } = await admin
+    .from('paw_print_awards')
+    .insert({ user_id: testChildAUserId, family_id: testFamilyAId, giver: 'shrewy', recipe_id: testRecipeId });
+  if (awardErr) fail('section13 setup: service role INSERT paw_print_awards', awardErr.message);
+
+  // ── Family B parent (cross-family reader), self-contained ──
+  let familyBParentClient: SupabaseClient | null = null;
+  let authUserParentBId: string | null = null;
+  const { data: parentBRow, error: parentBErr } = await admin
+    .from('users')
+    .insert({ family_id: testFamilyBId, name: `${TEST_TAG}_parent_b_s13`, role: 'parent' })
+    .select('id')
+    .single();
+  if (parentBErr || !parentBRow) {
+    fail('section13 setup: service role INSERT parent user for Family B', parentBErr?.message);
+  } else {
+    try {
+      const parentBResult = await createTestAuthClient({
+        email: `${TEST_TAG}-parent-b-s13@test.invalid`,
+        familyId: testFamilyBId,
+        userId: (parentBRow as { id: string }).id,
+        role: 'parent',
+      });
+      familyBParentClient = parentBResult.client;
+      authUserParentBId = parentBResult.authUserId;
+    } catch (e: unknown) {
+      fail('section13 setup: Family B auth client creation failed', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // ── The question bank is invisible to children and parents ──
+  for (const [who, client] of [
+    ['child', familyAChildClient],
+    ['parent', familyAParentClient],
+  ] as const) {
+    const { data, error } = await client.from('chef_challenge_questions').select('id').eq('recipe_id', testRecipeId);
+    if (!error && (data ?? []).length === 0) pass(`chef_challenge_questions: a ${who} reads nothing (answers stay hidden)`);
+    else fail(`chef_challenge_questions: a ${who} could read the question bank!`, error?.message ?? JSON.stringify(data));
+  }
+
+  // ── No client writes on any of the five tables ──
+  const writes: Array<[string, Record<string, unknown>]> = [
+    ['chef_challenge_questions', { recipe_id: testRecipeId, prompt: 'x', correct_answer: 'a', wrong_answers: ['b', 'c'] }],
+    ['chef_challenge_attempts', { user_id: testChildAUserId, family_id: testFamilyAId, recipe_id: testRecipeId, round: 1 }],
+    ['paw_print_awards', { user_id: testChildAUserId, family_id: testFamilyAId, giver: 'shrewy' }],
+    ['paw_print_redemptions', { user_id: testChildAUserId, family_id: testFamilyAId, reward_key: 'shrewy-hand-wash', giver: 'shrewy', cost: 10 }],
+    ['paw_print_rewards', { reward_key: `${TEST_TAG}_free`, giver: 'shrewy', cost: 1 }],
+  ];
+  for (const [table, row] of writes) {
+    const { error } = await familyAChildClient.from(table).insert(row);
+    if (error) pass(`${table}: a child cannot insert directly`);
+    else fail(`${table}: a child INSERT SUCCEEDED — the RPCs must be the only writers!`);
+  }
+
+  const { data: awardDeleted } = await familyAChildClient.from('paw_print_awards').delete().eq('user_id', testChildAUserId).select();
+  const { data: awardUpdated } = await familyAChildClient
+    .from('paw_print_awards')
+    .update({ giver: 'shrewy' })
+    .eq('user_id', testChildAUserId)
+    .select();
+  if ((awardDeleted ?? []).length === 0 && (awardUpdated ?? []).length === 0) {
+    pass('paw_print_awards: a child cannot update or delete their paw prints');
+  } else {
+    fail('paw_print_awards: a child changed or deleted a paw print!');
+  }
+
+  const { data: priceRows } = await familyAChildClient
+    .from('paw_print_rewards')
+    .update({ cost: 1 })
+    .eq('reward_key', 'shrewy-hand-wash')
+    .select();
+  if ((priceRows ?? []).length === 0) pass('paw_print_rewards: a child cannot change a price');
+  else fail('paw_print_rewards: a child changed a reward price!');
+
+  // ── Reads: catalog for everyone, ledgers family-scoped ──
+  const { data: catalog } = await familyAChildClient.from('paw_print_rewards').select('reward_key');
+  if ((catalog ?? []).some((row) => (row as { reward_key: string }).reward_key === 'shrewy-hand-wash')) {
+    pass('paw_print_rewards: a signed-in child can read the catalog');
+  } else {
+    fail('paw_print_rewards: the catalog is not readable by a child');
+  }
+
+  const { data: ownAwards } = await familyAParentClient.from('paw_print_awards').select('id').eq('user_id', testChildAUserId);
+  if ((ownAwards ?? []).length === 1) pass("paw_print_awards: the child's own family can read them");
+  else fail("paw_print_awards: the family can't read its own child's paw prints", JSON.stringify(ownAwards));
+
+  if (familyBParentClient) {
+    const { data: crossAwards } = await familyBParentClient.from('paw_print_awards').select('id').eq('user_id', testChildAUserId);
+    if ((crossAwards ?? []).length === 0) pass('paw_print_awards: another family reads nothing');
+    else fail('paw_print_awards: ANOTHER FAMILY can read the paw prints!');
+  }
+
+  // ── Cleanup (Family A/B rows go with the families; the recipe and its question here) ──
+  await admin.from('paw_print_rewards').delete().eq('reward_key', `${TEST_TAG}_free`);
+  await admin.from('shop_recipes').delete().eq('id', testRecipeId);
+  if (authUserParentBId) {
+    const { error: authDelErr } = await admin.auth.admin.deleteUser(authUserParentBId);
+    if (authDelErr) console.error(`  ⚠️  Failed to delete Section 13 Family B auth user: ${authDelErr.message}`);
+  }
+}
+
 async function cleanup(): Promise<void> {
   console.log('\n■ Cleanup: Removing synthetic test data');
 
@@ -2041,6 +2189,7 @@ async function main(): Promise<void> {
     await section10_shopKitchen();
     await section11_shopIngredientPurchases();
     await section12_childPackagedSessions();
+    await section13_chefChallengePawPrints();
   } finally {
     await cleanup();
   }

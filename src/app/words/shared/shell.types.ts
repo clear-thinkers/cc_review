@@ -11,6 +11,7 @@ export type NavPage =
   | "review"
   | "shop"
   | "shopKitchen"
+  | "rewards"
   | "shopAdmin"
   | "admin"
   | "results"

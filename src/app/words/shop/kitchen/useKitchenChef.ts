@@ -81,5 +81,8 @@ export function useKitchenChef(strings: Pick<KitchenChefLocaleStrings, "generic"
     [show]
   );
 
-  return { pose: state.pose, line: state.line, spot: state.spot, say, tap };
+  /** Plays one ready-made line (e.g. the chef challenge's dismiss line) from the ladder in the idle pose. */
+  const sayLine = useCallback((line: string) => show({ line, pose: "idle", spot: "ladder" }), [show]);
+
+  return { pose: state.pose, line: state.line, spot: state.spot, say, tap, sayLine };
 }

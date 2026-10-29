@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-10-28 (Shop Kitchen background music — item R; chef shelf reactions — item S, Rule 20; recipe scenes and interactive cooking — Rule 21; recipe wall size corrected to 18). Previously: 2026-10-24 (Mystery Foods — items L/M/N; child-created sessions + reward picks — item P)_
+_Last updated: 2026-10-28 (chef challenge + paw prints — item T: Shop Kitchen Rule 22, Rewards Rules, Shop Admin Rule 13, five new tables, guarantee 6e; Shop Kitchen background music — item R; chef shelf reactions — item S, Rule 20; recipe scenes and interactive cooking — Rule 21; recipe wall size corrected to 18). Previously: 2026-10-24 (Mystery Foods — items L/M/N; child-created sessions + reward picks — item P)_
 
 ---
 
@@ -397,6 +397,16 @@ These rules govern the platform-admin recipe metadata editor:
 11. **Added by Mystery Foods (2026-10-24):** the recipe form gains a **Mystery Food** toggle and, when on, EN/ZH **teaser** inputs (≤ 140 chars; blank stores `null`). Saving a mystery recipe forces `unlock_cost_coins` to 0, requires a `cook_method`, and validates (`validateShopRecipeAdminDraft(draft, mysteryIngredientKeys)`) that it uses **only** mystery ingredients and that a normal recipe uses **none**. The recipes route loads the catalog's mystery keys itself, so the rule cannot be bypassed from the client.
 12. **Added by Mystery Foods (2026-10-24):** each catalog ingredient gains a **Mystery ingredient** toggle (price pinned to 0 and the input disabled; the ingredient-prices route rejects a priced mystery ingredient), a "Mystery" badge, and a "Mystery" filter.
 
+13. **Added by the chef challenge (2026-10-28, roadmap item T):**
+    - **New section:** a third collapsible section, **"Chef Challenges — Curate Recipe Questions"** (`ChefChallengeQuestionsSection.tsx`), below the recipe section.
+    - **Collapsed on load:** all three sections now start collapsed; the recipe section used to start open.
+    - **Editing:** pick a recipe, then add, edit, activate/deactivate or delete its questions, one at a time.
+      - Each question has a Chinese prompt (≤ 200 chars), one correct answer and 2–3 distinct wrong answers (each ≤ 60 chars), validated by `validateChefChallengeQuestionDraft`.
+      - **Delete asks for confirmation**: a deliberate exception to the no-dialog default (`0_BUILD_CONVENTIONS.md §5`), since these are hand-written questions.
+      - **Preview** renders the same `ChefChallengeCard` the kitchen uses.
+    - **Access:** every call goes through `/api/shop-admin/chef-questions` (GET/POST/PATCH/DELETE; platform admin checked from the token's own claims via `getJwtAppMetadataUserId`, not `user.app_metadata`; service-role client). Children can't read the question table at all.
+    - **Shared styles:** the page's class strings now live in `shopAdmin.styles.ts`.
+
 ### Shop Kitchen Rules (`/words/shop/kitchen`)
 
 These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature-specs/2026-08-23-kitchen-page.md`), revised same day once a real kitchen illustration (originally `public/kitchen/full-kitchen.png`, since renamed -- see Rule 15 below) replaced the original card-grid design with clickable regions over the artwork, and child-driven shelf drag-and-drop was replaced with admin-preassigned food types — see the spec's Revision section for the full before/after:
@@ -435,9 +445,39 @@ These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature
     - **Plain vs. interactive.** A scene entry without `effects` is **plain**: new artwork and hotspots only, and cooking works exactly as on the default scene. A scene with `effects` (`KitchenSceneEffects.tsx`) is **interactive**: steam, glow and sparkles over the pot, plus a **prep step** — the child drags (or taps) each needed ingredient unit from its spot on the artwork into the pot. Prep asks for the base units one cook consumes (variant waivers applied) plus each chosen special ingredient's slot quantity (`buildKitchenScenePrepRequirements`); an ingredient with no icon is left out, so prep never blocks on something the child can't see. The stove refuses to cook until prep is complete (`prepNotDoneMessage`). Prep is local UI state only — nothing is spent until the server cook — and resets on a different recipe or special-ingredient choice and after every successful cook.
     - **Cooking in an interactive scene.** The pot bubbles for `KITCHEN_SCENE_COOK_MS` (3 s) **before** `cook_shop_recipe` is called, so the boil can still be cancelled for free. On success the finished dish is shown full-size in `KitchenDishReveal` (portal, backdrop does not close it) until the child presses **Finish**, which plays the shared celebration chime with a ring burst and confetti for `KITCHEN_DISH_REVEAL_FINISH_MS` (1.8 s); only then do the success notice and the chef's success line appear. On the default or a plain scene the cook runs immediately and the notice and line appear straight away.
     - **Cancel cooking.** A "Cancel cooking" pill shows whenever a recipe is selected, until the server cook is actually in flight (`isCookCommitting`). It clears the selection, the special-ingredient picks and the pot; a boil in progress stops and never reaches the server (each cook has a run number in `cookRunRef`, which Cancel bumps). Leaving the kitchen mid-boil counts as cancelling. Since nothing is consumed before the RPC, "every ingredient comes back" needs no ledger write.
-    - **The chef in recipe scenes.** A **plain** scene gives the chef no interaction: there is no tap area, and his start/success lines have nowhere to render. An **interactive** scene's `effects.chef` box puts a tap area and speech bubble over the painted chef: his start and success lines play there (a recipe's own lines win, Rule 18), and a tap currently picks from the same pool as the default scene — generic tap lines, served recipes' tap lines, and shelf reactions (Rule 20). **Interim:** roadmap item T (chef challenge + paw prints, spec `docs/feature-specs/2026-10-28-chef-challenge-paw-prints.md`) will replace what tapping the chef does during cooking.
+    - **The chef in recipe scenes.** A **plain** scene gives the chef no interaction: there is no tap area, and his start/success lines have nowhere to render. An **interactive** scene's `effects.chef` box puts a tap area and speech bubble over the painted chef: his start and success lines play there (a recipe's own lines win, Rule 18), and a tap picks from the same pool as the default scene (generic tap lines, served recipes' tap lines, and shelf reactions, Rule 20) **except while Chef Shrewy's challenge is on offer**, when the tap opens the challenge instead (Rule 22, roadmap item T).
     - **Styling exceptions.** Scene boxes and confetti use inline percentage/CSS-variable styles (the same documented exception as `SceneHotspot`/`KitchenChef`), and the keyframes live in `kitchenScene.animation.module.css` — the keyframes-only CSS-module exception in `0_BUILD_CONVENTIONS.md §7`.
     - Purely presentational apart from the unchanged `cook_shop_recipe` call — no new RPC, table, or route.
+
+22. **Chef challenge + the hand-wash reward (2026-10-28, roadmap item T; spec `docs/feature-specs/2026-10-28-chef-challenge-paw-prints.md`).**
+    - **When it's offered:** only on an **interactive** recipe scene (Rule 21) during **prep**: a recipe is selected and the stove hasn't been tapped, with no cook running or committing and no dish reveal up (`isChefChallengePrepPhase`, `kitchen.types.ts`). This includes the moment after every ingredient is in the pot.
+    - **Badge:** as the scene opens, `KitchenSection` asks `get_chef_challenge(recipe)` and keeps the answer with the recipe it was fetched for. On success a bobbing paw badge (`/paw-prints/shrewy_paw_badge.png`) shows over the painted chef, his tap area's ARIA becomes "Chef's challenge: tap Shrewy", and a tap opens `ChefChallengeModal` instead of a chat line. Any refusal (`not_unlocked`, `no_questions`, `cook_required`, `forbidden`) means no badge and ordinary chat-line taps.
+    - **The pop-up** (portal, dimmed backdrop; ingredient dragging pauses beneath it) renders `ChefChallengeCard`:
+      - Shrewy's sprite in the moment's pose (`CHEF_CHALLENGE_POSES`: offer `careful`, correct `celebrate`, wrong `idle`), since the scene's chef is painted and can't change pose;
+      - a speech-bubble line from `kitchenChef.strings.ts` `challenge`;
+      - the Chinese-only question with its options shuffled by the server.
+    - **Closing without answering** costs nothing: the same challenge comes back, and Shrewy says a `dismiss` line in the scene bubble (`useKitchenChef.sayLine`).
+    - **Answering** calls `answer_chef_challenge`. The correct answer is returned only after answering. Correct: the option turns green, a paw stamp thumps in, the celebration chime plays, and the count is shown. Wrong: the correct option is highlighted and Shrewy says a gentle line, with no retry. Either way, closing re-asks the server, which now answers `cook_required`, so the badge goes away until the recipe is actually cooked (the one-per-cook rule).
+    - **A failed answer call** shows a retry and never awards anything.
+    - **The hand-wash video:** once the child has redeemed `shrewy-hand-wash` (read with the kitchen's other data via `listPawPrintRedemptions`, never failing the kitchen), **every new recipe choice** in the Recipe Book (any recipe, any scene) plays `/video/shrewy_hand_wash.mp4` in `HandWashVideoModal` before the usual next step (special-ingredient picker or start line, `continueAfterRecipeChosen`).
+      - It can't be skipped (no close button, the backdrop does nothing) and plays even with reduced motion. Both are owner decisions, made for the current single-child usage.
+      - Deselecting a recipe doesn't play it.
+      - The kitchen music dips while it plays (Rule 19).
+      - It never blocks cooking: if playback hasn't started within `HAND_WASH_VIDEO_START_TIMEOUT_MS` (2 s) it retries muted once, then carries on as if it had ended. A cleaned-up effect run never finishes or mutes the live one (the same trap as the music fix).
+
+### Rewards Rules (`/words/shop/rewards`)
+
+These rules govern the Rewards page added 2026-10-28 (roadmap item T; `docs/feature-specs/2026-10-28-chef-challenge-paw-prints.md`, section B):
+
+1. `/words/shop/rewards` ("Rewards" / 奖励 in the nav, right after Shop Kitchen) is **child + platform admin only**, matching `/words/shop` and `/words/shop/kitchen`. Parents are route-blocked and don't see a child's paw prints or redemptions.
+2. **Paw prints are a separate economy:** they are never converted to or from coins or ingredients, and nothing here touches `wallets`, scheduler state or quiz data. They're earned only through Shop Kitchen Rule 22 and spent only through `redeem_paw_print_reward`.
+3. **Balances are per giver** (character). Collected = the giver's `paw_print_awards` rows; available = collected minus the summed `cost` of that giver's `paw_print_redemptions` (`computePawPrintBalance`, `src/lib/pawPrints.ts`). Only Chef Shrewy (`shrewy`) gives paw prints today; the giver column leaves room for other characters' tokens.
+4. **The stamp sheet:** a cream paper card with Shrewy's signature (`/paw-prints/shrewy_signature.png`) and a neat grid of `/paw-prints/shrewy_paw.png` stamps, one per award, oldest first, about 5 per row on a typical screen (3 on a phone, 6 on wide screens).
+   - **Spending never removes a stamp:** the oldest spent ones render faded with a "Redeemed" label (`buildPawPrintStamps`).
+   - **Tapping any stamp**, used ones included, shows when it was earned, the recipe's localized title, and the giver.
+5. **The reward list** comes from the server catalog `paw_print_rewards` (launch: `shrewy-hand-wash`, 10 paw prints), with copy per reward key in `rewards.strings.ts`.
+   - **Card states** (`resolveRewardCardState`): *Redeem*, *Need N more* (disabled), or *Unlocked*.
+   - **Redeem** asks for confirmation, then calls `redeem_paw_print_reward`. Redemption is permanent (unique per child and reward); the price is never sent by the client.
 
 ### Debug Tools Rules (`/words/debug`)
 
@@ -506,8 +546,8 @@ These rules govern the two-layer authentication and session protection system:
 ### Role-Based Routing Rules (`/words/*`)
 
 Route access enforced by client-side RouteGuard using session role:
-- **Child**: Can access review (flashcard and fill-test), all characters, quiz results, Recipe Shop, and Shop Kitchen. Cannot access add, add-paragraph, or admin (content curation restricted to parents).
-- **Parent**: Can access add, add-paragraph, admin, all, results, review, flashcard. Cannot access fill-test (learning mode restricted to children), Recipe Shop, or Shop Kitchen (the reward layer is child-facing only).
+- **Child**: Can access review (flashcard and fill-test), all characters, quiz results, Recipe Shop, Shop Kitchen, and Rewards. Cannot access add, add-paragraph, or admin (content curation restricted to parents).
+- **Parent**: Can access add, add-paragraph, admin, all, results, review, flashcard. Cannot access fill-test (learning mode restricted to children), Recipe Shop, Shop Kitchen, or Rewards (the reward layer is child-facing only).
 - **Platform admin**: Full access (isPlatformAdmin flag bypasses role restrictions).
 
 Blocked routes are hidden from navigation (not shown as disabled). Direct URL access to blocked routes redirects to `/words/review` with no error message.
@@ -529,6 +569,7 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | `/words/results` | ✅ | ✅ | ✅ |
 | `/words/shop` | ✅ | ❌ | ✅ |
 | `/words/shop/kitchen` | ✅ | ❌ | ✅ |
+| `/words/shop/rewards` | ✅ | ❌ | ✅ |
 | `/words/shop-admin` | ❌ | ❌ | ✅ |
 | `/words/review` | ✅ | ✅ | ✅ |
 | `/words/review/flashcard` | ✅ | ✅ | ✅ |
@@ -930,6 +971,71 @@ A child's spendable count of ingredient X is `count(shop_ingredient_rewards wher
 
 `location` is the one field on any shop-adjacent table in this codebase that mutates post-insert — a deliberate, called-out departure from the append-only convention everywhere else (see the feature spec's Risks section), because organizing the countertop is inherently a mutation, not an event log.
 
+**`chef_challenge_questions` table** — Chef Shrewy's curated question bank (2026-10-28, roadmap item T). Shared/global content, one recipe per question
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `recipe_id` | uuid | Foreign key → `shop_recipes.id`; cascades on delete |
+| `prompt` | text | Chinese only; 1–200 chars |
+| `correct_answer` | text | 1–60 chars |
+| `wrong_answers` | jsonb | Array of 2–3 strings (distinctness validated by the API route) |
+| `is_active` | boolean | Default `true`; inactive questions are never issued |
+| `display_order` | integer | Admin list order within a recipe |
+| `created_at` / `updated_at` | timestamptz | |
+| **RLS Guarantee** | | **Platform-admin only** (`for all`). Children and parents can't select it, so answers never reach a child's browser; the definer RPCs and the service-role admin route are the only readers |
+
+**`chef_challenge_attempts` table** — one row per challenge handed to a child (2026-10-28)
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` / `family_id` | uuid | Cascade on delete |
+| `recipe_id` | uuid (nullable) | Foreign key → `shop_recipes.id`; set null on delete |
+| `question_id` | uuid (nullable) | Foreign key → `chef_challenge_questions.id`; set null on delete |
+| `round` | integer | ≥ 1; per child and recipe, no question repeats within a round |
+| `issued_at` / `answered_at` | timestamptz | `answered_at` null = still open |
+| `chosen_answer` / `is_correct` | text / boolean | Null until answered (checked together) |
+| **Constraint** | | At most one open attempt per `(user_id, recipe_id)` (partial unique index) |
+| **RLS Guarantee** | | Family-scoped read; no client writes |
+
+**`paw_print_awards` table** — append-only ledger of earned paw prints (2026-10-28). One row per paw print
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` / `family_id` | uuid | Cascade on delete |
+| `giver` | text | Character key; check `in ('shrewy')` |
+| `recipe_id` | uuid (nullable) | Foreign key → `shop_recipes.id`; set null on delete. Shown when a stamp is tapped |
+| `attempt_id` | uuid (nullable, unique) | Foreign key → `chef_challenge_attempts.id`; set null on delete. One attempt can never award twice |
+| `earned_at` | timestamptz | Server timestamp |
+| **RLS Guarantee** | | Family-scoped read; **no client insert/update/delete** — `answer_chef_challenge` is the only writer |
+
+**`paw_print_rewards` table** — the reward catalog (2026-10-28). Seeded by migration with `shrewy-hand-wash` (giver `shrewy`, cost 10)
+
+| Field | Type | Notes |
+|---|---|---|
+| `reward_key` | text | Primary key |
+| `giver` | text | Check `in ('shrewy')` |
+| `cost` | integer | > 0 |
+| `is_active` | boolean | Default `true` |
+| `created_at` | timestamptz | |
+| **RLS Guarantee** | | Readable by any signed-in user; written by migration only (no admin UI yet) |
+
+**`paw_print_redemptions` table** — redeemed rewards (2026-10-28). Permanent
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `user_id` / `family_id` | uuid | Cascade on delete |
+| `reward_key` | text | Foreign key → `paw_print_rewards.reward_key` |
+| `giver` / `cost` | text / integer | Snapshotted from the catalog at redemption |
+| `redeemed_at` | timestamptz | |
+| **Constraint** | | Unique `(user_id, reward_key)` |
+| **RLS Guarantee** | | Family-scoped read; **no client writes** — `redeem_paw_print_reward` is the only writer |
+
+A child's paw-print balance per giver is computed (`count(awards) − sum(redemption cost)`); there is no running-balance column.
+
 **`prompt_templates` table** — configurable LLM prompt templates (Phase 2, Feature #1)
 
 | Field | Type | Notes |
@@ -1077,6 +1183,11 @@ These are the technical behaviors the system upholds. They are the factual basis
 6b. **Shop Kitchen cooking is atomic and all-or-nothing.** The `cook_shop_recipe` RPC is the only write path that may insert `shop_cooked_dishes`/`shop_ingredient_consumptions` rows; it checks countertop capacity and every required ingredient's availability before writing anything, so a shortfall never partially spends ingredients or half-inserts a dish. `organize_shop_kitchen_countertop` is the only write path that may update `shop_cooked_dishes.location`, and it only ever bulk-moves the caller's own `'countertop'` rows to `'shelf'` — there is no per-dish variant. Direct client writes to either table are blocked by RLS.
 6c. **Mystery rewards and unlocks are server-decided and atomic per call.** `reward_session_ingredients` is the only path that grants mystery ingredients: it re-derives win/non-win from the persisted session, is idempotent per `quiz_session_id`, inserts the ledger rows, and triggers any resulting unlock through `unlock_shop_recipe` in the same call. The client never supplies which ingredients are granted, whether a session was a win, or whether a food unlocks. Its helpers `shop_ingredient_available_count` and `shop_recipe_base_requirements` are read-only (`security invoker`). **Updated 2026-10-24 (item P):** the grant now happens at *claim* time — `reward_session_ingredients` only creates a stored offer, and `claim_session_ingredient_offer` (security definer, row-locked, one claim per offer) grants the child's validated pick and triggers the unlock.
 6d. **Packaged-session creation is role-scoped at the database.** Parents and the platform admin may create any session; a child may create only a character session attributed to themselves and extend/delete only their own (additive RLS policies, `verify-rls.ts` Section 12). A session's reward size is derived server-side from its saved Tested Count — never from the packaged target count or anything the client sends.
+6e. **Paw prints are server-decided and unforgeable (2026-10-28, roadmap item T).**
+    - **Issuing:** `get_chef_challenge` (security definer) checks role (child or platform admin), recipe unlock, active questions and the one-per-cook rule (after answering, `cook_required` until a newer `shop_cooked_dishes` row for that recipe). It returns the child's open challenge unchanged or issues the next question in the round, serialized per child and recipe. It never returns the correct answer.
+    - **Answering:** `answer_chef_challenge` locks the caller's own open attempt, accepts one answer, compares it (trimmed) with the stored correct answer, and on a correct answer inserts exactly one `paw_print_awards` row.
+    - **Redeeming:** `redeem_paw_print_reward` takes the price from the server catalog, serializes per child and giver, and refuses duplicates and overspending.
+    - **No other path:** no client can write any of the five tables. `scripts/verify-chef-challenge.ts` checks the flow (including the SQL rotation against `pickNextChallengeQuestion`), and `verify-rls.ts` Section 13 checks the policies.
 7. **Shop writes do not affect learning state.** Shop unlocks, spend history, coin redemptions, ingredient catalog edits, recipe metadata edits, and Shop Kitchen cooking/shelf moves never update `words`, `flashcard_contents`, scheduler fields, or quiz-session grading data.
 7a. **`quiz_sessions.coins_earned` is immutable.** Coin redemptions decrement `wallets.total_coins` only. The per-session earned totals in `quiz_sessions` are never modified by any redemption path.
 8. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists — this holds for the vocab-phrase familiarity nudge too, since `nudgeWordFamiliarity` calls the same unmodified `calculateNextState`, not a parallel scheduling path.

@@ -4,7 +4,7 @@ Roadmap item **T**. Builds on Shop Kitchen (item J), the kitchen chef (item O) a
 
 ## Status
 
-**Full design drafted 2026-10-28 and approved by the owner the same day,** including the one-per-cook rule (`cook_required`), no scheduler impact (Q4), a separate economy (Q9), and confirm-on-delete for questions. **Awaiting the explicit word "authorized"** (`AI_CONTRACT.md §2`) before any build. All owner decisions are recorded inline under Open questions. The sections from "Data and security" down turn them into the build design. **Not authorized for build yet:** this feature needs a schema migration and a new page, both `AI_CONTRACT.md §2` boundaries. Implementation starts only after the spec is approved and the owner's reply contains the word "authorized".
+**Full design drafted 2026-10-28 and approved by the owner the same day,** including the one-per-cook rule (`cook_required`), no scheduler impact (Q4), a separate economy (Q9), and confirm-on-delete for questions. **Authorized by the owner 2026-10-28 and built on dev the same day.** Migration `20261028160000` is on dev only; `verify:chef-challenge` passes 30/30 and `verify:rls` Section 13 12/12. Pending: in-browser QA by the owner, then the prod migration. Shipped behavior is recorded in `0_ARCHITECTURE.md` (Shop Kitchen Rule 22, Rewards Rules, Shop Admin Rule 13, data schema, guarantee 6e). All owner decisions are recorded inline under Open questions. The sections from "Data and security" down turn them into the build design. **Not authorized for build yet:** this feature needs a schema migration and a new page, both `AI_CONTRACT.md §2` boundaries. Implementation starts only after the spec is approved and the owner's reply contains the word "authorized".
 
 ## Problem
 

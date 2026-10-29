@@ -50,10 +50,12 @@ export const kitchenStrings = {
     wrongApplianceTemplate: "{title} needs the {appliance}, not this one.",
     missingIngredientsTemplate: "You need more {ingredients}. Check the fridge!",
     countertopFullMessage: "Your countertop is full! Click Organize to move everything to the shelf first.",
-    prepDragPrompt: "Drag each ingredient into the pot, one at a time!",
-    prepDonePrompt: "Everything's in! Now tap the stove.",
-    prepNotDoneMessage: "Put every ingredient in the pot first!",
-    prepTokenAriaTemplate: "Put {ingredient} in the pot ({count} left)",
+    prepVesselPot: "pot",
+    prepVesselBowl: "mixing bowl",
+    prepDragPrompt: "Drag each ingredient into the {vessel}, one at a time!",
+    prepDonePrompt: "Everything's in! Now tap the {appliance}.",
+    prepNotDoneMessage: "Put every ingredient in the {vessel} first!",
+    prepTokenAriaTemplate: "Put {ingredient} in the {vessel} ({count} left)",
     cookingPrompt: "Cooking... it smells so good!",
     dishRevealTitleTemplate: "{title} is ready!",
     dishRevealFinish: "Finish",
@@ -98,6 +100,21 @@ export const kitchenStrings = {
     specialDoneButton: "Done",
     specialAddPillLabel: "+ Add special ingredients",
     specialEditPillTemplate: "{count} special added — tap to edit",
+
+    // Section: Chef Challenge (spec 2026-10-28-chef-challenge-paw-prints.md)
+    challengeBadgeAria: "Chef's challenge: tap Shrewy",
+    challengeTitle: "Chef's Challenge",
+    challengeClose: "Close",
+    challengeDone: "Done",
+    challengeChecking: "Checking…",
+    challengeAnswerError: "Couldn't check your answer. Try again.",
+    challengeRetry: "Try again",
+    challengeCorrectAnswerLabel: "The answer is:",
+    challengePawCountTemplate: "Paw prints: {count}",
+    challengePawEarned: "+1 paw print",
+
+    // Section: Hand-wash reward video
+    handWashAria: "Chef Shrewy is washing his hands",
   },
   zh: {
     // Section: Page Header
@@ -145,11 +162,13 @@ export const kitchenStrings = {
     wrongApplianceTemplate: "{title}需要用{appliance},不是这个。",
     missingIngredientsTemplate: "你还需要更多{ingredients}。去冰箱看看吧!",
     countertopFullMessage: "台面满了!先点“整理”把菜都放到架子上吧。",
-    prepDragPrompt: "把食材一个一个拖进锅里吧!",
-    prepDonePrompt: "全都放进去啦!现在点一下炉灶。",
-    prepNotDoneMessage: "先把所有食材都放进锅里哦!",
-    prepTokenAriaTemplate: "把{ingredient}放进锅里(还剩{count}个)",
-    cookingPrompt: "正在煮……好香呀!",
+    prepVesselPot: "锅",
+    prepVesselBowl: "搅拌碗",
+    prepDragPrompt: "把食材一个一个拖进{vessel}里吧!",
+    prepDonePrompt: "全都放进去啦!现在点一下{appliance}。",
+    prepNotDoneMessage: "先把所有食材都放进{vessel}里哦!",
+    prepTokenAriaTemplate: "把{ingredient}放进{vessel}里(还剩{count}个)",
+    cookingPrompt: "正在烹饪……好香呀!",
     dishRevealTitleTemplate: "{title}做好啦!",
     dishRevealFinish: "完成",
     cancelCookingButton: "取消烹饪",
@@ -193,6 +212,21 @@ export const kitchenStrings = {
     specialDoneButton: "完成",
     specialAddPillLabel: "+ 添加特殊食材",
     specialEditPillTemplate: "已添加{count}种特殊食材——点击编辑",
+
+    // Section: Chef Challenge (spec 2026-10-28-chef-challenge-paw-prints.md)
+    challengeBadgeAria: "大厨挑战：点一点鼩仔",
+    challengeTitle: "大厨挑战",
+    challengeClose: "关闭",
+    challengeDone: "完成",
+    challengeChecking: "正在核对…",
+    challengeAnswerError: "没能核对你的答案，再试一次吧。",
+    challengeRetry: "再试一次",
+    challengeCorrectAnswerLabel: "正确答案是：",
+    challengePawCountTemplate: "爪印：{count}",
+    challengePawEarned: "+1 个爪印",
+
+    // Section: Hand-wash reward video
+    handWashAria: "鼩仔正在洗手",
   },
 };
 

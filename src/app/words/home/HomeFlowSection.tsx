@@ -14,7 +14,8 @@ type HomeFlowStep = {
     | "dueReview"
     | "results"
     | "recipeShop"
-    | "shopKitchen";
+    | "shopKitchen"
+    | "rewards";
   route:
     | "/words/add"
     | "/words/all"
@@ -23,7 +24,8 @@ type HomeFlowStep = {
     | "/words/review"
     | "/words/results"
     | "/words/shop"
-    | "/words/shop/kitchen";
+    | "/words/shop/kitchen"
+    | "/words/shop/rewards";
   role: "parent" | "child" | "shared";
   getPageTitle: (vm: WordsWorkspaceVM) => string;
 };
@@ -76,6 +78,12 @@ const HOME_FLOW_STEPS: HomeFlowStep[] = [
     route: "/words/shop/kitchen",
     role: "child",
     getPageTitle: (vm) => vm.str.nav.shopKitchen,
+  },
+  {
+    id: "rewards",
+    route: "/words/shop/rewards",
+    role: "child",
+    getPageTitle: (vm) => vm.str.nav.rewards,
   },
 ];
 

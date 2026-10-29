@@ -14,12 +14,13 @@ describe("Shell & Navigation Types", () => {
       "review",
       "shop",
       "shopKitchen",
+      "rewards",
       "shopAdmin",
       "admin",
       "results",
       "prompts",
     ];
-    expect(pages).toHaveLength(10);
+    expect(pages).toHaveLength(11);
   });
 
   it("should allow creating WordsSectionPage values", () => {

@@ -55,6 +55,7 @@ export default function KitchenSceneEffects({
   chefLine,
   chefTapAria,
   onChefTap,
+  chefBadge = null,
 }: {
   effects: KitchenSceneEffectsLayout;
   prepTokens: readonly KitchenScenePrepToken[];
@@ -67,6 +68,8 @@ export default function KitchenSceneEffects({
   chefLine: string | null;
   chefTapAria: string;
   onChefTap: () => void;
+  /** Chef challenge on offer (roadmap item T): a paw badge over him, and his tap opens it. */
+  chefBadge?: { iconPath: string; ariaLabel: string } | null;
 }) {
   const layerRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -256,10 +259,19 @@ export default function KitchenSceneEffects({
             {chefLine}
           </p>
         ) : null}
+        {chefBadge ? (
+          <img
+            src={chefBadge.iconPath}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className={`pointer-events-none absolute -right-3 -top-4 h-12 w-12 select-none drop-shadow-md ${styles.challengeBadge}`}
+          />
+        ) : null}
         <button
           type="button"
           onClick={onChefTap}
-          aria-label={chefTapAria}
+          aria-label={chefBadge ? chefBadge.ariaLabel : chefTapAria}
           className="pointer-events-auto absolute inset-0 rounded-xl outline-offset-2"
         />
       </div>

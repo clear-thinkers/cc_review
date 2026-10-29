@@ -3,14 +3,15 @@
  *
  * Keyframes for KitchenSceneEffects.tsx (steam, glow, sparkles, the drag-into-the-pot
  * prep step, the ~3 s cook) and KitchenDishReveal.tsx (the dish pop-in and its Finish
- * confetti). A CSS module because Tailwind can't express these keyframes
+ * confetti), and the chef challenge (the paw badge's bob and the earned stamp's
+ * thump, roadmap item T). A CSS module because Tailwind can't express these keyframes
  * (BUILD_CONVENTIONS.md §7 animation exception). Positions come from
  * per-artwork percentage anchors set inline by the component; a flying ingredient
  * reads its start/end points from --from-left/--from-top/--to-left/--to-top.
  * Everything decorative is removed under prefers-reduced-motion (a dropped
  * ingredient goes straight in, and the revealed dish just appears).
  *
- * Last updated: 2026-10-27
+ * Last updated: 2026-10-28
  */
 
 /* ─── Pot: warm glow + steam ─────────────────────────────────────────────── */
@@ -372,6 +373,41 @@
   }
 }
 
+/* ─── Chef challenge: badge bob + earned-stamp thump ─────────────────────── */
+
+.challengeBadge {
+  animation: badgeBob 1.6s ease-in-out infinite;
+}
+
+@keyframes badgeBob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-6deg);
+  }
+  50% {
+    transform: translateY(-12%) rotate(6deg);
+  }
+}
+
+.stampThump {
+  animation: stampThump 0.6s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes stampThump {
+  0% {
+    opacity: 0;
+    transform: scale(2.4) rotate(-18deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.9) rotate(4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-6deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .glow,
   .steam,
@@ -396,7 +432,9 @@
   }
 
   .progress,
-  .revealDish {
+  .revealDish,
+  .challengeBadge,
+  .stampThump {
     animation: none;
   }
 }

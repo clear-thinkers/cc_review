@@ -39,6 +39,20 @@ import type { Grade, GradeResult } from "./scheduler";
 import { canonicalizeShopIngredientKey } from "./shopIngredients";
 import { normalizeUnlockShopRecipeResult, normalizeRedeemCoinsResult } from "./shop";
 import {
+  isPawPrintGiver,
+  normalizeAnswerChefChallengeResult,
+  normalizeGetChefChallengeResult,
+  normalizeRedeemPawPrintRewardResult,
+} from "./pawPrints";
+import type {
+  AnswerChefChallengeResult,
+  GetChefChallengeResult,
+  PawPrintAward,
+  PawPrintRedemption,
+  PawPrintReward,
+  RedeemPawPrintRewardResult,
+} from "./pawPrints.types";
+import {
   normalizeShopIngredientList,
   normalizeShopLocalizedIngredients,
   normalizeShopLocalizedIntro,
@@ -1744,6 +1758,112 @@ export async function organizeShopKitchenCountertop(): Promise<OrganizeKitchenCo
   const { data, error } = await supabase.rpc("organize_shop_kitchen_countertop", {});
   if (error) throw new Error(`organizeShopKitchenCountertop: ${error.message}`);
   return normalizeOrganizeKitchenCountertopResult(data);
+}
+
+// ─── Chef Challenge + Paw Prints (roadmap item T) ─────────────────────────────
+
+/** Shrewy's challenge for this recipe: the child's open one, or a new one (rotation, unlock, and the one-per-cook rule are all enforced server-side). Never includes the correct answer. */
+export async function getChefChallenge(recipeId: string): Promise<GetChefChallengeResult> {
+  const { data, error } = await supabase.rpc("get_chef_challenge", { p_recipe_id: recipeId });
+  if (error) throw new Error(`getChefChallenge: ${error.message}`);
+  return normalizeGetChefChallengeResult(data);
+}
+
+/** Checks the child's choice once, server-side; a correct answer appends one paw print. Returns the correct answer either way so the pop-up can show it. */
+export async function answerChefChallenge(attemptId: string, answer: string): Promise<AnswerChefChallengeResult> {
+  const { data, error } = await supabase.rpc("answer_chef_challenge", {
+    p_attempt_id: attemptId,
+    p_answer: answer,
+  });
+  if (error) throw new Error(`answerChefChallenge: ${error.message}`);
+  return normalizeAnswerChefChallengeResult(data);
+}
+
+/** Spends paw prints on a catalog reward, once, for good. The price comes from the server's catalog, never the client. */
+export async function redeemPawPrintReward(rewardKey: string): Promise<RedeemPawPrintRewardResult> {
+  const { data, error } = await supabase.rpc("redeem_paw_print_reward", { p_reward_key: rewardKey });
+  if (error) throw new Error(`redeemPawPrintReward: ${error.message}`);
+  return normalizeRedeemPawPrintRewardResult(data);
+}
+
+interface SupabasePawPrintAwardRow {
+  id: string;
+  user_id: string;
+  giver: string;
+  recipe_id: string | null;
+  earned_at: string;
+}
+
+export async function listPawPrintAwards(targetUserId?: string): Promise<PawPrintAward[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paw_print_awards")
+    .select("id, user_id, giver, recipe_id, earned_at")
+    .eq("family_id", familyId)
+    .eq("user_id", targetUserId ?? userId)
+    .order("earned_at", { ascending: true });
+  if (error) throw new Error(`listPawPrintAwards: ${error.message}`);
+  return ((data ?? []) as SupabasePawPrintAwardRow[]).flatMap((row) =>
+    isPawPrintGiver(row.giver)
+      ? [{ id: row.id, userId: row.user_id, giver: row.giver, recipeId: row.recipe_id, earnedAt: new Date(row.earned_at).getTime() }]
+      : []
+  );
+}
+
+interface SupabasePawPrintRedemptionRow {
+  id: string;
+  user_id: string;
+  reward_key: string;
+  giver: string;
+  cost: number;
+  redeemed_at: string;
+}
+
+export async function listPawPrintRedemptions(targetUserId?: string): Promise<PawPrintRedemption[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paw_print_redemptions")
+    .select("id, user_id, reward_key, giver, cost, redeemed_at")
+    .eq("family_id", familyId)
+    .eq("user_id", targetUserId ?? userId)
+    .order("redeemed_at", { ascending: true });
+  if (error) throw new Error(`listPawPrintRedemptions: ${error.message}`);
+  return ((data ?? []) as SupabasePawPrintRedemptionRow[]).flatMap((row) =>
+    isPawPrintGiver(row.giver)
+      ? [
+          {
+            id: row.id,
+            userId: row.user_id,
+            rewardKey: row.reward_key,
+            giver: row.giver,
+            cost: row.cost,
+            redeemedAt: new Date(row.redeemed_at).getTime(),
+          },
+        ]
+      : []
+  );
+}
+
+interface SupabasePawPrintRewardRow {
+  reward_key: string;
+  giver: string;
+  cost: number;
+  is_active: boolean;
+}
+
+/** The active reward catalog (shared; seeded by migration). */
+export async function listPawPrintRewards(): Promise<PawPrintReward[]> {
+  const { data, error } = await supabase
+    .from("paw_print_rewards")
+    .select("reward_key, giver, cost, is_active")
+    .eq("is_active", true)
+    .order("cost", { ascending: true });
+  if (error) throw new Error(`listPawPrintRewards: ${error.message}`);
+  return ((data ?? []) as SupabasePawPrintRewardRow[]).flatMap((row) =>
+    isPawPrintGiver(row.giver)
+      ? [{ rewardKey: row.reward_key, giver: row.giver, cost: row.cost, isActive: row.is_active }]
+      : []
+  );
 }
 
 // ─── Coin Redemptions ────────────────────────────────────────────────────────
