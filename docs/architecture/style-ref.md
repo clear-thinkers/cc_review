@@ -1,6 +1,6 @@
 # Button Style Reference - HanziQuest (`cc_review`)
 
-_Last updated: 2026-03-27. Ground truth after semantic workspace token rollout, results button migration, toggle-token extraction, and flashcard reveal-button remapping._
+_Last updated: 2026-10-29. Adds the Rewards page, Shop Admin's chef-challenge section and shared `shopAdmin.styles.ts`, the kitchen music toggle and challenge pop-up, and the Debug bulk add. Previously 2026-03-27: semantic workspace token rollout, results button migration, toggle-token extraction, and flashcard reveal-button remapping._
 
 ## Base Patterns
 
@@ -28,6 +28,7 @@ _Last updated: 2026-03-27. Ground truth after semantic workspace token rollout, 
 - `src/app/words/shop-admin/ShopAdminSection.tsx` now reads its gold/cream palette from scoped CSS custom properties in `src/app/globals.css` under `.shop-admin-pane`.
 - Shop Admin cards, text, inputs, and helper surfaces remain intentionally distinct from the workspace action palette.
 - Shop Admin buttons now use the shared workspace semantic button classes chosen by intent: `btn-primary`, `btn-secondary`, `btn-caution`, `btn-destructive`, and `btn-nav`.
+- Since 2026-10-29 the page's class strings (`PANEL`, `LABEL`, `TOGGLE_BUTTON`, `INPUT`, `SHOP_ADMIN_BUTTON_*` …) live in `src/app/words/shop-admin/shopAdmin.styles.ts`, shared by `ShopAdminSection.tsx` and `ChefChallengeQuestionsSection.tsx`. Import them; don't redefine them.
 
 ## Semantic Tokens
 
@@ -76,6 +77,12 @@ _Last updated: 2026-03-27. Ground truth after semantic workspace token rollout, 
 | Debug edit/save/cancel rows | compact buttons using `btn-primary`, `btn-secondary`, `btn-neutral` | `src/app/words/debug/DebugSection.tsx` |
 | Pagination / viewer controls | compact buttons using `btn-nav` | `src/app/words/all/AllWordsSection.tsx`, `src/app/words/admin/AdminSection.tsx`, `src/app/words/review/fill-test/FillTestReviewSection.tsx`, `src/app/words/prompts/PromptsSection.tsx` |
 | Shop Admin add/save/reset/toggle actions | `btn-secondary`, `btn-primary`, `btn-caution`, `btn-nav` | `src/app/words/shop-admin/ShopAdminSection.tsx` |
+| Shop Admin chef challenges: add / edit / save / preview + activate toggle | `SHOP_ADMIN_BUTTON_SECONDARY`, `SHOP_ADMIN_BUTTON_PRIMARY`, `TOGGLE_BUTTON` (`btn-nav`) | `src/app/words/shop-admin/ChefChallengeQuestionsSection.tsx` |
+| Rewards redeem / confirm | `btn-primary rounded-full border-2 px-4 py-1.5 text-sm font-semibold disabled:opacity-50` | `src/app/words/shop/rewards/RewardsSection.tsx` |
+| Rewards confirm cancel | `btn-neutral rounded-full border-2 px-4 py-2 text-sm font-semibold` | `src/app/words/shop/rewards/RewardsSection.tsx` |
+| Rewards stamp detail close | `btn-nav w-full rounded-full border-2 px-4 py-2 font-semibold` | `src/app/words/shop/rewards/RewardsSection.tsx` |
+| Kitchen music on/off | `btn-nav inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1 text-sm font-semibold hover:bg-[#fff1cd]` | `src/app/words/shop/kitchen/KitchenSection.tsx` |
+| Debug "add to every shown ingredient" | `rounded border-2 px-3 py-1 text-sm font-medium btn-primary disabled:opacity-50` | `src/app/words/debug/DebugSection.tsx` |
 
 ## Destructive Buttons
 
@@ -91,6 +98,7 @@ _Last updated: 2026-03-27. Ground truth after semantic workspace token rollout, 
 | Results clear history | `btn-destructive rounded border-2 px-3 py-1 text-[11px] font-medium leading-none` | `src/app/words/results/SessionHistoryTable.tsx` |
 | Results confirm delete | `btn-destructive rounded-md border px-3 py-2 text-sm font-medium` | `src/app/words/results/ClearHistoryDialog.tsx` |
 | Shop Admin remove/delete actions | `btn-destructive` | `src/app/words/shop-admin/ShopAdminSection.tsx` |
+| Shop Admin chef-challenge question delete (asks for confirmation) | `SHOP_ADMIN_BUTTON_DESTRUCTIVE` | `src/app/words/shop-admin/ChefChallengeQuestionsSection.tsx` |
 
 ## Toggle States
 
@@ -144,3 +152,4 @@ _Last updated: 2026-03-27. Ground truth after semantic workspace token rollout, 
 - `src/app/words/review/fill-test/FillTestReviewSection.tsx` still uses custom `quiz-phrase-pill` and sentence-slot visuals that do not fit the semantic button system.
 - `src/app/words/shop/ShopSection.tsx` still uses a separate shop skin and bespoke button sizing. That visual separation is intentional and should be cleaned up through shop-specific variables, not by forcing the admin token set onto the shop.
 - `src/app/words/shared/WordsShell.tsx` still contains a hardcoded English fallback: `vm.str.nav.logout ?? 'Logout'`.
+- The kitchen's pop-ups (dish reveal Finish, chef challenge Next/Done, the challenge's answer options) and the Rewards page's cards use the kitchen's own gold/cream skin (`#dcc38a` / `#fffaf0` / `#f7ead0`), not the semantic tokens. This is intentional, like `ShopSection.tsx`'s shop skin; secondary actions inside them (Close, Cancel, Retry) still use `btn-nav` / `btn-neutral` / `btn-caution`.

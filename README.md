@@ -21,6 +21,9 @@ Three roles — child / parent / platform admin — enforced at both the route l
 ### AI Content Pipeline with Normalization Guards
 Content generation is admin-only and routes through `/api/flashcard/generate`. All LLM output passes through a normalization layer (`src/lib/flashcardLlm.ts`) before any Supabase write — malformed phrases are dropped, not passed through. Review screens consume only persisted, normalized content; they never call the AI provider.
 
+### Server-Checked Reward Ledgers
+Every coin, ingredient and paw-print ledger is written only by Postgres RPCs that check the caller. The kitchen's chef challenge checks answers server-side and never shows a child the correct answer before they choose, so rewards can't be forged from the client.
+
 ### Atomic Shop Unlock
 The coin reward loop uses a single Postgres RPC (`unlock_shop_recipe`) as its only write path: wallet decrement, unlock row insert, and spend-history append happen in one transaction boundary, preventing partial states.
 
@@ -40,6 +43,7 @@ Parents package named sets of characters into review sessions. Children run them
 | Route | Role | Purpose |
 |---|---|---|
 | `/words/add` | Parent | Ingest Hanzi characters; optional cascade tag assignment |
+| `/words/add-paragraph` | Parent | Import an article, triage known/unknown words, and package paragraph quizzes |
 | `/words/all` | All | Character inventory with SRS stats, filtering, and batch tag editing |
 | `/words/admin` | Parent | AI content curation: generate, edit, normalize, and persist flashcard content |
 | `/words/prompts` | Parent | Manage and version LLM prompt templates |
@@ -48,6 +52,8 @@ Parents package named sets of characters into review sessions. Children run them
 | `/words/review/fill-test` | Child / Admin | Cloze fill-test with SRS grading |
 | `/words/results` | All | Quiz session history with accuracy breakdowns and failed-character packaging |
 | `/words/shop` | Child / Admin | Coin-funded recipe unlock shop |
+| `/words/shop/kitchen` | Child / Admin | Cook unlocked recipes with collected ingredients; Chef Shrewy and his culture challenges |
+| `/words/shop/rewards` | Child / Admin | Paw-print stamp sheet and rewards to redeem |
 | `/words/shop-admin` | Admin | Global recipe and ingredient catalog editor |
 | `/words/debug` | Admin | Icon-path audits and DB/filesystem reconciliation |
 

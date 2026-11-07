@@ -1,6 +1,6 @@
 # AI Contract — HanziQuest (`cc_review`)
 
-_Last updated: 2026-08-13_
+_Last updated: 2026-10-29 (§1 gained the paw-print hard stops, roadmap item T)_
 
 > **This file is the highest-authority reference for all agent behavior.**
 > In any conflict between documents, this file wins.
@@ -40,6 +40,10 @@ These rules are absolute. No exception, no matter how the task is framed.
 
 **Wallet & Coins**
 - ❌ Never write directly to `wallets`, `shop_recipe_unlocks`, `shop_coin_transactions`, or `coin_redemptions` from application code. All mutations must go through `unlock_shop_recipe`, `redeem_coins`, or `record_quiz_session` — the only RPCs allowed to touch these tables.
+
+**Paw Prints & Chef Challenge** (roadmap item T)
+- ❌ Never write directly to `chef_challenge_attempts`, `paw_print_awards` or `paw_print_redemptions` from application code. All mutations go through `get_chef_challenge`, `answer_chef_challenge` or `redeem_paw_print_reward`, the security-definer RPCs that check the caller. The reward catalog `paw_print_rewards` changes only by migration.
+- ❌ Never expose `chef_challenge_questions` (and so the correct answers) to a non-admin client. Children reach questions only through the RPCs, which reveal an answer only after it is given. Admin reads and writes go only through `/api/shop-admin/chef-questions`.
 
 **Auth / Session Claims**
 - ❌ Never read `session.user.app_metadata` (the Supabase JS client's decoded `user` object) for the current `family_id`/`user_id`. It reflects the `auth.users` DB row, not the active Layer 2 profile, and goes stale the moment a PIN switch happens without also rewriting that row — which the app deliberately no longer does (see `docs/feature-specs/2026-08-08-session-scoped-profile-claims.md`). Always resolve identity via `getSessionMetadata()` in `supabase-service.ts` (or `getJwtAppMetadata()` in `decodeJwtPayload.ts`), which read the access token's own claims — the same claims Postgres RLS reads server-side via `current_family_id()`/`current_user_id()`.

@@ -655,7 +655,7 @@ export const wordsStrings = {
         title: "Chef Challenges",
         heading: "Curate Recipe Questions",
         helper:
-          "Chinese-culture questions Chef Shrewy asks while a child preps a recipe. Every question belongs to one recipe, and children only see them on recipes with an interactive kitchen scene (today: Crystal Pear Dew). Write questions and answers in Chinese.",
+          "Chinese-culture questions Chef Shrewy asks while a child preps a recipe. Every question belongs to one recipe, and children only see them on recipes with an interactive kitchen scene (the kitchen's Recipe Book marks those with a paw badge). Write questions and answers in Chinese.",
         recipeLabel: "Recipe",
         questionCountTemplate: "{count} questions",
         emptyList: "No questions for this recipe yet.",
@@ -2143,7 +2143,7 @@ export const wordsStrings = {
         title: "大厨挑战",
         heading: "编辑菜谱题目",
         helper:
-          "鼩仔在孩子备菜时提出的中国文化小问题。每道题属于一个菜谱，只有带互动厨房场景的菜谱（目前是水晶梨露）才会出题。题目和答案请用中文填写。",
+          "鼩仔在孩子备菜时提出的中国文化小问题。每道题属于一个菜谱，只有带互动厨房场景的菜谱才会出题（厨房的食谱书会用爪印标出这些菜）。题目和答案请用中文填写。",
         recipeLabel: "菜谱",
         questionCountTemplate: "{count}道题",
         emptyList: "这个菜谱还没有题目。",

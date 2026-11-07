@@ -1,6 +1,6 @@
 # Build Conventions — HanziQuest (`cc_review`)
 
-_Last updated: 2026-10-28 (§10 gained `scripts/verify-chef-challenge.ts`; `verify-rls.ts` gained Section 13, known state refreshed — item T). Previously: 2026-10-24 (§10 gained `scripts/verify-mystery-foods.ts`; `verify-rls.ts` known state refreshed; item P added Section 12 and reshaped Section 9)_
+_Last updated: 2026-10-29 (§7 lists the kitchen's keyframes-only CSS module; §10 gained `scripts/seed-chef-challenge-questions.ts`, and `verify-chef-challenge.ts` is at 38/38). Previously: 2026-10-28 (§10 gained `scripts/verify-chef-challenge.ts`; `verify-rls.ts` gained Section 13, known state refreshed — item T). Previously: 2026-10-24 (§10 gained `scripts/verify-mystery-foods.ts`; `verify-rls.ts` known state refreshed; item P added Section 12 and reshaped Section 9)_
 
 For authority hierarchy, hard stops, doc update policy, and fix log policy — see `AI_CONTRACT.md`.
 For where to file new documents — see `0_ARCHITECTURE.md §6`.
@@ -209,6 +209,7 @@ Every new feature must have tests before it is considered complete.
 **CSS module exceptions (do not create new ones):**
 - `results/results.module.css` — predates Tailwind-only rule; all new styling for `results/` must extend this file, not mix with Tailwind.
 - `review/fill-test/coins.animation.module.css` — animation keyframes only. A new CSS module is only permitted for keyframe animations Tailwind cannot express; document the reason at the top of the file.
+- `shop/kitchen/kitchenScene.animation.module.css` — keyframes only, under that same rule: the recipe scenes' steam, glow, sparkles, prep and boil (Shop Kitchen Rule 21), the dish reveal's confetti, and the chef challenge's badge bob and stamp thump (Rule 22). Everything decorative in it is removed under `prefers-reduced-motion`.
 
 **Pinyin (ruby) alignment:** render as per-character units (Hanzi + pinyin token), not a full pinyin line above a full Hanzi line. Map pinyin tokens only to Hanzi code points; skip punctuation and non-Hanzi characters. When token count mismatches, render Hanzi without pinyin — no placeholder. Remove from DOM when pinyin is hidden (not CSS `visibility: hidden`). Reuse `renderPhraseWithPinyin`/`renderSentenceWithPinyin`/`tokenizePinyinSyllables` from `words.shared.utils.tsx` — do not hand-roll this DOM pattern again; `FlashcardCard.tsx`, Content Admin's phrase view, and `FillTestReviewSection.tsx`'s correct-answer reveal all call the same helpers.
 
