@@ -427,6 +427,47 @@ export const RECIPE_KITCHEN_SCENES: Readonly<Record<string, KitchenSceneLayout>>
       },
     },
   },
+  "tibetan-sweet-tea": {
+    imagePath: "/kitchen/kitchen_tibetan-sweet-tea.jpg",
+    aspectRatio: "1376 / 768",
+    showChef: false,
+    hotspots: {
+      fridge: { left: "7%", top: "32%", width: "18%", height: "58%" },
+      book: { left: "47.5%", top: "19.5%", width: "9%", height: "9%" },
+      // Stops short of the chef, who stands right up against the stove.
+      stovetop: { left: "33.5%", top: "37%", width: "13.5%", height: "8%" },
+      oven: { left: "37.5%", top: "51%", width: "9%", height: "14%" },
+      shelf: { left: "78.5%", top: "18%", width: "10.5%", height: "48%" },
+    },
+    effects: {
+      // A stove brew, so the "pot" is the copper kettle on the burner.
+      pot: { left: "38.5%", top: "28%", width: "7.5%", height: "12%" },
+      vessel: "pot",
+      sparkles: [
+        { left: "40%", top: "25%" },
+        { left: "45%", top: "21%" },
+        { left: "36%", top: "30%" },
+        { left: "66%", top: "46%" },
+        { left: "72%", top: "50%" },
+      ],
+      // Sweet tea's order: black tea, yak milk, osmanthus honey, glacier water.
+      ingredientOrigins: [
+        { left: "53.5%", top: "31%" }, // tea canister by the book
+        { left: "54.5%", top: "61%" }, // milk pitcher on the cutting board
+        { left: "62%", top: "68%" }, // little amber dish
+        { left: "67.5%", top: "54%" }, // glacier-water flask
+      ],
+      // The bubble opens leftward: to the right it would hide the flask and honey tokens.
+      chef: {
+        left: "47.5%",
+        top: "42.5%",
+        width: "10%",
+        height: "15%",
+        bubbleAlign: "left",
+        bubbleBesideOnWide: "left",
+      },
+    },
+  },
 };
 
 export function resolveKitchenScene(shelfDishCount: number, selectedRecipeSlug: string | null): KitchenSceneLayout {
