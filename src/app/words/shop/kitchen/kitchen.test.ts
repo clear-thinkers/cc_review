@@ -353,6 +353,14 @@ describe("resolveKitchenScene", () => {
     expect(scene.effects?.ingredientOrigins).toHaveLength(4);
   });
 
+  it("gives Popcorn Chicken its own stove scene, cooked in the chef's pan", () => {
+    const scene = resolveKitchenScene(0, "popcorn-chicken");
+    expect(scene.imagePath).toBe("/kitchen/kitchen_popcorn-chicken.jpg");
+    expect(scene.showChef).toBe(false);
+    expect(scene.effects?.vessel).toBe("pan");
+    expect(scene.effects?.ingredientOrigins).toHaveLength(4);
+  });
+
   it("keeps every scene's painted-chef tap area clear of its hotspots", () => {
     const box = (b: { left: string; top: string; width: string; height: string }) => {
       const [left, top, width, height] = [b.left, b.top, b.width, b.height].map(parseFloat);

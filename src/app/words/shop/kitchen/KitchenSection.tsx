@@ -884,8 +884,10 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
     ? buildKitchenScenePrepTokens(scenePrepRequirements, selectedKitchenScene.effects.ingredientOrigins, scenePrepAdded)
     : [];
   const isScenePrepPending = scenePrepRequirements.length > 0 && !isKitchenScenePrepComplete(scenePrepRequirements, scenePrepAdded);
-  // Each scene names its own vessel (pot, mixing bowl) and the recipe's own appliance.
-  const sceneVesselLabel = selectedKitchenScene.effects?.vessel === "bowl" ? str.prepVesselBowl : str.prepVesselPot;
+  // Each scene names its own vessel (pot, mixing bowl, pan) and the recipe's own appliance.
+  const sceneVessel = selectedKitchenScene.effects?.vessel;
+  const sceneVesselLabel =
+    sceneVessel === "bowl" ? str.prepVesselBowl : sceneVessel === "pan" ? str.prepVesselPan : str.prepVesselPot;
   const sceneApplianceLabel = resolveApplianceLabel(selectedRecipe?.cookMethod ?? "stove", str);
 
   // Chef challenge (roadmap item T): offered only on an interactive scene during prep.

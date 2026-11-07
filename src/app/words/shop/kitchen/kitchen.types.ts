@@ -206,7 +206,7 @@ export type KitchenScenePoint = { left: string; top: string };
 export type KitchenSceneEffectsLayout = {
   pot: KitchenSceneHotspot;
   /** What the painted `pot` actually is, so the prep prompts name the right thing. */
-  vessel: "pot" | "bowl";
+  vessel: "pot" | "bowl" | "pan";
   sparkles: readonly KitchenScenePoint[];
   /** Where each prep token sits, in requirement order; cycled if a recipe needs more kinds. */
   ingredientOrigins: readonly KitchenScenePoint[];
@@ -463,6 +463,48 @@ export const RECIPE_KITCHEN_SCENES: Readonly<Record<string, KitchenSceneLayout>>
         top: "42.5%",
         width: "10%",
         height: "15%",
+        bubbleAlign: "left",
+        bubbleBesideOnWide: "left",
+      },
+    },
+  },
+  "popcorn-chicken": {
+    imagePath: "/kitchen/kitchen_popcorn-chicken.jpg",
+    aspectRatio: "1024 / 1024",
+    showChef: false,
+    hotspots: {
+      fridge: { left: "5%", top: "39%", width: "19.5%", height: "34%" },
+      book: { left: "48%", top: "32%", width: "6%", height: "7.5%" },
+      // The chef stands on a stool in front of the stove, so the stovetop and
+      // oven boxes cover only what shows above and beside him.
+      stovetop: { left: "44%", top: "40%", width: "6%", height: "6%" },
+      oven: { left: "46.5%", top: "47%", width: "3.5%", height: "10%" },
+      shelf: { left: "80%", top: "30%", width: "15%", height: "35%" },
+    },
+    effects: {
+      // A stir-fry, so the "pot" is the frying pan the chef holds up.
+      pot: { left: "33%", top: "43%", width: "7%", height: "5.5%" },
+      vessel: "pan",
+      sparkles: [
+        { left: "34%", top: "40%" },
+        { left: "38%", top: "38%" },
+        { left: "42%", top: "37%" },
+        { left: "49%", top: "41%" },
+        { left: "55%", top: "37%" },
+      ],
+      // Popcorn chicken's order: chicken thigh, basil leaves, salt, soy sauce.
+      ingredientOrigins: [
+        { left: "68%", top: "55%" }, // plate of chicken on the island
+        { left: "60%", top: "58.5%" }, // basil bowl
+        { left: "51.5%", top: "59%" }, // salt jar
+        { left: "76%", top: "51.5%" }, // soy sauce bottle
+      ],
+      // Below the pan; the bubble opens leftward, over the ladder, clear of the tokens.
+      chef: {
+        left: "36.5%",
+        top: "48.5%",
+        width: "9.5%",
+        height: "12.5%",
         bubbleAlign: "left",
         bubbleBesideOnWide: "left",
       },
