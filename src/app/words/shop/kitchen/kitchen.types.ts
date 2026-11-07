@@ -510,6 +510,45 @@ export const RECIPE_KITCHEN_SCENES: Readonly<Record<string, KitchenSceneLayout>>
       },
     },
   },
+  bubble_tea: {
+    imagePath: "/kitchen/kitchen_bubble_tea.jpg",
+    aspectRatio: "1376 / 768",
+    showChef: false,
+    hotspots: {
+      fridge: { left: "10%", top: "33%", width: "17%", height: "55%" },
+      book: { left: "48%", top: "21.5%", width: "8.5%", height: "14%" },
+      stovetop: { left: "34.5%", top: "39.5%", width: "14.5%", height: "11%" },
+      // Stops at 48.5% so the tapioca token beside it stays clear.
+      oven: { left: "38.5%", top: "52%", width: "10%", height: "15%" },
+      shelf: { left: "76%", top: "18%", width: "15%", height: "50%" },
+    },
+    effects: {
+      // A stove brew, so the "pot" is the saucepan of milk tea on the front burner.
+      pot: { left: "40.5%", top: "33%", width: "5.5%", height: "9%" },
+      vessel: "pot",
+      sparkles: [
+        { left: "40%", top: "27.5%" },
+        { left: "44.5%", top: "29.5%" },
+        { left: "47%", top: "32.5%" },
+        { left: "52.5%", top: "37.5%" },
+        { left: "57%", top: "27%" },
+      ],
+      // Bubble tea's order: milk, tapioca pearls.
+      ingredientOrigins: [
+        { left: "59%", top: "35%" }, // milk jar between the book and the sink
+        { left: "52.5%", top: "63%" }, // tapioca sack on the island
+      ],
+      // The bubble opens rightward, over the lid and shelf; to the left it would hide the tapioca token.
+      chef: {
+        left: "61%",
+        top: "54%",
+        width: "10.5%",
+        height: "34%",
+        bubbleAlign: "right",
+        bubbleBesideOnWide: "right",
+      },
+    },
+  },
 };
 
 export function resolveKitchenScene(shelfDishCount: number, selectedRecipeSlug: string | null): KitchenSceneLayout {

@@ -361,6 +361,14 @@ describe("resolveKitchenScene", () => {
     expect(scene.effects?.ingredientOrigins).toHaveLength(4);
   });
 
+  it("gives Bubble Tea its own stove scene with a spot for each of its two ingredients", () => {
+    const scene = resolveKitchenScene(0, "bubble_tea");
+    expect(scene.imagePath).toBe("/kitchen/kitchen_bubble_tea.jpg");
+    expect(scene.showChef).toBe(false);
+    expect(scene.effects?.vessel).toBe("pot");
+    expect(scene.effects?.ingredientOrigins).toHaveLength(2);
+  });
+
   it("keeps every scene's painted-chef tap area clear of its hotspots", () => {
     const box = (b: { left: string; top: string; width: string; height: string }) => {
       const [left, top, width, height] = [b.left, b.top, b.width, b.height].map(parseFloat);
