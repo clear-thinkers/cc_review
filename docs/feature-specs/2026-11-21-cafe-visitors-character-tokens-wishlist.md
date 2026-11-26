@@ -4,7 +4,11 @@ Proposed roadmap item **U**. Builds on Shop Kitchen (item J), the chef challenge
 
 ## Status
 
-**Authorized by the owner 2026-11-21; roadmap item U.** Covers the `AI_CONTRACT.md §2` boundaries this feature crosses: new routes, tables, RPCs, RLS policies and the `shop_cooked_dishes.location` change. Dev only until the owner approves prod.
+## Status: Shipped 2026-11-26
+
+On dev and prod; owner QA passed on prod 2026-11-26; code pushed to main in commit `884a1b7`; Li Bai seeded on both. See the roadmap's item U row for the checks that ran.
+
+**Authorized by the owner 2026-11-21; roadmap item U.** Covers the `AI_CONTRACT.md §2` boundaries this feature crosses: new routes, tables, RPCs, RLS policies and the `shop_cooked_dishes.location` change.
 
 **Build state (2026-11-21):** code and migration `20261121120000` are written and **not deployed**. As built, where it differs from the draft below: no `/api` admin route (platform-admin RLS plus `save_shop_character_order`); the parent page is `/words/wishlist`; orders live in `shop_character_orders` + `shop_character_order_items`; `scripts/verify-cafe.ts` was **not written**: the RPC and RLS scenarios ran once on a throwaway local Postgres over a stub of the existing tables (60/60), which doesn't replace a run against the real dev database. `0_ARCHITECTURE.md` (Café Rules, Wishlist Rewards Rules) is authoritative.
 
