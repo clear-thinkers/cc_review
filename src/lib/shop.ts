@@ -777,7 +777,7 @@ type CookShopRecipeRpcResult = {
 };
 
 function normalizeShopDishLocation(raw: unknown): ShopDishLocation {
-  return raw === "shelf" ? "shelf" : "countertop";
+  return raw === "shelf" || raw === "sold" ? raw : "countertop";
 }
 
 /** A dish's recorded special_ingredient_keys (jsonb array of ingredient keys) -- from either a cook_shop_recipe RPC response or a shop_cooked_dishes row. Non-string entries are dropped rather than erroring. */

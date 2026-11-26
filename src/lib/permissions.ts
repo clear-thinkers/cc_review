@@ -11,7 +11,9 @@ export type ProtectedRoute =
   | '/words/results'
   | '/words/shop'
   | '/words/shop/kitchen'
+  | '/words/shop/cafe'
   | '/words/shop/rewards'
+  | '/words/wishlist'
   | '/words/review'
   | '/words/review/flashcard'
   | '/words/review/fill-test'
@@ -38,6 +40,7 @@ export function canAccessRoute(
     case '/words/add-paragraph':
     case '/words/admin':
     case '/words/prompts':
+    case '/words/wishlist':
       return role === 'parent';
 
     case '/words/shop-admin':
@@ -46,6 +49,7 @@ export function canAccessRoute(
     case '/words/review/fill-test':
     case '/words/shop':
     case '/words/shop/kitchen':
+    case '/words/shop/cafe':
     case '/words/shop/rewards':
       return role === 'child';
     

@@ -47,5 +47,11 @@ describe("canAccessRoute", () => {
     expect(canAccessRoute("/words/shop/rewards", "child", false)).toBe(true);
     expect(canAccessRoute("/words/shop/rewards", "parent", false)).toBe(false);
     expect(canAccessRoute("/words/shop/rewards", "parent", true)).toBe(true);
+    expect(canAccessRoute("/words/shop/cafe", "child", false)).toBe(true);
+    expect(canAccessRoute("/words/shop/cafe", "parent", false)).toBe(false);
+    expect(canAccessRoute("/words/shop/cafe", "parent", true)).toBe(true);
+    expect(canAccessRoute("/words/wishlist", "parent", false)).toBe(true);
+    expect(canAccessRoute("/words/wishlist", "child", false)).toBe(false);
+    expect(canAccessRoute("/words/wishlist", "child", true)).toBe(true);
   });
 });

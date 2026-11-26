@@ -39,6 +39,38 @@ import type { Grade, GradeResult } from "./scheduler";
 import { canonicalizeShopIngredientKey } from "./shopIngredients";
 import { normalizeUnlockShopRecipeResult, normalizeRedeemCoinsResult } from "./shop";
 import {
+  isCafeVisitFrequency,
+  normalizeCafeOrderItems,
+  normalizeDismissCafeVisitResult,
+  normalizeGetCafeVisitResult,
+  normalizeLocalizedText,
+  normalizePriceSnapshot,
+  normalizeRedeemWishlistRewardResult,
+  normalizeSaveCharacterOrderResult,
+  normalizeSaveWishlistRewardResult,
+  normalizeServeCafeVisitResult,
+} from "./characterTokens";
+import type {
+  CafeLineMoment,
+  CafeOrderItem,
+  CafeSpritePose,
+  CatalogTokenSpend,
+  CharacterTokenAward,
+  CharacterTokenContent,
+  DismissCafeVisitResult,
+  GetCafeVisitResult,
+  LocalizedText,
+  RedeemWishlistRewardResult,
+  SaveCharacterOrderResult,
+  SaveWishlistRewardResult,
+  ServeCafeVisitResult,
+  ShopCharacter,
+  ShopCharacterOrder,
+  WishlistDraft,
+  WishlistRedemption,
+  WishlistReward,
+} from "./characterTokens.types";
+import {
   isPawPrintGiver,
   normalizeAnswerChefChallengeResult,
   normalizeGetChefChallengeResult,
@@ -1720,7 +1752,7 @@ function toShopCookedDish(row: SupabaseShopCookedDishRow): ShopCookedDish {
     id: row.id,
     userId: row.user_id,
     recipeId: row.recipe_id,
-    location: row.location === "shelf" ? "shelf" : "countertop",
+    location: row.location === "shelf" || row.location === "sold" ? row.location : "countertop",
     specialIngredientKeys: normalizeShopSpecialIngredientKeys(row.special_ingredient_keys),
     cookedAt: new Date(row.cooked_at).getTime(),
   };
@@ -1871,6 +1903,400 @@ export async function listPawPrintRewards(): Promise<PawPrintReward[]> {
       ? [{ rewardKey: row.reward_key, giver: row.giver, cost: row.cost, isActive: row.is_active }]
       : []
   );
+}
+
+// ─── Café, Character Tokens + Wishlist (roadmap item U) ───────────────────────
+
+const CAFE_SPRITE_POSES: readonly CafeSpritePose[] = ["waiting", "delighted"];
+const CAFE_LINE_MOMENTS: readonly CafeLineMoment[] = ["order", "served", "dismissed"];
+
+interface SupabaseShopCharacterRow {
+  character_key: string;
+  name_i18n: unknown;
+  intro_i18n: unknown;
+  token_name_i18n: unknown;
+  token_icon_path: string | null;
+  sprite_paths: unknown;
+  lines_i18n: unknown;
+  visits_cafe: boolean;
+  visit_frequency: string | null;
+  visit_limit: number | null;
+  is_active: boolean;
+  display_order: number;
+}
+
+function toShopCharacter(row: SupabaseShopCharacterRow): ShopCharacter {
+  const sprites = (row.sprite_paths && typeof row.sprite_paths === "object" ? row.sprite_paths : {}) as Record<string, unknown>;
+  const rawLines = (row.lines_i18n && typeof row.lines_i18n === "object" ? row.lines_i18n : {}) as Record<string, unknown>;
+  const spritePaths: ShopCharacter["spritePaths"] = {};
+  for (const pose of CAFE_SPRITE_POSES) {
+    const path = sprites[pose];
+    if (typeof path === "string" && path.trim() !== "") spritePaths[pose] = path;
+  }
+  const lines: ShopCharacter["lines"] = {};
+  for (const moment of CAFE_LINE_MOMENTS) {
+    const entries = rawLines[moment];
+    if (Array.isArray(entries)) {
+      lines[moment] = entries.map(normalizeLocalizedText).filter((line: LocalizedText) => line.en !== "" || line.zh !== "");
+    }
+  }
+  return {
+    key: row.character_key,
+    name: normalizeLocalizedText(row.name_i18n),
+    intro: normalizeLocalizedText(row.intro_i18n),
+    tokenName: normalizeLocalizedText(row.token_name_i18n),
+    tokenIconPath: row.token_icon_path,
+    spritePaths,
+    lines,
+    visitsCafe: row.visits_cafe,
+    visitFrequency: isCafeVisitFrequency(row.visit_frequency) ? row.visit_frequency : "unlimited",
+    visitLimit: isCafeVisitFrequency(row.visit_frequency) && row.visit_frequency !== "unlimited" ? row.visit_limit : null,
+    isActive: row.is_active,
+    displayOrder: row.display_order,
+  };
+}
+
+export async function listShopCharacters(): Promise<ShopCharacter[]> {
+  const { data, error } = await supabase
+    .from("shop_characters")
+    .select("character_key, name_i18n, intro_i18n, token_name_i18n, token_icon_path, sprite_paths, lines_i18n, visits_cafe, visit_frequency, visit_limit, is_active, display_order")
+    .order("display_order", { ascending: true });
+  if (error) throw new Error("listShopCharacters: " + error.message);
+  return ((data ?? []) as SupabaseShopCharacterRow[]).map(toShopCharacter);
+}
+
+/** Platform admin only (RLS). Creates or updates one character. */
+export async function saveShopCharacter(character: ShopCharacter): Promise<void> {
+  const { error } = await supabase.from("shop_characters").upsert({
+    character_key: character.key,
+    name_i18n: character.name,
+    intro_i18n: character.intro,
+    token_name_i18n: character.tokenName,
+    token_icon_path: character.tokenIconPath,
+    sprite_paths: character.spritePaths,
+    lines_i18n: character.lines,
+    visits_cafe: character.visitsCafe,
+    visit_frequency: character.visitFrequency,
+    visit_limit: character.visitFrequency === "unlimited" ? null : character.visitLimit,
+    is_active: character.isActive,
+    display_order: character.displayOrder,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw new Error("saveShopCharacter: " + error.message);
+}
+
+interface SupabaseCharacterOrderRow {
+  id: string;
+  character_key: string;
+  token_price: number;
+  is_active: boolean;
+  shop_character_order_items: { recipe_id: string; quantity: number }[] | null;
+}
+
+export async function listShopCharacterOrders(): Promise<ShopCharacterOrder[]> {
+  const { data, error } = await supabase
+    .from("shop_character_orders")
+    .select("id, character_key, token_price, is_active, shop_character_order_items(recipe_id, quantity)")
+    .order("display_order", { ascending: true });
+  if (error) throw new Error("listShopCharacterOrders: " + error.message);
+  return ((data ?? []) as unknown as SupabaseCharacterOrderRow[]).map((row) => ({
+    id: row.id,
+    characterKey: row.character_key,
+    tokenPrice: row.token_price,
+    isActive: row.is_active,
+    items: (row.shop_character_order_items ?? []).map((item) => ({ recipeId: item.recipe_id, quantity: item.quantity })),
+  }));
+}
+
+/** Platform admin only. Saves an order and all its items together. */
+export async function saveShopCharacterOrder(params: {
+  orderId: string | null;
+  characterKey: string;
+  tokenPrice: number;
+  isActive: boolean;
+  items: CafeOrderItem[];
+}): Promise<SaveCharacterOrderResult> {
+  const { data, error } = await supabase.rpc("save_shop_character_order", {
+    p_order_id: params.orderId,
+    p_character_key: params.characterKey,
+    p_token_price: params.tokenPrice,
+    p_is_active: params.isActive,
+    p_items: params.items,
+  });
+  if (error) throw new Error("saveShopCharacterOrder: " + error.message);
+  return normalizeSaveCharacterOrderResult(data);
+}
+
+export async function deleteShopCharacterOrder(orderId: string): Promise<void> {
+  const { error } = await supabase.from("shop_character_orders").delete().eq("id", orderId);
+  if (error) throw new Error("deleteShopCharacterOrder: " + error.message);
+}
+
+interface SupabaseTokenContentRow {
+  id: string;
+  character_key: string;
+  title: string;
+  body: string;
+  is_active: boolean;
+  display_order: number;
+}
+
+export async function listCharacterTokenContents(): Promise<CharacterTokenContent[]> {
+  const { data, error } = await supabase
+    .from("shop_character_token_contents")
+    .select("id, character_key, title, body, is_active, display_order")
+    .order("display_order", { ascending: true });
+  if (error) throw new Error("listCharacterTokenContents: " + error.message);
+  return ((data ?? []) as SupabaseTokenContentRow[]).map((row) => ({
+    id: row.id,
+    characterKey: row.character_key,
+    title: row.title,
+    body: row.body,
+    isActive: row.is_active,
+    displayOrder: row.display_order,
+  }));
+}
+
+/** Platform admin only (RLS). */
+export async function saveCharacterTokenContent(
+  content: Omit<CharacterTokenContent, "id"> & { id: string | null }
+): Promise<void> {
+  const row = {
+    character_key: content.characterKey,
+    title: content.title.trim(),
+    body: content.body.trim(),
+    is_active: content.isActive,
+    display_order: content.displayOrder,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = content.id
+    ? await supabase.from("shop_character_token_contents").update(row).eq("id", content.id)
+    : await supabase.from("shop_character_token_contents").insert(row);
+  if (error) throw new Error("saveCharacterTokenContent: " + error.message);
+}
+
+export async function deleteCharacterTokenContent(contentId: string): Promise<void> {
+  const { error } = await supabase.from("shop_character_token_contents").delete().eq("id", contentId);
+  if (error) throw new Error("deleteCharacterTokenContent: " + error.message);
+}
+
+/** The child's current café visitor, or a new one. Picked and stored server-side. */
+export async function getCafeVisit(): Promise<GetCafeVisitResult> {
+  // Visit limits count days, weeks and months in the child's own time zone.
+  let timeZone: string | null = null;
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+  } catch {
+    timeZone = null;
+  }
+  const { data, error } = await supabase.rpc("get_cafe_visit", { p_time_zone: timeZone });
+  if (error) throw new Error("getCafeVisit: " + error.message);
+  return normalizeGetCafeVisitResult(data);
+}
+
+/** Serves the whole order from the shelf or nothing; the sold dishes leave the shelf for good. */
+export async function serveCafeVisit(visitId: string): Promise<ServeCafeVisitResult> {
+  const { data, error } = await supabase.rpc("serve_cafe_visit", { p_visit_id: visitId });
+  if (error) throw new Error("serveCafeVisit: " + error.message);
+  return normalizeServeCafeVisitResult(data);
+}
+
+export async function dismissCafeVisit(visitId: string): Promise<DismissCafeVisitResult> {
+  const { data, error } = await supabase.rpc("dismiss_cafe_visit", { p_visit_id: visitId });
+  if (error) throw new Error("dismissCafeVisit: " + error.message);
+  return normalizeDismissCafeVisitResult(data);
+}
+
+interface SupabaseCharacterTokenAwardRow {
+  id: string;
+  user_id: string;
+  giver: string;
+  source: string;
+  recipe_id: string | null;
+  content_id: string | null;
+  earned_at: string;
+  cafe_visits: { items: unknown } | null;
+}
+
+/** Every token this child has earned, from every character. */
+export async function listCharacterTokenAwards(): Promise<CharacterTokenAward[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paw_print_awards")
+    .select("id, user_id, giver, source, recipe_id, content_id, earned_at, cafe_visits(items)")
+    .eq("family_id", familyId)
+    .eq("user_id", userId)
+    .order("earned_at", { ascending: true });
+  if (error) throw new Error("listCharacterTokenAwards: " + error.message);
+  return ((data ?? []) as unknown as SupabaseCharacterTokenAwardRow[]).map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    giver: row.giver,
+    source: row.source === "cafe_sale" ? "cafe_sale" : "chef_challenge",
+    recipeId: row.recipe_id,
+    cafeItems: normalizeCafeOrderItems(row.cafe_visits?.items),
+    contentId: row.content_id,
+    earnedAt: new Date(row.earned_at).getTime(),
+  }));
+}
+
+/** Tokens spent on in-app catalog rewards, for every character. */
+export async function listCatalogTokenSpends(): Promise<CatalogTokenSpend[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("paw_print_redemptions")
+    .select("giver, cost")
+    .eq("family_id", familyId)
+    .eq("user_id", userId);
+  if (error) throw new Error("listCatalogTokenSpends: " + error.message);
+  return (data ?? []) as CatalogTokenSpend[];
+}
+
+interface SupabaseWishlistRewardRow {
+  id: string;
+  user_id: string | null;
+  title: string;
+  is_repeatable: boolean;
+  is_active: boolean;
+  image_path: string | null;
+  wishlist_reward_prices: { character_key: string; token_count: number }[] | null;
+}
+
+/** The family's real-world rewards, including inactive ones (the parent page shows them). */
+export async function listWishlistRewards(): Promise<WishlistReward[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("wishlist_rewards")
+    .select("id, user_id, title, is_repeatable, is_active, image_path, wishlist_reward_prices(character_key, token_count)")
+    .eq("family_id", familyId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error("listWishlistRewards: " + error.message);
+  return ((data ?? []) as unknown as SupabaseWishlistRewardRow[]).map((row) => ({
+    id: row.id,
+    childUserId: row.user_id,
+    title: row.title,
+    isRepeatable: row.is_repeatable,
+    isActive: row.is_active,
+    prices: (row.wishlist_reward_prices ?? []).map((price) => ({
+      characterKey: price.character_key,
+      tokenCount: price.token_count,
+    })),
+    imagePath: row.image_path,
+  }));
+}
+
+interface SupabaseWishlistRedemptionRow {
+  id: string;
+  user_id: string;
+  reward_id: string | null;
+  title: string;
+  price_snapshot: unknown;
+  child_signature: string;
+  parent_signature: string;
+  redeemed_at: string;
+}
+
+/** Redemptions for the signed-in child, or for the whole family when wholeFamily is set (parent page). */
+export async function listWishlistRedemptions(options: { wholeFamily?: boolean } = {}): Promise<WishlistRedemption[]> {
+  const { familyId, userId } = await getSessionMetadata();
+  let query = supabase
+    .from("wishlist_redemptions")
+    .select("id, user_id, reward_id, title, price_snapshot, child_signature, parent_signature, redeemed_at")
+    .eq("family_id", familyId);
+  if (!options.wholeFamily) query = query.eq("user_id", userId);
+  const { data, error } = await query.order("redeemed_at", { ascending: false });
+  if (error) throw new Error("listWishlistRedemptions: " + error.message);
+  return ((data ?? []) as SupabaseWishlistRedemptionRow[]).map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    rewardId: row.reward_id,
+    title: row.title,
+    priceSnapshot: normalizePriceSnapshot(row.price_snapshot),
+    childSignature: row.child_signature,
+    parentSignature: row.parent_signature,
+    redeemedAt: new Date(row.redeemed_at).getTime(),
+  }));
+}
+
+/** Parent or platform admin. Creates (null id) or edits a reward for their own family. */
+export async function saveWishlistReward(
+  rewardId: string | null,
+  draft: WishlistDraft,
+  isActive: boolean,
+  imagePath: string | null = null
+): Promise<SaveWishlistRewardResult> {
+  const { data, error } = await supabase.rpc("save_wishlist_reward", {
+    p_reward_id: rewardId,
+    p_title: draft.title,
+    p_child_user_id: draft.childUserId,
+    p_is_repeatable: draft.isRepeatable,
+    p_is_active: isActive,
+    p_prices: draft.prices,
+    p_image_path: imagePath,
+  });
+  if (error) throw new Error("saveWishlistReward: " + error.message);
+  return normalizeSaveWishlistRewardResult(data);
+}
+
+/** Spends the child's tokens on a real-world reward. The price always comes from the server. */
+export async function redeemWishlistReward(
+  rewardId: string,
+  childSignature: string,
+  parentSignature: string
+): Promise<RedeemWishlistRewardResult> {
+  const { data, error } = await supabase.rpc("redeem_wishlist_reward", {
+    p_reward_id: rewardId,
+    p_child_signature: childSignature,
+    p_parent_signature: parentSignature,
+  });
+  if (error) throw new Error("redeemWishlistReward: " + error.message);
+  return normalizeRedeemWishlistRewardResult(data);
+}
+
+const WISHLIST_PHOTO_BUCKET = "wishlist-photos";
+
+/** Parent or platform admin. Uploads an already-shrunk JPEG into the family's private folder; returns its path. */
+export async function uploadWishlistPhoto(photo: Blob): Promise<string> {
+  const { familyId } = await getSessionMetadata();
+  const path = familyId + "/" + crypto.randomUUID() + ".jpg";
+  const { error } = await supabase.storage
+    .from(WISHLIST_PHOTO_BUCKET)
+    .upload(path, photo, { contentType: "image/jpeg", upsert: false });
+  if (error) throw new Error("uploadWishlistPhoto: " + error.message);
+  return path;
+}
+
+/** Removes photos no reward uses any more (a replaced or removed photo, or an upload whose save failed). */
+export async function deleteWishlistPhotos(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const { error } = await supabase.storage.from(WISHLIST_PHOTO_BUCKET).remove(paths);
+  if (error) throw new Error("deleteWishlistPhotos: " + error.message);
+}
+
+/** Short-lived links for showing private photos, keyed by path. Paths the caller can't read are left out. */
+export async function getWishlistPhotoUrls(paths: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(paths)];
+  if (unique.length === 0) return {};
+  const { data, error } = await supabase.storage.from(WISHLIST_PHOTO_BUCKET).createSignedUrls(unique, 60 * 60);
+  if (error) throw new Error("getWishlistPhotoUrls: " + error.message);
+  const urls: Record<string, string> = {};
+  for (const entry of data ?? []) {
+    if (entry.path && entry.signedUrl && !entry.error) urls[entry.path] = entry.signedUrl;
+  }
+  return urls;
+}
+
+/** The child profiles in the caller's family, for the parent's "who is this for" picker. */
+export async function listFamilyChildren(): Promise<{ id: string; name: string }[]> {
+  const { familyId } = await getSessionMetadata();
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, name")
+    .eq("family_id", familyId)
+    .eq("role", "child")
+    .order("created_at", { ascending: true });
+  if (error) throw new Error("listFamilyChildren: " + error.message);
+  return (data ?? []) as { id: string; name: string }[];
 }
 
 // ─── Coin Redemptions ────────────────────────────────────────────────────────

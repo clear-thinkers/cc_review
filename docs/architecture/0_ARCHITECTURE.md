@@ -1,6 +1,6 @@
 ﻿# ARCHITECTURE
 
-_Last updated: 2026-10-29 (governance pass after item T shipped: Golden Mooncake scene and vessel wording in Shop Kitchen Rule 21; guarantee 7 covers paw prints). Previously: 2026-10-28 (chef challenge + paw prints — item T: Shop Kitchen Rule 22, Rewards Rules, Shop Admin Rule 13, five new tables, guarantee 6e; Shop Kitchen background music — item R; chef shelf reactions — item S, Rule 20; recipe scenes and interactive cooking — Rule 21; recipe wall size corrected to 18). Previously: 2026-10-24 (Mystery Foods — items L/M/N; child-created sessions + reward picks — item P)_
+_Last updated: 2026-11-21 (Café, character tokens + wishlist rewards — item U: Café Rules, Wishlist Rewards Rules, new tables, guarantee 6f; built, not yet deployed). Previously: 2026-10-29 (governance pass after item T shipped: Golden Mooncake scene and vessel wording in Shop Kitchen Rule 21; guarantee 7 covers paw prints). Previously: 2026-10-28 (chef challenge + paw prints — item T: Shop Kitchen Rule 22, Rewards Rules, Shop Admin Rule 13, five new tables, guarantee 6e; Shop Kitchen background music — item R; chef shelf reactions — item S, Rule 20; recipe scenes and interactive cooking — Rule 21; recipe wall size corrected to 18). Previously: 2026-10-24 (Mystery Foods — items L/M/N; child-created sessions + reward picks — item P)_
 
 ---
 
@@ -410,6 +410,8 @@ These rules govern the platform-admin recipe metadata editor:
     - **Access:** every call goes through `/api/shop-admin/chef-questions` (GET/POST/PATCH/DELETE; platform admin checked from the token's own claims via `getJwtAppMetadataUserId`, not `user.app_metadata`; service-role client). Children can't read the question table at all.
     - **Shared styles:** the page's class strings now live in `shopAdmin.styles.ts`.
 
+14. **Added by the Café (2026-11-21, roadmap item U):** a fourth collapsible section, **"Café Characters"** (`CafeCharactersSection.tsx`, strings in `cafeAdmin.strings.ts`): each character's copy, art paths and lines; their orders (any mix of cookable dishes and quantities for one token price); and their token content (e.g. poems). Writes use platform-admin RLS and `save_shop_character_order`. Deleting an order or content asks for confirmation, a deliberate exception to the no-dialog default (`0_BUILD_CONVENTIONS.md §5`), since these are hand-written.
+
 ### Shop Kitchen Rules (`/words/shop/kitchen`)
 
 These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature-specs/2026-08-23-kitchen-page.md`), revised same day once a real kitchen illustration (originally `public/kitchen/full-kitchen.png`, since renamed -- see Rule 15 below) replaced the original card-grid design with clickable regions over the artwork, and child-driven shelf drag-and-drop was replaced with admin-preassigned food types — see the spec's Revision section for the full before/after:
@@ -481,7 +483,7 @@ These rules govern the child-facing cooking page added 2026-08-23 (`docs/feature
 These rules govern the Rewards page added 2026-10-28 (roadmap item T; `docs/feature-specs/2026-10-28-chef-challenge-paw-prints.md`, section B):
 
 1. `/words/shop/rewards` ("Rewards" / 奖励 in the nav, right after Shop Kitchen) is **child + platform admin only**, matching `/words/shop` and `/words/shop/kitchen`. Parents are route-blocked and don't see a child's paw prints or redemptions.
-2. **Paw prints are a separate economy:** they are never converted to or from coins or ingredients, and nothing here touches `wallets`, scheduler state or quiz data. They're earned only through Shop Kitchen Rule 22 and spent only through `redeem_paw_print_reward`.
+2. **Paw prints are a separate economy:** they are never converted to or from coins or ingredients, and nothing here touches `wallets`, scheduler state or quiz data. They're earned only through Shop Kitchen Rule 22 and spent only through `redeem_paw_print_reward`. **Updated 2026-11-21 (item U):** paw prints are Chef Shrewy's character token. Other characters' tokens are earned at the Café (Café Rule 4), and any character's tokens can also be spent through `redeem_wishlist_reward` (Wishlist Rewards Rules). The page shows one sheet per character the child holds tokens from, plus the wishlist.
 3. **Balances are per giver** (character). Collected = the giver's `paw_print_awards` rows; available = collected minus the summed `cost` of that giver's `paw_print_redemptions` (`computePawPrintBalance`, `src/lib/pawPrints.ts`). Only Chef Shrewy (`shrewy`) gives paw prints today; the giver column leaves room for other characters' tokens.
 4. **The stamp sheet:** a cream paper card headed "Chef Shrewy's paw prints" / "鼩仔的爪印" with the small paw badge beside it (no separate signature or "from" line), and a neat grid of `/paw-prints/shrewy_paw.png` stamps, one per award, oldest first, about 5 per row on a typical screen (3 on a phone, 6 on wide screens).
    - **Spending never removes a stamp:** the oldest spent ones render faded with a "Redeemed" label (`buildPawPrintStamps`).
@@ -489,6 +491,39 @@ These rules govern the Rewards page added 2026-10-28 (roadmap item T; `docs/feat
 5. **The reward list** comes from the server catalog `paw_print_rewards` (launch: `shrewy-hand-wash`, **2 paw prints** since 2026-10-29, was 10), with copy per reward key in `rewards.strings.ts`.
    - **Card states** (`resolveRewardCardState`): *Redeem*, *Need N more* (disabled), or *Unlocked*.
    - **Redeem** asks for confirmation, then calls `redeem_paw_print_reward`. Redemption is permanent (unique per child and reward); the price is never sent by the client.
+
+### Café Rules (`/words/shop/cafe`)
+
+These rules govern the Café added 2026-11-21 (roadmap item U; `docs/feature-specs/2026-11-21-cafe-visitors-character-tokens-wishlist.md`):
+
+1. `/words/shop/cafe` ("Café" / 小餐馆 in the nav, between Shop Kitchen and Rewards) is **child + platform admin only**, matching the other shop pages.
+2. **One visitor at a time.** `get_cafe_visit` returns the child's open visit or creates one, so a refresh or second device sees the same visitor. It picks an active, visiting character's active order whose dishes are all active and cookable, preferring orders the child has fully unlocked and avoiding the order just closed.
+3. **An order is a mix of dishes** (recipe + quantity, 1–9 each) for one token price (1–50). The visit snapshots both, so an admin edit never changes an order already at the counter.
+4. **Serving is all-or-nothing and shelf-only.** `serve_cafe_visit` needs every item on the shelf; countertop dishes don't count, and any variant of a recipe satisfies the order. It sells the oldest matching dishes, closes the visit and pays one `paw_print_awards` row per token in one transaction.
+5. **Sold dishes leave for good.** Their `location` becomes `'sold'`: never on the shelf or countertop, not counted in shelf stock or countertop capacity, and not mentioned by the chef as served. The row stays, so "dishes ever cooked" and the favorite-dish lines still count it.
+6. **"Not now"** (`dismiss_cafe_visit`) is free; the next visitor arrives after a short delay.
+7. **Token content:** each token paid may carry a curated `shop_character_token_contents` row (e.g. a poem), preferring what the child holds the fewest copies of. It's shown when the token is tapped on the Rewards page.
+8. Selling never touches coins, wallets, ingredients, scheduler or quiz data.
+9. **Visit frequency (2026-11-25, migration `20261125120000`).** Each character has a `visit_frequency` set in Shop Admin: any time (default), up to x visits a day, a week (Monday to Sunday) or a month, or one visit on each of x random days a month (`random_days`, x ≤ 31).
+   - A visit counts the moment the visitor walks in (a `cafe_visits` row is created), whether it's then served or sent away. Once the limit is reached the character doesn't return until the next period (owner decisions 2026-11-25).
+   - Counted per child. Days, weeks and months use the child's device time zone, which the app passes to `get_cafe_visit(p_time_zone)`; an unknown zone falls back to UTC. Changing the device's time zone could earn an extra visit; accepted.
+   - The random days are a stable per-child, per-character, per-month pick (`cafe_random_visit_days`), so refreshing never moves them.
+   - When orders exist but every character has used up their visits, `get_cafe_visit` returns `no_visitors_today` and the Café says everyone has already dropped by; `no_visitors` still means nobody is set up.
+
+### Wishlist Rewards Rules (`/words/wishlist`)
+
+These rules govern real-world rewards (roadmap item U):
+
+1. `/words/wishlist` ("Wishlist Rewards" / 心愿奖励) is **parent + platform admin only**. One form: what the reward is, its token price (one or several characters), who it's for (any child or one child; the picker shows only with 2+ children), and one-time or repeatable.
+2. Rewards are **family-scoped** and written only through `save_wishlist_reward`, which checks the caller is a parent or platform admin of that family. They are hidden, never deleted, so redemption history stays intact.
+3. The child redeems on the Rewards page with a **child signature and a parent signature**, like the coin cash-out. Signing is the handover: there is no pending or delivered state and no refund.
+4. `redeem_wishlist_reward` takes the price from the server, refuses a blank or identical pair of signatures, serializes per child and per character, checks every character's balance, and snapshots the price. One-time means once **per child**.
+5. **Signatures are typed names, not identity checks** (same as the coin cash-out). A child on their own device could type a parent's name.
+6. **Optional photo (2026-11-26, migration `20261126120000`).** A parent or the platform admin can attach one photo of the real item. The browser shrinks it to a JPEG (longest side 1600 px) and uploads it to the private `wishlist-photos` bucket at `<family_id>/<uuid>.jpg`. The child sees it on the wishlist card and in the signing dialog, through one-hour signed links.
+   - Storage policies on `storage.objects`: only the family whose id is the first folder can read; only that family's parents (or the platform admin) can upload, replace or delete. The bucket takes JPEG, PNG or WebP up to 2 MB.
+   - `save_wishlist_reward(..., p_image_path)` takes the reward's whole photo state: an existing file in the caller's own family folder, or null for none (`invalid_image` otherwise). Hiding or showing a reward keeps its photo.
+   - A replaced or removed photo, or an upload whose save failed, is deleted by the app on a best-effort basis; a leftover file is harmless.
+   - `scripts/verify-wishlist-photos.ts` checks all of this on dev.
 
 ### Debug Tools Rules (`/words/debug`)
 
@@ -561,8 +596,8 @@ These rules govern the two-layer authentication and session protection system:
 ### Role-Based Routing Rules (`/words/*`)
 
 Route access enforced by client-side RouteGuard using session role:
-- **Child**: Can access review (flashcard and fill-test), all characters, quiz results, Recipe Shop, Shop Kitchen, and Rewards. Cannot access add, add-paragraph, or admin (content curation restricted to parents).
-- **Parent**: Can access add, add-paragraph, admin, all, results, review, flashcard. Cannot access fill-test (learning mode restricted to children), Recipe Shop, Shop Kitchen, or Rewards (the reward layer is child-facing only).
+- **Child**: Can access review (flashcard and fill-test), all characters, quiz results, Recipe Shop, Shop Kitchen, Café, and Rewards. Cannot access add, add-paragraph, or admin (content curation restricted to parents).
+- **Parent**: Can access add, add-paragraph, admin, all, results, review, flashcard, and Wishlist Rewards. Cannot access fill-test (learning mode restricted to children), Recipe Shop, Shop Kitchen, Café, or Rewards (the reward layer is child-facing only).
 - **Platform admin**: Full access (isPlatformAdmin flag bypasses role restrictions).
 
 Blocked routes are hidden from navigation (not shown as disabled). Direct URL access to blocked routes redirects to `/words/review` with no error message.
@@ -584,7 +619,9 @@ Role enforcement is UI-only; database operations protected by RLS policies at th
 | `/words/results` | ✅ | ✅ | ✅ |
 | `/words/shop` | ✅ | ❌ | ✅ |
 | `/words/shop/kitchen` | ✅ | ❌ | ✅ |
+| `/words/shop/cafe` | ✅ | ❌ | ✅ |
 | `/words/shop/rewards` | ✅ | ❌ | ✅ |
+| `/words/wishlist` | ❌ | ✅ | ✅ |
 | `/words/shop-admin` | ❌ | ❌ | ✅ |
 | `/words/review` | ✅ | ✅ | ✅ |
 | `/words/review/flashcard` | ✅ | ✅ | ✅ |
@@ -979,7 +1016,7 @@ A child's spendable count of ingredient X is `count(shop_ingredient_rewards wher
 | `user_id` | uuid | Foreign key → `users.id`; cascades on delete |
 | `family_id` | uuid | Foreign key → `families.id`; cascades on delete |
 | `recipe_id` | uuid | Foreign key → `shop_recipes.id`; cascades on delete |
-| `location` | text | `'countertop'` \| `'shelf'`; default `'countertop'`. Which shelf *tab* a shelved dish displays under is derived at read time from the dish's recipe's `food_type` (see below) — never stored on this row |
+| `location` | text | `'countertop'` \| `'shelf'` \| `'sold'` (Café, item U); default `'countertop'`. Which shelf *tab* a shelved dish displays under is derived at read time from the dish's recipe's `food_type` (see below) — never stored on this row |
 | `special_ingredient_keys` | jsonb | Added 2026-08-24. Array of ingredient keys spent on this cook beyond the recipe's base ingredients; default `'[]'`. Raw fact only — which icon the dish displays is resolved at read time from this array against the recipe's `variant_icon_rules` (`resolveShopRecipeIconPath`), never stored |
 | `cooked_at` | timestamptz | Server timestamp |
 | **RLS Guarantee** | | Family-scoped read; **no direct client insert/update/delete policy at all** — `cook_shop_recipe` is the only inserter, `organize_shop_kitchen_countertop` is the only updater (and only bulk-moves `location` from `'countertop'` to `'shelf'`, never per-dish) |
@@ -1051,6 +1088,34 @@ A child's spendable count of ingredient X is `count(shop_ingredient_rewards wher
 | **RLS Guarantee** | | Family-scoped read; **no client writes** — `redeem_paw_print_reward` is the only writer |
 
 A child's paw-print balance per giver is computed (`count(awards) − sum(redemption cost)`); there is no running-balance column.
+
+**`shop_characters` table** — characters who give tokens (2026-11-21, item U). Shared catalog, seeded with `shrewy` (`visits_cafe = false`)
+
+| Field | Type | Notes |
+|---|---|---|
+| `character_key` | text | Primary key; lowercase letters, digits, dashes |
+| `name_i18n` / `intro_i18n` / `token_name_i18n` | jsonb | `{ en, zh }` |
+| `token_icon_path` | text (nullable) | Token art |
+| `sprite_paths` | jsonb | Pose → path (`waiting`, `delighted`) |
+| `lines_i18n` | jsonb | Moment (`order`, `served`, `dismissed`) → `{ en, zh }[]` |
+| `visits_cafe` / `is_active` | boolean | A new character starts inactive |
+| `visit_frequency` / `visit_limit` | text / integer (nullable) | `unlimited` (limit null) \| `daily` \| `weekly` \| `monthly` (limit 1–100) \| `random_days` (limit 1–31). Added 2026-11-25; see Café Rule 9 |
+| `display_order` | integer | |
+| **RLS Guarantee** | | Readable by signed-in users; platform-admin write |
+
+**`shop_character_orders` / `shop_character_order_items` tables** — what a character buys (item U). An order has `character_key`, `token_price` (1–50), `is_active` and `display_order`; each item has `order_id`, `recipe_id` and `quantity` (1–9), primary key `(order_id, recipe_id)`. Signed-in read; platform-admin write. `save_shop_character_order` saves an order and its items atomically.
+
+**`shop_character_token_contents` table** — curated content a token can carry, e.g. a poem (item U): `character_key`, `title` (≤ 60), `body` (≤ 600), `is_active`, `display_order`. Signed-in read; platform-admin write.
+
+**`cafe_visits` table** — one row per visitor (item U): `user_id`, `family_id`, `character_key`, `order_id` (nullable), `items` (jsonb snapshot `[{ recipeId, quantity }]`), `token_price`, `status` (`open`/`served`/`dismissed`), `created_at`, `closed_at`. At most one open visit per child. Family-scoped read; **no client writes**.
+
+**`wishlist_rewards` / `wishlist_reward_prices` tables** — a family's real-world rewards (item U). A reward has `family_id`, `user_id` (nullable = any child), `title` (≤ 60), `is_repeatable`, `is_active`, `created_by_user_id`, `image_path` (nullable, added 2026-11-26: the photo's path in the private `wishlist-photos` storage bucket, see Wishlist Rewards Rule 6); each price row has `reward_id`, `character_key`, `token_count` (1–999). Family-scoped read; **no client writes** (`save_wishlist_reward` only).
+
+**`wishlist_redemptions` table** — permanent record of redeemed real-world rewards (item U): `user_id`, `family_id`, `reward_id` (nullable), `title`, `price_snapshot` (jsonb `{ characterKey: count }`), `child_signature`, `parent_signature`, `redeemed_at`. Family-scoped read; **no client writes** (`redeem_wishlist_reward` only).
+
+**Item U changes to existing tables:** `shop_cooked_dishes.location` also allows `'sold'`, with a new `sold_visit_id`. The `paw_print_*` tables' `giver` is now a foreign key to `shop_characters`. `paw_print_awards` gains `source` (`chef_challenge`/`cafe_sale`), `cafe_visit_id`, `visit_token_index` (unique per visit) and `content_id`.
+
+A child's token balance per character is computed: `count(awards) − sum(catalog redemption cost) − sum(wishlist price snapshots for that character)`; there is no running-balance column.
 
 **`prompt_templates` table** — configurable LLM prompt templates (Phase 2, Feature #1)
 
@@ -1206,6 +1271,7 @@ These are the technical behaviors the system upholds. They are the factual basis
     - **Redeeming:** `redeem_paw_print_reward` takes the price from the server catalog, serializes per child and giver, and refuses duplicates and overspending.
     - **Recipe ids only:** `chef_challenge_recipe_ids()` (security definer, signed-in callers) returns only the ids of recipes with active questions, never a prompt, option or answer.
     - **No other path:** no client can write any of the five tables. `scripts/verify-chef-challenge.ts` checks the flow (including the SQL rotation against `pickNextChallengeQuestion`), and `verify-rls.ts` Section 13 checks the policies.
+6f. **Café sales and wishlist redemptions are server-decided and atomic (2026-11-21, item U).** `serve_cafe_visit` is the only path that sets a dish to `'sold'` or awards a non-Shrewy token; it locks the caller's open visit and sells the whole order or nothing. `redeem_wishlist_reward` takes its price from the server, shares the per-child, per-character spending lock with `redeem_paw_print_reward` (taken in a fixed order), and can't overspend. No client can write `cafe_visits`, `wishlist_rewards`, `wishlist_reward_prices`, `wishlist_redemptions` or the token ledger.
 7. **Shop writes do not affect learning state.** Shop unlocks, spend history, coin redemptions, ingredient catalog edits, recipe metadata edits, Shop Kitchen cooking/shelf moves, and chef-challenge answers, paw prints and paw-print redemptions never update `words`, `flashcard_contents`, scheduler fields, quiz-session grading data, coins or ingredients. A chef-challenge answer is a game, not a review (item T, decision 4).
 7a. **`quiz_sessions.coins_earned` is immutable.** Coin redemptions decrement `wallets.total_coins` only. The per-session earned totals in `quiz_sessions` are never modified by any redemption path.
 8. **`nextReviewAt` and `interval` are updated only by the deterministic grade functions in `scheduler.ts`.** No other write path exists — this holds for the vocab-phrase familiarity nudge too, since `nudgeWordFamiliarity` calls the same unmodified `calculateNextState`, not a parallel scheduling path.

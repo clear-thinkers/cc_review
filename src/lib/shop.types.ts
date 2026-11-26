@@ -203,8 +203,8 @@ export type ShopIngredientLedgerEntry = {
   ingredientKey: string;
 };
 
-/** Where a cooked dish physically sits. The countertop is capacity-limited (SHOP_KITCHEN_COUNTERTOP_CAPACITY); the shelf is unlimited and dishes there are grouped for display by their *recipe's* foodType, not stored per-dish. */
-export type ShopDishLocation = "countertop" | "shelf";
+/** Where a cooked dish physically sits. The countertop is capacity-limited (SHOP_KITCHEN_COUNTERTOP_CAPACITY); the shelf is unlimited and dishes there are grouped for display by their *recipe's* foodType, not stored per-dish. `sold` means served at the Café (roadmap item U): gone from the kitchen for good, but still counted as cooked. */
+export type ShopDishLocation = "countertop" | "shelf" | "sold";
 
 /** Max number of dishes that can sit on the countertop before organize_shop_kitchen_countertop must be called (cooking is blocked past this). Kept in sync by hand with the same constant baked into the cook_shop_recipe migration -- no shared config layer between SQL and TS in this codebase. */
 export const SHOP_KITCHEN_COUNTERTOP_CAPACITY = 6;

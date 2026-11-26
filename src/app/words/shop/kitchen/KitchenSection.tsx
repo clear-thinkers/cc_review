@@ -921,6 +921,8 @@ export default function KitchenSection({ vm }: { vm: WordsWorkspaceVM }) {
   const servedRecipeSlugs = useMemo(
     () =>
       dishes.flatMap((dish) => {
+        // A dish sold at the Café is no longer in the kitchen for the chef to talk about.
+        if (dish.location === "sold") return [];
         const slug = recipesById.get(dish.recipeId)?.slug;
         return slug ? [slug] : [];
       }),

@@ -51,6 +51,7 @@ import {
   SHOP_ADMIN_RECIPE_CARD_BUTTON,
 } from "./shopAdmin.styles";
 import ChefChallengeQuestionsSection from "./ChefChallengeQuestionsSection";
+import CafeCharactersSection from "./CafeCharactersSection";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type NoticeState = { kind: "success" | "error"; message: string } | null;
@@ -1783,6 +1784,8 @@ export default function ShopAdminSection({ vm }: { vm: WordsWorkspaceVM }) {
         strings={strings}
         accessToken={session?.supabaseSession.access_token ?? ""}
       />
+
+      <CafeCharactersSection recipes={recipes} locale={locale} />
     </div>
   );
 }

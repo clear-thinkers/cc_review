@@ -431,6 +431,20 @@ Count history: 79/81 (2026-08-23, before the Section 10 fix deployed) → 80/81 
 
 ---
 
+### `scripts/verify-wishlist-photos.ts`
+
+**npm command:** `npm run verify:wishlist-photos`
+
+**Purpose:** Verifies wishlist reward photos (roadmap item U, 2026-11-26) against a live Supabase **dev** project, as real parent and child JWTs: a parent can upload only into their own family's folder of the private `wishlist-photos` bucket; a child can't upload or delete but can view their family's photo; another family can't view it; `save_wishlist_reward` accepts only an existing file in the caller's own family folder, and null clears the photo.
+
+**When to use:** After any change to the `wishlist-photos` bucket, its storage policies, or `save_wishlist_reward`.
+
+**Env vars required:** same three as `verify-rls.ts`. Dev only, no `--prod` flag.
+
+**Key behaviours:** creates two throwaway families and removes them, their auth users and every uploaded file in a `finally` block. Last run: **13/13 on 2026-11-26**, with no leftover rows or files.
+
+---
+
 ### `scripts/seed-chef-challenge-questions.ts`
 
 **npm command:** `npm run seed:chef-challenge-questions` (dev, whole file). Flags after `--`:

@@ -21,6 +21,7 @@
     "verify:session-scoped-claims": "tsx scripts/verify-session-scoped-claims.ts",
     "verify:mystery-foods": "tsx scripts/verify-mystery-foods.ts",
     "verify:chef-challenge": "tsx scripts/verify-chef-challenge.ts",
+    "verify:wishlist-photos": "tsx scripts/verify-wishlist-photos.ts",
     "seed:admin": "node scripts/seed-platform-admin.mjs",
     "seed:chef-challenge-questions": "tsx scripts/seed-chef-challenge-questions.ts",
     "db:push": "supabase db push --include-all",

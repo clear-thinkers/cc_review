@@ -97,10 +97,12 @@ export function getNavItems(
     { href: "/words/results", label: `${str.nav.quizResults}`, page: "results" },
     { href: "/words/prompts", label: `${str.nav.aiPrompts}`, page: "prompts" },
     { href: "/words/debug", label: `${str.nav.debug}`, page: "debug" },
+    { href: "/words/shop-admin", label: `${str.nav.shopAdmin}`, page: "shopAdmin" },
     { href: "/words/shop", label: `${str.nav.shop}`, page: "shop" },
     { href: "/words/shop/kitchen", label: `${str.nav.shopKitchen}`, page: "shopKitchen" },
+    { href: "/words/shop/cafe", label: `${str.nav.cafe}`, page: "cafe" },
     { href: "/words/shop/rewards", label: `${str.nav.rewards}`, page: "rewards" },
-    { href: "/words/shop-admin", label: `${str.nav.shopAdmin}`, page: "shopAdmin" },
+    { href: "/words/wishlist", label: `${str.nav.wishlist}`, page: "wishlist" },
   ];
 
   return allItems.filter(item => 
