@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildCharacterTokenStamps,
   computeCharacterTokenBalance,
-  countShelfDishesByRecipe,
+  dishMatchesOrderItem,
   filterWishlistForChild,
   findMissingTokens,
+  groupShelfDishes,
+  listOrderVariantChoices,
   normalizeCafeOrderItems,
   normalizeGetCafeVisitResult,
   normalizePriceSnapshot,
@@ -113,25 +115,79 @@ describe("wishlist", () => {
   });
 });
 
+function dish(recipeId: string, location: string, specialIngredientKeys: string[] = []) {
+  return { recipeId, location, specialIngredientKeys };
+}
+
 describe("café orders", () => {
-  it("counts only shelf dishes, never countertop or sold", () => {
-    const counts = countShelfDishesByRecipe([
-      { recipeId: "r1", location: "shelf" },
-      { recipeId: "r1", location: "sold" },
-      { recipeId: "r1", location: "countertop" },
-      { recipeId: "r2", location: "shelf" },
+  it("groups only shelf dishes, never countertop or sold, by recipe and exact special ingredients", () => {
+    const groups = groupShelfDishes([
+      dish("r1", "shelf"),
+      dish("r1", "sold"),
+      dish("r1", "countertop"),
+      dish("bun", "shelf", ["red-bean"]),
+      dish("bun", "shelf", ["pork-filling"]),
+      dish("bun", "shelf", ["red-bean"]),
+      dish("noodle", "shelf", ["tomato", "egg"]),
+      dish("noodle", "shelf", ["egg", "tomato"]),
     ]);
-    expect(counts.get("r1")).toBe(1);
-    expect(counts.get("r2")).toBe(1);
+    expect(groups).toEqual([
+      { recipeId: "r1", specialIngredientKeys: [], count: 1 },
+      { recipeId: "bun", specialIngredientKeys: ["red-bean"], count: 2 },
+      { recipeId: "bun", specialIngredientKeys: ["pork-filling"], count: 1 },
+      { recipeId: "noodle", specialIngredientKeys: ["egg", "tomato"], count: 2 },
+    ]);
   });
 
   it("is ready only when every item is fully on the shelf", () => {
     const items = [{ recipeId: "r1", quantity: 2 }, { recipeId: "r2", quantity: 1 }];
-    expect(resolveOrderReadiness(items, new Map([["r1", 2], ["r2", 1]])).isReady).toBe(true);
-    const partial = resolveOrderReadiness(items, new Map([["r1", 1], ["r2", 1]]));
+    expect(resolveOrderReadiness(items, [dish("r1", "shelf"), dish("r1", "shelf"), dish("r2", "shelf")]).isReady).toBe(true);
+    const partial = resolveOrderReadiness(items, [dish("r1", "shelf"), dish("r1", "countertop"), dish("r2", "shelf")]);
     expect(partial.isReady).toBe(false);
     expect(partial.items[0]).toMatchObject({ onShelf: 1, isReady: false });
-    expect(resolveOrderReadiness([], new Map()).isReady).toBe(false);
+    expect(resolveOrderReadiness([], []).isReady).toBe(false);
+  });
+
+  it("lets any variant fill an item that pins none", () => {
+    const item = { recipeId: "bun", quantity: 1 };
+    expect(dishMatchesOrderItem(dish("bun", "shelf", ["pork-filling"]), item)).toBe(true);
+    expect(dishMatchesOrderItem(dish("bun", "shelf"), item)).toBe(true);
+    expect(dishMatchesOrderItem(dish("noodle", "shelf"), item)).toBe(false);
+  });
+
+  it("fills a pinned item only with exactly that variant (a vegetarian 红豆包 is never a 小笼包)", () => {
+    const redBean = { recipeId: "bun", quantity: 1, specialIngredientKeys: ["red-bean"] };
+    expect(dishMatchesOrderItem(dish("bun", "shelf", ["red-bean"]), redBean)).toBe(true);
+    expect(dishMatchesOrderItem(dish("bun", "shelf", ["pork-filling"]), redBean)).toBe(false);
+    expect(dishMatchesOrderItem(dish("bun", "shelf", ["red-bean", "pork-filling"]), redBean)).toBe(false);
+    expect(dishMatchesOrderItem(dish("bun", "shelf"), redBean)).toBe(false);
+
+    const plain = { recipeId: "noodle", quantity: 1, specialIngredientKeys: [] };
+    expect(dishMatchesOrderItem(dish("noodle", "shelf"), plain)).toBe(true);
+    expect(dishMatchesOrderItem(dish("noodle", "shelf", ["pork-liver"]), plain)).toBe(false);
+
+    const tomatoEgg = { recipeId: "noodle", quantity: 1, specialIngredientKeys: ["egg", "tomato"] };
+    expect(dishMatchesOrderItem(dish("noodle", "shelf", ["tomato", "egg"]), tomatoEgg)).toBe(true);
+  });
+
+  it("counts only matching dishes toward a pinned item", () => {
+    const items = [{ recipeId: "bun", quantity: 2, specialIngredientKeys: ["red-bean"] }];
+    const shelf = [dish("bun", "shelf", ["red-bean"]), dish("bun", "shelf", ["pork-filling"]), dish("bun", "shelf")];
+    const readiness = resolveOrderReadiness(items, shelf);
+    expect(readiness.items[0]).toMatchObject({ onShelf: 1, isReady: false });
+    expect(resolveOrderReadiness(items, [...shelf, dish("bun", "shelf", ["red-bean"])]).isReady).toBe(true);
+  });
+
+  it("offers plain first, then each named variant once", () => {
+    const rules = [
+      { iconPath: "/a.png", match: [] },
+      { iconPath: "/b.png", match: ["red-bean"] },
+      { iconPath: "/c.png", match: ["pork-filling"] },
+      { iconPath: "/d.png", match: ["red-bean"] },
+      { iconPath: "/e.png", match: ["tomato", "egg"] },
+    ];
+    expect(listOrderVariantChoices(rules)).toEqual([[], ["red-bean"], ["pork-filling"], ["egg", "tomato"]]);
+    expect(listOrderVariantChoices([])).toEqual([[]]);
   });
 
   it("validates an admin's mixed order", () => {
@@ -213,6 +269,17 @@ describe("normalizers", () => {
       { recipeId: "r1", quantity: 2 },
     ]);
     expect(normalizeCafeOrderItems("nope")).toEqual([]);
+    expect(
+      normalizeCafeOrderItems([
+        { recipeId: "bun", quantity: 1, specialIngredientKeys: ["red-bean"] },
+        { recipeId: "noodle", quantity: 1, specialIngredientKeys: [] },
+        { recipeId: "rice", quantity: 1, specialIngredientKeys: null },
+      ])
+    ).toEqual([
+      { recipeId: "bun", quantity: 1, specialIngredientKeys: ["red-bean"] },
+      { recipeId: "noodle", quantity: 1, specialIngredientKeys: [] },
+      { recipeId: "rice", quantity: 1 },
+    ]);
     expect(normalizePriceSnapshot({ a: 2, b: 0, c: "x" })).toEqual({ a: 2 });
   });
 

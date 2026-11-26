@@ -1,5 +1,5 @@
 /**
- * Café Admin Strings — Last updated: 2026-11-21
+ * Café Admin Strings — Last updated: 2026-11-26 (variant-pinned order items)
  * All user-facing text for Shop Admin's "Café Characters" section (roadmap item U, feature
  * spec 2026-11-21-cafe-visitors-character-tokens-wishlist.md).
  */
@@ -65,6 +65,10 @@ export const cafeAdminStrings = {
     deleteOrderConfirm: "Delete this order?",
     orderDish: "Dish",
     orderQuantity: "Quantity",
+    orderKind: "Kind",
+    kindAny: "Any kind",
+    kindPlainTemplate: "{dish} (plain)",
+    kindHelp: "Pick a kind when only that one will do (e.g. 红豆包 for a vegetarian visitor). Only dishes cooked with exactly those special ingredients fill the order.",
     addDish: "+ Add another dish",
     removeDish: "Remove",
     pickDish: "Choose a dish…",
@@ -84,7 +88,7 @@ export const cafeAdminStrings = {
       forbidden: "Platform admin only.",
       unknown_character: "Save the character first.",
       unknown_order: "This order no longer exists.",
-      invalid_items: "Every dish must be a cookable recipe.",
+      invalid_items: "Every dish must be a cookable recipe, and a kind must use that dish's own special ingredients.",
       unknown: "Could not save the order.",
     },
 
@@ -163,6 +167,10 @@ export const cafeAdminStrings = {
     deleteOrderConfirm: "要删除这个订单吗？",
     orderDish: "菜品",
     orderQuantity: "数量",
+    orderKind: "种类",
+    kindAny: "任何一种",
+    kindPlainTemplate: "{dish}（原味）",
+    kindHelp: "只接受某一种时就选它（比如吃素的客人选红豆包）。只有用完全相同的特色食材做的菜才算数。",
     addDish: "+ 再加一道菜",
     removeDish: "移除",
     pickDish: "选择菜品…",
@@ -182,7 +190,7 @@ export const cafeAdminStrings = {
       forbidden: "仅限平台管理员。",
       unknown_character: "请先保存角色。",
       unknown_order: "这个订单已经不存在了。",
-      invalid_items: "每道菜都必须是可以烹饪的菜谱。",
+      invalid_items: "每道菜都必须是可以烹饪的菜谱，选定的种类也只能用这道菜自己的特色食材。",
       unknown: "无法保存订单。",
     },
 

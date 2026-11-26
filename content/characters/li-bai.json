@@ -1,0 +1,44 @@
+{
+  "key": "li-bai",
+  "name": { "en": "Li Bai", "zh": "李白" },
+  "intro": { "en": "The great Tang poet. He pays in poems!", "zh": "唐代大诗人，用诗来付账！" },
+  "tokenName": { "en": "poem slip", "zh": "诗笺" },
+  "visitFrequency": "unlimited",
+  "visitLimit": null,
+  "lines": {
+    "order": [
+      { "en": "A poem for a plate? I'd love a little feast!", "zh": "一首诗换一份美食，好不好？" },
+      { "en": "The moon is so bright tonight. Something sweet, please!", "zh": "今晚月色真好，来点甜的吧！" },
+      { "en": "I've walked a thousand miles. I'm so hungry!", "zh": "我走了千里路，肚子好饿呀！" }
+    ],
+    "served": [
+      { "en": "Delicious! Here's a poem, fresh from my brush!", "zh": "真好吃！送你一首刚写的诗！" },
+      { "en": "This tastes like moonlight! Thank you!", "zh": "像月光一样美味！谢谢你！" },
+      { "en": "Wonderful! I'll write a poem about this meal!", "zh": "太棒了！我要为这顿饭写首诗！" }
+    ],
+    "dismissed": [
+      { "en": "No hurry! I'll wander by again.", "zh": "不着急，我改天再来逛逛！" },
+      { "en": "Then I'll go count the stars. See you!", "zh": "那我去数星星啦，再见！" }
+    ]
+  },
+  "orders": [
+    { "tokenPrice": 2, "items": [{ "recipe": "golden-mooncake", "quantity": 1 }] },
+    { "tokenPrice": 2, "items": [{ "recipe": "tangyuan", "quantity": 2 }] },
+    {
+      "tokenPrice": 3,
+      "items": [
+        { "recipe": "golden-mooncake", "quantity": 1 },
+        { "recipe": "tangyuan", "quantity": 1 }
+      ]
+    }
+  ],
+  "tokenContents": [
+    { "title": "静夜思", "body": "床前明月光，疑是地上霜。举头望明月，低头思故乡。" },
+    { "title": "古朗月行（节选）", "body": "小时不识月，呼作白玉盘。又疑瑶台镜，飞在青云端。" },
+    { "title": "夜宿山寺", "body": "危楼高百尺，手可摘星辰。不敢高声语，恐惊天上人。" },
+    { "title": "望庐山瀑布", "body": "日照香炉生紫烟，遥看瀑布挂前川。飞流直下三千尺，疑是银河落九天。" },
+    { "title": "早发白帝城", "body": "朝辞白帝彩云间，千里江陵一日还。两岸猿声啼不住，轻舟已过万重山。" },
+    { "title": "赠汪伦", "body": "李白乘舟将欲行，忽闻岸上踏歌声。桃花潭水深千尺，不及汪伦送我情。" },
+    { "title": "望天门山", "body": "天门中断楚江开，碧水东流至此回。两岸青山相对出，孤帆一片日边来。" }
+  ]
+}

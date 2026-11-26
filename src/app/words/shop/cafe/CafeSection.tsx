@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocale } from "@/app/shared/locale";
-import { countShelfDishesByRecipe, pickCharacterLine, resolveOrderReadiness } from "@/lib/characterTokens";
+import { dishMatchesOrderItem, groupShelfDishes, pickCharacterLine, resolveOrderReadiness } from "@/lib/characterTokens";
 import type { CafeLineMoment, CafeVisit, LocalizedText, ShopCharacter } from "@/lib/characterTokens.types";
-import { getShopRecipeContentForLocale, resolveShopRecipeIconPath } from "@/lib/shop";
+import {
+  getShopRecipeContentForLocale,
+  resolveShopRecipeIconPath,
+  resolveShopRecipeVariant,
+  resolveShopRecipeVariantTitle,
+} from "@/lib/shop";
 import type { ShopCookedDish, ShopRecipe } from "@/lib/shop.types";
 import {
   dismissCafeVisit,
@@ -134,22 +139,38 @@ export default function CafeSection({ vm }: { vm: WordsWorkspaceVM }) {
   }, [vm.page, arrive, clearTimers]);
 
   const recipesById = useMemo(() => new Map(recipes.map((recipe) => [recipe.id, recipe])), [recipes]);
-  const shelfCounts = useMemo(() => countShelfDishesByRecipe(dishes), [dishes]);
+  const shelfGroups = useMemo(() => groupShelfDishes(dishes), [dishes]);
   const character = characters.find((entry) => entry.key === visit?.characterKey);
-  const readiness = useMemo(
-    () => resolveOrderReadiness(visit?.items ?? [], shelfCounts),
-    [visit, shelfCounts]
-  );
+  const readiness = useMemo(() => resolveOrderReadiness(visit?.items ?? [], dishes), [visit, dishes]);
 
   if (vm.page !== "cafe") return null;
 
-  const recipeTitle = (recipeId: string): string => {
+  /** A dish's name and icon for a set of special ingredients (none = the plain dish). */
+  const recipeTitle = (recipeId: string, specialIngredientKeys: string[] = []): string => {
     const recipe = recipesById.get(recipeId);
-    return recipe ? getShopRecipeContentForLocale(recipe, locale).title : str.unknownDish;
+    if (!recipe) return str.unknownDish;
+    const title = getShopRecipeContentForLocale(recipe, locale).title;
+    return resolveShopRecipeVariantTitle(recipe.variantIconRules, specialIngredientKeys, locale, title);
   };
-  const recipeIcon = (recipeId: string): string | null => {
+  const recipeIcon = (recipeId: string, specialIngredientKeys: string[] = []): string | null => {
     const recipe = recipesById.get(recipeId);
-    return recipe ? resolveShopRecipeIconPath(recipe.variantIconRules, []) : null;
+    return recipe ? resolveShopRecipeIconPath(recipe.variantIconRules, specialIngredientKeys) : null;
+  };
+  /**
+   * Special ingredients a shelf dish has beyond its named variant (e.g. an egg in 阳春面), so
+   * two dishes that share a name and icon can still be told apart. Empty when there are none.
+   */
+  const extraIngredientNames = (recipeId: string, specialIngredientKeys: string[]): string => {
+    const recipe = recipesById.get(recipeId);
+    if (!recipe) return "";
+    const named = resolveShopRecipeVariant(recipe.variantIconRules, specialIngredientKeys)?.match ?? [];
+    const names = new Map(
+      getShopRecipeContentForLocale(recipe, locale).specialIngredients.map((ingredient) => [ingredient.ingredientKey ?? "", ingredient.name])
+    );
+    return specialIngredientKeys
+      .filter((key) => !named.includes(key))
+      .map((key) => names.get(key) || key)
+      .join(str.namesSeparator);
   };
 
   const characterName = character?.name[locale] || character?.name.en || "";
@@ -255,7 +276,6 @@ export default function CafeSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
   }
 
-  const shelfEntries = [...shelfCounts.entries()];
 
   return (
     <section className="space-y-4 rounded-lg border p-4">
@@ -355,14 +375,20 @@ export default function CafeSection({ vm }: { vm: WordsWorkspaceVM }) {
                 {character.intro[locale] ? <p className="text-sm text-gray-700">{character.intro[locale]}</p> : null}
                 <ul className="space-y-2">
                   {readiness.items.map((item) => {
-                    const icon = recipeIcon(item.recipeId);
+                    const icon = recipeIcon(item.recipeId, item.specialIngredientKeys);
+                    const pinnedNote = !item.specialIngredientKeys
+                      ? null
+                      : item.specialIngredientKeys.length === 0
+                        ? str.pinnedPlainNote
+                        : str.pinnedVariantNote;
                     return (
                       <li key={item.recipeId} className="flex items-center gap-3 rounded-xl border border-[#e8dcc0] bg-white/70 p-2">
                         {icon ? <img src={icon} alt="" aria-hidden="true" className="h-12 w-12 object-contain" /> : null}
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-[#5c4720]">
-                            {recipeTitle(item.recipeId)} × {item.quantity}
+                            {recipeTitle(item.recipeId, item.specialIngredientKeys)} × {item.quantity}
                           </p>
+                          {pinnedNote ? <p className="text-xs text-[#8b6f2f]">{pinnedNote}</p> : null}
                           <p className={`text-xs font-semibold ${item.isReady ? "text-emerald-700" : "text-amber-700"}`}>
                             {fill(str.onShelfTemplate, {
                               have: String(Math.min(item.onShelf, item.quantity)),
@@ -418,20 +444,25 @@ export default function CafeSection({ vm }: { vm: WordsWorkspaceVM }) {
                 className="max-h-[85vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-[1.5rem] border-2 border-[#dcc38a] bg-[#fffaf0] p-5 shadow-xl"
               >
                 <h3 className="text-lg font-semibold text-[#5c4720]">{str.shelfTitle}</h3>
-                {shelfEntries.length === 0 ? (
+                {shelfGroups.length === 0 ? (
                   <p className="text-sm text-[#8b6f2f]">{str.shelfEmpty}</p>
                 ) : (
                   <div className="grid grid-cols-3 gap-3">
-                    {shelfEntries.map(([recipeId, count]) => {
-                      const icon = recipeIcon(recipeId);
-                      const isOrdered = visit?.items.some((item) => item.recipeId === recipeId) ?? false;
+                    {shelfGroups.map((group) => {
+                      const { recipeId, specialIngredientKeys, count } = group;
+                      const icon = recipeIcon(recipeId, specialIngredientKeys);
+                      const extras = extraIngredientNames(recipeId, specialIngredientKeys);
+                      const isOrdered = visit?.items.some((item) => dishMatchesOrderItem(group, item)) ?? false;
                       return (
                         <div
-                          key={recipeId}
+                          key={`${recipeId}|${specialIngredientKeys.join(",")}`}
                           className={`rounded-xl border-2 bg-white/70 p-2 text-center ${isOrdered ? "border-emerald-400" : "border-[#e8dcc0]"}`}
                         >
                           {icon ? <img src={icon} alt="" aria-hidden="true" className="mx-auto h-14 w-14 object-contain" /> : null}
-                          <p className="text-xs font-semibold text-[#5c4720]">{recipeTitle(recipeId)}</p>
+                          <p className="text-xs font-semibold text-[#5c4720]">{recipeTitle(recipeId, specialIngredientKeys)}</p>
+                          {extras ? (
+                            <p className="text-[11px] text-[#8b6f2f]">{fill(str.shelfExtrasTemplate, { names: extras })}</p>
+                          ) : null}
                           <p className="text-xs text-gray-600">{fill(str.shelfCountTemplate, { count: String(count) })}</p>
                         </div>
                       );

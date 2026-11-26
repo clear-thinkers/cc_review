@@ -12,6 +12,10 @@ On dev and prod; owner QA passed on prod 2026-11-26; code pushed to main in comm
 
 **Build state (2026-11-21):** code and migration `20261121120000` are written and **not deployed**. As built, where it differs from the draft below: no `/api` admin route (platform-admin RLS plus `save_shop_character_order`); the parent page is `/words/wishlist`; orders live in `shop_character_orders` + `shop_character_order_items`; `scripts/verify-cafe.ts` was **not written**: the RPC and RLS scenarios ran once on a throwaway local Postgres over a stub of the existing tables (60/60), which doesn't replace a run against the real dev database. `0_ARCHITECTURE.md` (Café Rules, Wishlist Rewards Rules) is authoritative.
 
+### Variant-pinned order items (authorized 2026-11-25)
+
+An order item can name the exact kind of a dish it wants, so a vegetarian visitor (唐僧, who orders 红豆包, plain 阳春面 and 饭团) is never served a 小笼包 or a 猪肝面. Each item has an optional list of special ingredients: left out = any kind (as before, and every existing order), `[]` = plain, `["red-bean"]` = 红豆包. The match is exact: a bun cooked with red bean and pork is not a 红豆包. Shop Admin picks the kind from the recipe's named variants; the Café lists the dish by its variant's name and icon and groups the shelf by kind. An order still holds each recipe once. Migration `20261126130000`; rules in `0_ARCHITECTURE.md` Café Rules 3 and 4. Checked on dev with 10 rolled-back scenarios (10/10); on dev and prod (prod got the migration before the app code that reads `special_ingredient_keys`).
+
 ### Wishlist photo (authorized 2026-11-26)
 
 A parent or the platform admin can attach one optional photo of the real item to a wishlist reward; the child sees it on the Rewards page. Photos are shrunk in the browser and kept in a private, family-scoped storage bucket. Migration `20261126120000`; rules in `0_ARCHITECTURE.md` Wishlist Rewards Rule 6; checked on dev with `npm run verify:wishlist-photos` (13/13).

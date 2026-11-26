@@ -1,5 +1,5 @@
 /**
- * Café Strings — Last updated: 2026-11-21
+ * Café Strings — Last updated: 2026-11-26 (variant-pinned order items)
  * All user-facing text for /words/shop/cafe (roadmap item U, feature spec
  * 2026-11-21-cafe-visitors-character-tokens-wishlist.md). Characters' own lines come from
  * `shop_characters.lines_i18n`; these are the fallbacks and the page's own copy.
@@ -29,6 +29,8 @@ export const cafeStrings = {
     notNowButton: "Not now",
     notReadyHint: "You need every dish on your shelf. Cook what's missing, then Organize it in the kitchen. This visitor will wait!",
     unknownDish: "A dish no longer on the menu",
+    pinnedPlainNote: "Plain, with nothing added",
+    pinnedVariantNote: "Only this kind will do",
 
     // Section: Fallback lines
     fallbackOrderLine: "Hello! Could I have this, please?",
@@ -52,6 +54,8 @@ export const cafeStrings = {
     shelfTitle: "Your shelf",
     shelfEmpty: "Your shelf is empty. Cook something and Organize it in the kitchen!",
     shelfCountTemplate: "× {count}",
+    shelfExtrasTemplate: "with {names}",
+    namesSeparator: ", ",
     closeButton: "Close",
   },
   zh: {
@@ -77,6 +81,8 @@ export const cafeStrings = {
     notNowButton: "下次吧",
     notReadyHint: "每道菜都要在货架上才能上菜。去厨房做好缺的菜，再整理到货架上。这位客人会等你哦！",
     unknownDish: "一道已经下架的菜",
+    pinnedPlainNote: "要原味的，什么都不加",
+    pinnedVariantNote: "只要这一种哦",
 
     // Section: Fallback lines
     fallbackOrderLine: "你好！我想要这些，可以吗？",
@@ -100,6 +106,8 @@ export const cafeStrings = {
     shelfTitle: "我的货架",
     shelfEmpty: "货架是空的。去厨房做点好吃的，再整理到货架上吧！",
     shelfCountTemplate: "× {count}",
+    shelfExtrasTemplate: "加了{names}",
+    namesSeparator: "、",
     closeButton: "关闭",
   },
 };

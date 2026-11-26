@@ -1,0 +1,47 @@
+{
+  "key": "tang-seng",
+  "name": { "en": "Tang Seng", "zh": "唐僧" },
+  "intro": { "en": "The monk from Journey to the West. He only eats vegetarian food!", "zh": "《西游记》里的唐僧，只吃素食！" },
+  "tokenName": { "en": "travel stamp", "zh": "通关印" },
+  "visitFrequency": "daily",
+  "visitLimit": 6,
+  "lines": {
+    "order": [
+      { "en": "I've come a long way from Tang. A simple meal, please?", "zh": "贫僧从东土大唐来，想讨一份素斋。" },
+      { "en": "Amituofo! May I have some vegetarian food?", "zh": "阿弥陀佛！请给贫僧来点素食吧。" },
+      { "en": "We've walked so far. My disciples are hungry too!", "zh": "走了好远的路，徒儿们也饿了。" }
+    ],
+    "served": [
+      { "en": "Thank you, kind friend! What a tasty meal.", "zh": "多谢施主！这顿素斋真香。" },
+      { "en": "Now I have the strength to keep heading west!", "zh": "吃饱了，贫僧又有力气西行了！" },
+      { "en": "How kind! Here's a stamp from my travel pass.", "zh": "善哉善哉！送你一枚通关印。" }
+    ],
+    "dismissed": [
+      { "en": "No matter. I'll come by another day.", "zh": "不要紧，贫僧改日再来。" },
+      { "en": "Then I'll be on my way. Farewell!", "zh": "那贫僧先去赶路啦，再会！" }
+    ]
+  },
+  "orders": [
+    { "tokenPrice": 1, "items": [{ "recipe": "noodle", "quantity": 1, "specialIngredients": [] }] },
+    { "tokenPrice": 2, "items": [{ "recipe": "bun", "quantity": 2, "specialIngredients": ["red-bean"] }] },
+    { "tokenPrice": 2, "items": [{ "recipe": "rice_ball", "quantity": 2 }] },
+    {
+      "tokenPrice": 4,
+      "items": [
+        { "recipe": "noodle", "quantity": 1, "specialIngredients": [] },
+        { "recipe": "bun", "quantity": 1, "specialIngredients": ["red-bean"] },
+        { "recipe": "rice_ball", "quantity": 1 }
+      ]
+    }
+  ],
+  "tokenContents": [
+    { "title": "五行山救悟空", "body": "唐僧路过五行山，揭下山顶的金字帖子。被压了五百年的孙悟空跳了出来，拜唐僧为师，保护师父去西天取经。" },
+    { "title": "鹰愁涧收白龙马", "body": "在鹰愁涧，一条小白龙吃掉了唐僧的马。观音菩萨让小白龙变成一匹白马，驮着唐僧一路西行。" },
+    { "title": "高老庄收八戒", "body": "在高老庄，悟空降服了猪八戒。八戒拜唐僧为师，从此跟着师父去取经。" },
+    { "title": "流沙河收沙僧", "body": "流沙河又宽又深，沙悟净就住在河里。他拜唐僧为师，帮大家渡过了河。师徒四人到齐了！" },
+    { "title": "三打白骨精", "body": "白骨精三次变成人的样子来骗唐僧，都被悟空的火眼金睛看穿了。" },
+    { "title": "女儿国", "body": "西梁女国里住的都是女子。女王想留唐僧做国王，可唐僧一心取经，还是告别女王，继续西行。" },
+    { "title": "火焰山", "body": "火焰山的大火挡住了去路。悟空向铁扇公主借来芭蕉扇，扇灭了大火，师徒才过了山。" },
+    { "title": "灵山取经", "body": "师徒经历了九九八十一难，终于来到灵山，见到如来佛祖，取得了真经。" }
+  ]
+}

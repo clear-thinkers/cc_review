@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CAFE_VISIT_FREQUENCIES, validateCafeVisitFrequency, validateCharacterOrderDraft } from "@/lib/characterTokens";
+import {
+  CAFE_VISIT_FREQUENCIES,
+  listOrderVariantChoices,
+  validateCafeVisitFrequency,
+  validateCharacterOrderDraft,
+} from "@/lib/characterTokens";
 import type {
   CafeLineMoment,
   CafeOrderItem,
@@ -11,7 +16,7 @@ import type {
   ShopCharacter,
   ShopCharacterOrder,
 } from "@/lib/characterTokens.types";
-import { getShopRecipeContentForLocale } from "@/lib/shop";
+import { getShopRecipeContentForLocale, resolveShopRecipeVariantTitle } from "@/lib/shop";
 import type { ShopRecipe } from "@/lib/shop.types";
 import {
   deleteCharacterTokenContent,
@@ -59,7 +64,8 @@ type OrderForm = {
   id: string | null;
   tokenPrice: string;
   isActive: boolean;
-  items: { recipeId: string; quantity: string }[];
+  /** kind: ANY_KIND, or the pinned special ingredient keys joined by "," ("" = plain). */
+  items: { recipeId: string; quantity: string; kind: string }[];
 };
 type ContentForm = { id: string | null; title: string; body: string; isActive: boolean };
 
@@ -67,6 +73,16 @@ const KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const LINE_MOMENTS: readonly CafeLineMoment[] = ["order", "served", "dismissed"];
 const SMALL_BUTTON = "px-3 py-1 text-xs font-semibold disabled:opacity-50";
 const SECTION_CONTENT_ID = "shop-admin-cafe-characters-content";
+const ANY_KIND = "*";
+
+function kindOf(item: CafeOrderItem): string {
+  return item.specialIngredientKeys ? item.specialIngredientKeys.join(",") : ANY_KIND;
+}
+
+function keysOfKind(kind: string): string[] | undefined {
+  if (kind === ANY_KIND) return undefined;
+  return kind === "" ? [] : kind.split(",");
+}
 
 function linesToText(lines: readonly LocalizedText[] | undefined): string {
   return (lines ?? []).map((line) => `${line.en} | ${line.zh}`).join("\n");
@@ -186,6 +202,23 @@ export default function CafeCharactersSection({ recipes, locale }: { recipes: Sh
     const recipe = recipes.find((entry) => entry.id === recipeId);
     return recipe ? getShopRecipeContentForLocale(recipe, locale).title : recipeId;
   };
+  /** A dish as an order lists it: the plain name, "(plain)", or the pinned variant's name. */
+  const kindLabel = (recipeId: string, keys: string[] | undefined): string => {
+    const title = recipeTitle(recipeId);
+    const recipe = recipes.find((entry) => entry.id === recipeId);
+    if (!keys || !recipe) return title;
+    if (keys.length === 0) return str.kindPlainTemplate.replace("{dish}", title);
+    const variantTitle = resolveShopRecipeVariantTitle(recipe.variantIconRules, keys, locale, title);
+    return variantTitle === title ? `${title} + ${keys.join(" + ")}` : variantTitle;
+  };
+  /** The kinds the picker offers for a dish, plus the item's current kind if no rule names it any more. */
+  const kindChoices = (recipeId: string, currentKind: string): string[] => {
+    const recipe = recipes.find((entry) => entry.id === recipeId);
+    const kinds = recipe ? listOrderVariantChoices(recipe.variantIconRules).map((keys) => keys.join(",")) : [];
+    return currentKind !== ANY_KIND && !kinds.includes(currentKind) ? [...kinds, currentKind] : kinds;
+  };
+  const hasKinds = (recipeId: string): boolean =>
+    (recipes.find((entry) => entry.id === recipeId)?.specialIngredients.length ?? 0) > 0;
 
   const activeKey = form && !form.isNew ? form.key : null;
   const characterOrders = orders.filter((order) => order.characterKey === activeKey);
@@ -266,7 +299,10 @@ export default function CafeCharactersSection({ recipes, locale }: { recipes: Sh
     void run(async () => {
       const items: CafeOrderItem[] = orderForm.items
         .filter((item) => item.recipeId !== "")
-        .map((item) => ({ recipeId: item.recipeId, quantity: Number(item.quantity) }));
+        .map((item) => {
+          const specialIngredientKeys = keysOfKind(item.kind);
+          return { recipeId: item.recipeId, quantity: Number(item.quantity), ...(specialIngredientKeys ? { specialIngredientKeys } : {}) };
+        });
       const tokenPrice = Number(orderForm.tokenPrice);
       const problem = validateCharacterOrderDraft({ tokenPrice, items });
       if (problem) return fail(str.orderErrors[problem]);
@@ -483,7 +519,7 @@ export default function CafeCharactersSection({ recipes, locale }: { recipes: Sh
                     <h3 className="font-semibold text-[var(--shop-admin-text-dark)]">{str.ordersHeading}</h3>
                     <button
                       type="button"
-                      onClick={() => setOrderForm({ id: null, tokenPrice: "1", isActive: true, items: [{ recipeId: "", quantity: "1" }] })}
+                      onClick={() => setOrderForm({ id: null, tokenPrice: "1", isActive: true, items: [{ recipeId: "", quantity: "1", kind: ANY_KIND }] })}
                       className={`${SHOP_ADMIN_BUTTON_SECONDARY} ${SMALL_BUTTON}`}
                     >
                       {str.addOrder}
@@ -494,7 +530,7 @@ export default function CafeCharactersSection({ recipes, locale }: { recipes: Sh
                     {characterOrders.map((order) => (
                       <li key={order.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm">
                         <span className="min-w-0 flex-1">
-                          {order.items.map((item) => `${recipeTitle(item.recipeId)} × ${item.quantity}`).join(" + ")}
+                          {order.items.map((item) => `${kindLabel(item.recipeId, item.specialIngredientKeys)} × ${item.quantity}`).join(" + ")}
                           {" → "}
                           {str.orderPaysTemplate.replace("{count}", String(order.tokenPrice))}
                           {order.isActive ? null : <span className="ml-2 text-xs text-gray-500">{str.orderInactiveBadge}</span>}
@@ -506,7 +542,7 @@ export default function CafeCharactersSection({ recipes, locale }: { recipes: Sh
                               id: order.id,
                               tokenPrice: String(order.tokenPrice),
                               isActive: order.isActive,
-                              items: order.items.map((item) => ({ recipeId: item.recipeId, quantity: String(item.quantity) })),
+                              items: order.items.map((item) => ({ recipeId: item.recipeId, quantity: String(item.quantity), kind: kindOf(item) })),
                             })
                           }
                           className={`${SHOP_ADMIN_BUTTON_SECONDARY} ${SMALL_BUTTON}`}
@@ -537,7 +573,9 @@ export default function CafeCharactersSection({ recipes, locale }: { recipes: Sh
                               onChange={(event) =>
                                 setOrderForm({
                                   ...orderForm,
-                                  items: orderForm.items.map((entry, i) => (i === index ? { ...entry, recipeId: event.target.value } : entry)),
+                                  items: orderForm.items.map((entry, i) =>
+                                    i === index ? { ...entry, recipeId: event.target.value, kind: ANY_KIND } : entry
+                                  ),
                                 })
                               }
                             >
@@ -549,6 +587,28 @@ export default function CafeCharactersSection({ recipes, locale }: { recipes: Sh
                               ))}
                             </select>
                           </label>
+                          {item.recipeId && (hasKinds(item.recipeId) || item.kind !== ANY_KIND) ? (
+                            <label className={`${LABEL} min-w-[10rem]`}>
+                              {str.orderKind}
+                              <select
+                                className={INPUT}
+                                value={item.kind}
+                                onChange={(event) =>
+                                  setOrderForm({
+                                    ...orderForm,
+                                    items: orderForm.items.map((entry, i) => (i === index ? { ...entry, kind: event.target.value } : entry)),
+                                  })
+                                }
+                              >
+                                <option value={ANY_KIND}>{str.kindAny}</option>
+                                {kindChoices(item.recipeId, item.kind).map((kind) => (
+                                  <option key={kind} value={kind}>
+                                    {kindLabel(item.recipeId, keysOfKind(kind))}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
                           <label className={`${LABEL} w-24`}>
                             {str.orderQuantity}
                             <input
@@ -575,9 +635,10 @@ export default function CafeCharactersSection({ recipes, locale }: { recipes: Sh
                           </button>
                         </div>
                       ))}
+                      <p className="text-xs text-[var(--shop-admin-support-text)]">{str.kindHelp}</p>
                       <button
                         type="button"
-                        onClick={() => setOrderForm({ ...orderForm, items: [...orderForm.items, { recipeId: "", quantity: "1" }] })}
+                        onClick={() => setOrderForm({ ...orderForm, items: [...orderForm.items, { recipeId: "", quantity: "1", kind: ANY_KIND }] })}
                         className={`${SHOP_ADMIN_BUTTON_SECONDARY} ${SMALL_BUTTON}`}
                       >
                         {str.addDish}

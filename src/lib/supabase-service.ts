@@ -44,6 +44,7 @@ import {
   normalizeDismissCafeVisitResult,
   normalizeGetCafeVisitResult,
   normalizeLocalizedText,
+  normalizeOrderItemSpecialKeys,
   normalizePriceSnapshot,
   normalizeRedeemWishlistRewardResult,
   normalizeSaveCharacterOrderResult,
@@ -1990,13 +1991,13 @@ interface SupabaseCharacterOrderRow {
   character_key: string;
   token_price: number;
   is_active: boolean;
-  shop_character_order_items: { recipe_id: string; quantity: number }[] | null;
+  shop_character_order_items: { recipe_id: string; quantity: number; special_ingredient_keys: unknown }[] | null;
 }
 
 export async function listShopCharacterOrders(): Promise<ShopCharacterOrder[]> {
   const { data, error } = await supabase
     .from("shop_character_orders")
-    .select("id, character_key, token_price, is_active, shop_character_order_items(recipe_id, quantity)")
+    .select("id, character_key, token_price, is_active, shop_character_order_items(recipe_id, quantity, special_ingredient_keys)")
     .order("display_order", { ascending: true });
   if (error) throw new Error("listShopCharacterOrders: " + error.message);
   return ((data ?? []) as unknown as SupabaseCharacterOrderRow[]).map((row) => ({
@@ -2004,7 +2005,10 @@ export async function listShopCharacterOrders(): Promise<ShopCharacterOrder[]> {
     characterKey: row.character_key,
     tokenPrice: row.token_price,
     isActive: row.is_active,
-    items: (row.shop_character_order_items ?? []).map((item) => ({ recipeId: item.recipe_id, quantity: item.quantity })),
+    items: (row.shop_character_order_items ?? []).map((item) => {
+      const specialIngredientKeys = normalizeOrderItemSpecialKeys(item.special_ingredient_keys);
+      return { recipeId: item.recipe_id, quantity: item.quantity, ...(specialIngredientKeys ? { specialIngredientKeys } : {}) };
+    }),
   }));
 }
 

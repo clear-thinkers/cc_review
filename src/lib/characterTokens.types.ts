@@ -30,7 +30,15 @@ export type ShopCharacter = {
   displayOrder: number;
 };
 
-export type CafeOrderItem = { recipeId: string; quantity: number };
+/**
+ * One dish in an order. `specialIngredientKeys` pins a variant (migration `20261126130000`):
+ * absent = any dish of the recipe; a list = dishes cooked with exactly those special
+ * ingredients, sorted ([] = plain, ["red-bean"] = 红豆包).
+ */
+export type CafeOrderItem = { recipeId: string; quantity: number; specialIngredientKeys?: string[] };
+
+/** Shelf dishes of one recipe cooked with the same special ingredients (sorted keys). */
+export type ShelfDishGroup = { recipeId: string; specialIngredientKeys: string[]; count: number };
 
 /** One order a character can place: a mix of dishes for one token price. */
 export type ShopCharacterOrder = {
@@ -120,6 +128,9 @@ export type WishlistDraftError = "missing_title" | "title_too_long" | "missing_p
 
 export type CharacterOrderDraft = { tokenPrice: number; items: CafeOrderItem[] };
 export type CharacterOrderDraftError = "invalid_price" | "missing_items" | "invalid_quantity" | "duplicate_item";
+
+/** What a shelf dish needs to be matched against an order item. */
+export type CafeShelfDish = { recipeId: string; location: string; specialIngredientKeys: readonly string[] };
 
 /** no_visitors: nobody is set up to visit; no_visitors_today: everyone has used up their visits for now. */
 export type GetCafeVisitFailureCode = "forbidden" | "no_visitors" | "no_visitors_today" | "unknown";

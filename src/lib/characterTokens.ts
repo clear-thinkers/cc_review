@@ -7,6 +7,7 @@
  */
 import type {
   CafeOrderItem,
+  CafeShelfDish,
   CafeVisit,
   CafeVisitFrequency,
   CafeVisitFrequencyError,
@@ -31,6 +32,7 @@ import type {
   SaveWishlistRewardResult,
   ServeCafeVisitFailureCode,
   ServeCafeVisitResult,
+  ShelfDishGroup,
   WishlistCardState,
   WishlistDraft,
   WishlistDraftError,
@@ -38,6 +40,8 @@ import type {
   WishlistRedemption,
   WishlistReward,
 } from "./characterTokens.types";
+import { normalizeShopVariantMatchKeys } from "./shop";
+import type { ShopVariantIconRule } from "./shop.types";
 
 export const CHARACTER_ORDER_PRICE_MAX = 50;
 export const CHARACTER_ORDER_QUANTITY_MAX = 9;
@@ -142,25 +146,65 @@ export function filterWishlistForChild(rewards: readonly WishlistReward[], userI
   return rewards.filter((reward) => reward.isActive && (reward.childUserId === null || reward.childUserId === userId));
 }
 
-/** How many of each recipe sit on the shelf. Countertop and sold dishes never count. */
-export function countShelfDishesByRecipe(
-  dishes: readonly { recipeId: string; location: string }[]
-): Map<string, number> {
-  const counts = new Map<string, number>();
+function sameKeys(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((key, index) => key === b[index]);
+}
+
+/**
+ * Whether a dish can fill an order item, mirroring serve_cafe_visit: same recipe, and when
+ * the item pins a variant, cooked with exactly those special ingredients (any order).
+ */
+export function dishMatchesOrderItem(
+  dish: Pick<CafeShelfDish, "recipeId" | "specialIngredientKeys">,
+  item: Pick<CafeOrderItem, "recipeId" | "specialIngredientKeys">
+): boolean {
+  if (dish.recipeId !== item.recipeId) return false;
+  if (!item.specialIngredientKeys) return true;
+  return sameKeys(
+    normalizeShopVariantMatchKeys([...dish.specialIngredientKeys]),
+    normalizeShopVariantMatchKeys(item.specialIngredientKeys)
+  );
+}
+
+/**
+ * Shelf dishes grouped by recipe and by the exact special ingredients they were cooked with,
+ * so 红豆包 and 小笼包 show apart. Countertop and sold dishes never count. Groups keep the
+ * order in which each first appears.
+ */
+export function groupShelfDishes(dishes: readonly CafeShelfDish[]): ShelfDishGroup[] {
+  const groups = new Map<string, ShelfDishGroup>();
   for (const dish of dishes) {
     if (dish.location !== "shelf") continue;
-    counts.set(dish.recipeId, (counts.get(dish.recipeId) ?? 0) + 1);
+    const specialIngredientKeys = normalizeShopVariantMatchKeys([...dish.specialIngredientKeys]);
+    const id = `${dish.recipeId}|${specialIngredientKeys.join(",")}`;
+    const group = groups.get(id);
+    if (group) group.count += 1;
+    else groups.set(id, { recipeId: dish.recipeId, specialIngredientKeys, count: 1 });
   }
-  return counts;
+  return [...groups.values()];
+}
+
+/**
+ * The kinds Shop Admin offers when pinning an order item: plain first, then each named
+ * variant (a variant rule's exact ingredient set), once each, in rule order.
+ */
+export function listOrderVariantChoices(rules: readonly ShopVariantIconRule[]): string[][] {
+  const choices: string[][] = [[]];
+  for (const rule of rules) {
+    const keys = normalizeShopVariantMatchKeys(rule.match);
+    if (!choices.some((choice) => sameKeys(choice, keys))) choices.push(keys);
+  }
+  return choices;
 }
 
 /** Serving is all-or-nothing, so an order is ready only when every item is fully on the shelf. */
 export function resolveOrderReadiness(
   items: readonly CafeOrderItem[],
-  shelfCounts: ReadonlyMap<string, number>
+  dishes: readonly CafeShelfDish[]
 ): OrderReadiness {
+  const shelf = dishes.filter((dish) => dish.location === "shelf");
   const resolved = items.map((item) => {
-    const onShelf = shelfCounts.get(item.recipeId) ?? 0;
+    const onShelf = shelf.filter((dish) => dishMatchesOrderItem(dish, item)).length;
     return { ...item, onShelf, isReady: onShelf >= item.quantity };
   });
   return { items: resolved, isReady: resolved.length > 0 && resolved.every((item) => item.isReady) };
@@ -237,13 +281,20 @@ export function normalizeLocalizedText(value: unknown): LocalizedText {
   };
 }
 
+/** A pinned variant's keys, sorted; undefined when the value isn't a list (any variant). */
+export function normalizeOrderItemSpecialKeys(value: unknown): string[] | undefined {
+  return Array.isArray(value) ? normalizeShopVariantMatchKeys(value) : undefined;
+}
+
 /** A visit's stored items. Malformed entries are dropped rather than shown. */
 export function normalizeCafeOrderItems(value: unknown): CafeOrderItem[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     const row = asRecord(entry);
     const quantity = asCount(row?.quantity);
-    return typeof row?.recipeId === "string" && quantity > 0 ? [{ recipeId: row.recipeId, quantity }] : [];
+    if (typeof row?.recipeId !== "string" || quantity <= 0) return [];
+    const specialIngredientKeys = normalizeOrderItemSpecialKeys(row.specialIngredientKeys);
+    return [{ recipeId: row.recipeId, quantity, ...(specialIngredientKeys ? { specialIngredientKeys } : {}) }];
   });
 }
 

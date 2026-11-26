@@ -26,7 +26,7 @@ import type {
 } from "@/lib/characterTokens.types";
 import { resolveRewardCardState } from "@/lib/pawPrints";
 import type { PawPrintRedemption, PawPrintReward } from "@/lib/pawPrints.types";
-import { getShopRecipeContentForLocale } from "@/lib/shop";
+import { getShopRecipeContentForLocale, resolveShopRecipeVariantTitle } from "@/lib/shop";
 import type { ShopRecipe } from "@/lib/shop.types";
 import {
   listCatalogTokenSpends,
@@ -186,6 +186,13 @@ export default function RewardsSection({ vm }: { vm: WordsWorkspaceVM }) {
     () => new Map(recipes.map((recipe) => [recipe.id, getShopRecipeContentForLocale(recipe, locale).title])),
     [recipes, locale]
   );
+  /** A sold dish's name, using its pinned variant's name (e.g. 红豆包) when the order had one. */
+  const orderDishTitle = (recipeId: string, specialIngredientKeys: string[] | undefined): string => {
+    const title = recipeTitleById.get(recipeId);
+    const recipe = recipes.find((entry) => entry.id === recipeId);
+    if (!title || !recipe) return str.stampUnknownRecipe;
+    return resolveShopRecipeVariantTitle(recipe.variantIconRules, specialIngredientKeys ?? [], locale, title);
+  };
   const shrewyRewards = rewards.filter((reward) => reward.giver === SHREWY_KEY);
   const shrewyAvailable = availableByCharacter.get(SHREWY_KEY) ?? 0;
   const visibleWishlist = filterWishlistForChild(wishlist, session?.userId ?? "");
@@ -610,7 +617,7 @@ export default function RewardsSection({ vm }: { vm: WordsWorkspaceVM }) {
                       <dt className="text-gray-500">{str.tokenOrderLabel}</dt>
                       <dd className="text-right font-semibold">
                         {openStamp.award.cafeItems
-                          .map((item) => (recipeTitleById.get(item.recipeId) ?? str.stampUnknownRecipe) + " × " + item.quantity)
+                          .map((item) => orderDishTitle(item.recipeId, item.specialIngredientKeys) + " × " + item.quantity)
                           .join(", ") || str.stampUnknownRecipe}
                       </dd>
                     </div>
