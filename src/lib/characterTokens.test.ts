@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCharacterTokenStamps,
+  buildVisitorBoard,
   computeCharacterTokenBalance,
   dishMatchesOrderItem,
   filterWishlistForChild,
@@ -23,7 +24,13 @@ import {
   validateCharacterOrderDraft,
   validateWishlistDraft,
 } from "./characterTokens";
-import type { CharacterTokenAward, WishlistRedemption, WishlistReward } from "./characterTokens.types";
+import type {
+  CharacterTokenAward,
+  ShopCharacter,
+  ShopCharacterOrder,
+  WishlistRedemption,
+  WishlistReward,
+} from "./characterTokens.types";
 
 function award(id: string, giver: string, earnedAt: number): CharacterTokenAward {
   return { id, userId: "u1", giver, source: "cafe_sale", recipeId: null, cafeItems: [], contentId: null, earnedAt };
@@ -118,6 +125,59 @@ describe("wishlist", () => {
 function dish(recipeId: string, location: string, specialIngredientKeys: string[] = []) {
   return { recipeId, location, specialIngredientKeys };
 }
+
+describe("visitor board", () => {
+  const character = (key: string, displayOrder: number, extra: Partial<ShopCharacter> = {}): ShopCharacter => ({
+    key,
+    name: { en: key, zh: key },
+    intro: { en: "", zh: "" },
+    tokenName: { en: "t", zh: "t" },
+    tokenIconPath: null,
+    spritePaths: {},
+    lines: {},
+    visitsCafe: true,
+    visitFrequency: "unlimited",
+    visitLimit: null,
+    isActive: true,
+    displayOrder,
+    ...extra,
+  });
+  const order = (id: string, characterKey: string, extra: Partial<ShopCharacterOrder> = {}): ShopCharacterOrder => ({
+    id,
+    characterKey,
+    tokenPrice: 1,
+    isActive: true,
+    items: [{ recipeId: "r1", quantity: 1 }],
+    ...extra,
+  });
+
+  it("lists only characters who can visit, in display order, with their active orders", () => {
+    const board = buildVisitorBoard(
+      [
+        character("mama", 3),
+        character("shrewy", 0, { visitsCafe: false }),
+        character("li-bai", 1),
+        character("hidden", 2, { isActive: false }),
+        character("no-orders", 4),
+        character("tang-seng", 2),
+      ],
+      [
+        order("o1", "mama"),
+        order("o2", "li-bai"),
+        order("o3", "li-bai", { isActive: false }),
+        order("o4", "shrewy"),
+        order("o5", "hidden"),
+        order("o6", "tang-seng", { items: [] }),
+        order("o7", "tang-seng"),
+      ]
+    );
+    expect(board.map((entry) => [entry.character.key, entry.orders.map((o) => o.id)])).toEqual([
+      ["li-bai", ["o2"]],
+      ["tang-seng", ["o7"]],
+      ["mama", ["o1"]],
+    ]);
+  });
+});
 
 describe("café orders", () => {
   it("groups only shelf dishes, never countertop or sold, by recipe and exact special ingredients", () => {

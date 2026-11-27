@@ -1,5 +1,5 @@
 /**
- * Café Strings — Last updated: 2026-11-26 (variant-pinned order items)
+ * Café Strings — Last updated: 2026-11-27 (register visitor board)
  * All user-facing text for /words/shop/cafe (roadmap item U, feature spec
  * 2026-11-21-cafe-visitors-character-tokens-wishlist.md). Characters' own lines come from
  * `shop_characters.lines_i18n`; these are the fallbacks and the page's own copy.
@@ -49,6 +49,26 @@ export const cafeStrings = {
       unknown: "Could not serve right now. Please try again.",
     },
     dismissError: "Could not send the visitor off. Please try again.",
+
+    // Section: Visitor board (the register screen)
+    registerLabel: "Visitors",
+    registerAria: "Open the register to see who visits and what they like",
+    boardTitle: "Who visits the Café",
+    boardIntro: "Everyone who might drop by, how often they come, and what they like to order.",
+    boardLoading: "Loading the visitor list…",
+    boardError: "Could not load the visitor list. Please try again.",
+    boardEmpty: "No visitors are set up yet.",
+    boardLikesHeading: "Likes to order",
+    boardPaysTemplate: "→ pays {count} × {token}",
+    frequencyTemplates: {
+      unlimited: "Can drop by any time",
+      daily: "Up to {n} visits a day",
+      weekly: "Up to {n} visits a week",
+      monthly: "Up to {n} visits a month",
+      random_days: "Comes on {n} days each month",
+    },
+    plainDishTemplate: "{dish} (plain)",
+    mysteryDish: "A mystery food",
 
     // Section: Shelf
     shelfTitle: "Your shelf",
@@ -101,6 +121,26 @@ export const cafeStrings = {
       unknown: "现在无法上菜，请重试。",
     },
     dismissError: "现在无法送走客人，请重试。",
+
+    // Section: Visitor board (the register screen)
+    registerLabel: "客人名单",
+    registerAria: "打开收银台，看看有哪些客人、他们喜欢点什么",
+    boardTitle: "小餐馆的客人们",
+    boardIntro: "可能来的客人都在这里：他们多久来一次，喜欢点什么。",
+    boardLoading: "正在打开客人名单…",
+    boardError: "无法打开客人名单，请重试。",
+    boardEmpty: "还没有客人哦。",
+    boardLikesHeading: "喜欢点",
+    boardPaysTemplate: "→ 付 {count} 个{token}",
+    frequencyTemplates: {
+      unlimited: "随时都可能来",
+      daily: "每天最多来 {n} 次",
+      weekly: "每周最多来 {n} 次",
+      monthly: "每月最多来 {n} 次",
+      random_days: "每月有 {n} 天会来",
+    },
+    plainDishTemplate: "{dish}（原味）",
+    mysteryDish: "神秘美食",
 
     // Section: Shelf
     shelfTitle: "我的货架",

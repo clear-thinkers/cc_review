@@ -3,8 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocale } from "@/app/shared/locale";
-import { dishMatchesOrderItem, groupShelfDishes, pickCharacterLine, resolveOrderReadiness } from "@/lib/characterTokens";
-import type { CafeLineMoment, CafeVisit, LocalizedText, ShopCharacter } from "@/lib/characterTokens.types";
+import {
+  buildVisitorBoard,
+  dishMatchesOrderItem,
+  groupShelfDishes,
+  pickCharacterLine,
+  resolveOrderReadiness,
+} from "@/lib/characterTokens";
+import type {
+  CafeLineMoment,
+  CafeOrderItem,
+  CafeVisit,
+  LocalizedText,
+  ShopCharacter,
+  ShopCharacterOrder,
+} from "@/lib/characterTokens.types";
 import {
   getShopRecipeContentForLocale,
   resolveShopRecipeIconPath,
@@ -15,8 +28,10 @@ import type { ShopCookedDish, ShopRecipe } from "@/lib/shop.types";
 import {
   dismissCafeVisit,
   getCafeVisit,
+  listShopCharacterOrders,
   listShopCharacters,
   listShopCookedDishes,
+  listShopRecipeUnlocks,
   listShopRecipes,
   serveCafeVisit,
 } from "@/lib/supabase-service";
@@ -25,6 +40,7 @@ import type { WordsWorkspaceVM } from "../../shared/WordsWorkspaceVM";
 import { cafeStrings } from "./cafe.strings";
 
 type LoadState = "loading" | "ready" | "error";
+type BoardState = "idle" | LoadState;
 type VisitorSpot = "door" | "counter" | "table";
 type Notice = { tone: "success" | "error"; text: string } | null;
 /** A line that stays up until the child taps it (owner, 2026-11-25: they flashed by too fast). */
@@ -47,6 +63,8 @@ const VISITOR_SPOTS: Record<VisitorSpot, { left: string; top: string }> = {
 // Sized for 960 x 1080 sprites (width % = sprite width / 40 on this 1448 x 1086 scene).
 const VISITOR_SIZE = { width: "24%", height: "36%" };
 const DISPLAY_CASE_BOX = { left: "10%", top: "34%", width: "35%", height: "24%" };
+/** The register's screen (scene px 765-907 x 319-422): opens the visitor board. */
+const REGISTER_SCREEN_BOX = { left: "52.8%", top: "29.4%", width: "9.8%", height: "9.5%" };
 
 const WALK_START_MS = 60;
 const EATING_MS = 2200;
@@ -78,6 +96,10 @@ export default function CafeSection({ vm }: { vm: WordsWorkspaceVM }) {
   const [isOutOfVisits, setIsOutOfVisits] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [isShelfOpen, setIsShelfOpen] = useState(false);
+  const [isBoardOpen, setIsBoardOpen] = useState(false);
+  const [boardState, setBoardState] = useState<BoardState>("idle");
+  const [boardOrders, setBoardOrders] = useState<ShopCharacterOrder[]>([]);
+  const [unlockedRecipeIds, setUnlockedRecipeIds] = useState<ReadonlySet<string>>(new Set());
   const [notice, setNotice] = useState<Notice>(null);
   const timersRef = useRef<number[]>([]);
   const lastLineRef = useRef<LocalizedText | null>(null);
@@ -148,6 +170,7 @@ export default function CafeSection({ vm }: { vm: WordsWorkspaceVM }) {
 
   const recipesById = useMemo(() => new Map(recipes.map((recipe) => [recipe.id, recipe])), [recipes]);
   const shelfGroups = useMemo(() => groupShelfDishes(dishes), [dishes]);
+  const visitorBoard = useMemo(() => buildVisitorBoard(characters, boardOrders), [characters, boardOrders]);
   const character = characters.find((entry) => entry.key === visit?.characterKey);
   const readiness = useMemo(() => resolveOrderReadiness(visit?.items ?? [], dishes), [visit, dishes]);
 
@@ -262,6 +285,35 @@ export default function CafeSection({ vm }: { vm: WordsWorkspaceVM }) {
     }
   }
 
+  /** Opens the register's visitor board, loading the orders and unlocks the first time. */
+  function openBoard(): void {
+    setIsBoardOpen(true);
+    if (boardState === "ready" || boardState === "loading") return;
+    setBoardState("loading");
+    Promise.all([listShopCharacterOrders(), listShopRecipeUnlocks()])
+      .then(([orderRows, unlockRows]) => {
+        setBoardOrders(orderRows);
+        setUnlockedRecipeIds(new Set(unlockRows.map((unlock) => unlock.recipeId)));
+        setBoardState("ready");
+      })
+      .catch((error) => {
+        console.error("Failed to load the visitor board:", error);
+        setBoardState("error");
+      });
+  }
+
+  /** A dish as the board lists it. A mystery food the child hasn't unlocked keeps its secret. */
+  const boardDish = (item: CafeOrderItem): { title: string; icon: string | null } => {
+    const recipe = recipesById.get(item.recipeId);
+    if (!recipe) return { title: str.unknownDish, icon: null };
+    if (recipe.isMystery && !unlockedRecipeIds.has(recipe.id)) return { title: str.mysteryDish, icon: null };
+    const icon = recipeIcon(item.recipeId, item.specialIngredientKeys);
+    if (item.specialIngredientKeys?.length === 0) {
+      return { title: fill(str.plainDishTemplate, { dish: recipeTitle(item.recipeId) }), icon };
+    }
+    return { title: recipeTitle(item.recipeId, item.specialIngredientKeys), icon };
+  };
+
   async function handleNotNow(): Promise<void> {
     if (!visit || isBusy) return;
     setIsBusy(true);
@@ -325,6 +377,19 @@ export default function CafeSection({ vm }: { vm: WordsWorkspaceVM }) {
             >
               <span className="pointer-events-none absolute left-1/2 top-1 -translate-x-1/2 rounded-full border border-[#dcc38a] bg-[#fffaf0]/95 px-2 py-0.5 text-[11px] font-bold text-[#6a5530] shadow-sm">
                 {str.displayCaseLabel}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={openBoard}
+              aria-label={str.registerAria}
+              aria-haspopup="dialog"
+              className="group absolute rounded-lg outline-offset-2 transition hover:bg-white/25 focus-visible:bg-white/25"
+              style={REGISTER_SCREEN_BOX}
+            >
+              <span className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-[#dcc38a] bg-[#fffaf0]/95 px-2 py-0.5 text-[11px] font-bold text-[#6a5530] shadow-sm">
+                {str.registerLabel}
               </span>
             </button>
 
@@ -440,6 +505,91 @@ export default function CafeSection({ vm }: { vm: WordsWorkspaceVM }) {
           </div>
         </div>
       )}
+
+      {isBoardOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => setIsBoardOpen(false)}>
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={str.boardTitle}
+                onClick={(event) => event.stopPropagation()}
+                className="max-h-[85vh] w-full max-w-xl space-y-3 overflow-y-auto rounded-[1.5rem] border-2 border-[#dcc38a] bg-[#fffaf0] p-5 shadow-xl"
+              >
+                <h3 className="text-lg font-semibold text-[#5c4720]">{str.boardTitle}</h3>
+                <p className="text-sm text-gray-700">{str.boardIntro}</p>
+                {boardState === "error" ? (
+                  <p className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{str.boardError}</p>
+                ) : boardState !== "ready" ? (
+                  <p className="text-sm text-[#8b6f2f]">{str.boardLoading}</p>
+                ) : visitorBoard.length === 0 ? (
+                  <p className="text-sm text-[#8b6f2f]">{str.boardEmpty}</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {visitorBoard.map(({ character: guest, orders }) => {
+                      const guestName = guest.name[locale] || guest.name.en;
+                      const guestToken = guest.tokenName[locale] || guest.tokenName.en;
+                      const portrait = guest.spritePaths.waiting ?? guest.spritePaths.delighted;
+                      const limit = String(guest.visitLimit ?? "");
+                      return (
+                        <li key={guest.key} className="flex gap-3 rounded-xl border border-[#e8dcc0] bg-white/70 p-3">
+                          {portrait ? (
+                            <img src={portrait} alt="" aria-hidden="true" className="h-24 w-20 shrink-0 object-contain object-bottom" />
+                          ) : null}
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <p className="flex items-center gap-2 font-semibold text-[#5c4720]">
+                              {guestName}
+                              {guest.tokenIconPath ? (
+                                <img src={guest.tokenIconPath} alt="" aria-hidden="true" className="h-6 w-6 object-contain" />
+                              ) : null}
+                            </p>
+                            {guest.intro[locale] ? <p className="text-xs text-gray-700">{guest.intro[locale]}</p> : null}
+                            <p className="text-xs font-semibold text-emerald-700">
+                              {fill(str.frequencyTemplates[guest.visitFrequency], { n: limit })}
+                            </p>
+                            <p className="text-xs font-semibold text-[#8b6f2f]">{str.boardLikesHeading}</p>
+                            <ul className="space-y-1">
+                              {orders.map((order) => (
+                                <li key={order.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#5c4720]">
+                                  {order.items.map((item, index) => {
+                                    const dish = boardDish(item);
+                                    return (
+                                      <span key={item.recipeId} className="flex items-center gap-1">
+                                        {index > 0 ? <span aria-hidden="true">+</span> : null}
+                                        {dish.icon ? (
+                                          <img src={dish.icon} alt="" aria-hidden="true" className="h-6 w-6 object-contain" />
+                                        ) : (
+                                          <span aria-hidden="true" className="text-amber-500">✦</span>
+                                        )}
+                                        {dish.title} × {item.quantity}
+                                      </span>
+                                    );
+                                  })}
+                                  <span className="font-semibold text-[#8b6f2f]">
+                                    {fill(str.boardPaysTemplate, { count: String(order.tokenPrice), token: guestToken })}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setIsBoardOpen(false)}
+                  className="btn-nav w-full rounded-full border-2 px-4 py-2 font-semibold"
+                >
+                  {str.closeButton}
+                </button>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       {isShelfOpen && typeof document !== "undefined"
         ? createPortal(

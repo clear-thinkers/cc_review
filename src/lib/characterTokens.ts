@@ -33,6 +33,8 @@ import type {
   ServeCafeVisitFailureCode,
   ServeCafeVisitResult,
   ShelfDishGroup,
+  ShopCharacter,
+  ShopCharacterOrder,
   WishlistCardState,
   WishlistDraft,
   WishlistDraftError,
@@ -195,6 +197,26 @@ export function listOrderVariantChoices(rules: readonly ShopVariantIconRule[]): 
     if (!choices.some((choice) => sameKeys(choice, keys))) choices.push(keys);
   }
   return choices;
+}
+
+/**
+ * The Café register's visitor board (owner, 2026-11-27): every character who can actually
+ * come — active, visiting the Café, with at least one active order that has dishes — in
+ * display order, each with those orders. Mirrors cafe_candidate_orders' character checks.
+ */
+export function buildVisitorBoard(
+  characters: readonly ShopCharacter[],
+  orders: readonly ShopCharacterOrder[]
+): { character: ShopCharacter; orders: ShopCharacterOrder[] }[] {
+  return characters
+    .filter((character) => character.isActive && character.visitsCafe)
+    .slice()
+    .sort((a, b) => a.displayOrder - b.displayOrder || a.key.localeCompare(b.key))
+    .map((character) => ({
+      character,
+      orders: orders.filter((order) => order.characterKey === character.key && order.isActive && order.items.length > 0),
+    }))
+    .filter((entry) => entry.orders.length > 0);
 }
 
 /** Serving is all-or-nothing, so an order is ready only when every item is fully on the shelf. */
