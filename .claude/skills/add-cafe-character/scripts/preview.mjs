@@ -18,7 +18,7 @@
 import sharp from "sharp";
 import { existsSync, mkdirSync } from "node:fs";
 
-const SPOTS = { door: [68.5, 38], counter: [51.5, 42], table: [27, 45] };
+const SPOTS = { door: [68.5, 38], counter: [34.35, 32.4], table: [24.5, 40] };
 const BOX = { width: 0.24, height: 0.36 };
 
 const key = process.argv[2];

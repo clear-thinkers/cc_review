@@ -1,0 +1,151 @@
+{
+  "key": "mama",
+  "name": {
+    "en": "Mom",
+    "zh": "妈妈"
+  },
+  "intro": {
+    "en": "Mom grades math homework every day. Earn an A+!",
+    "zh": "妈妈每天批改数学作业，来拿个A+吧！"
+  },
+  "tokenName": {
+    "en": "A+ homework",
+    "zh": "A+作业纸"
+  },
+  "visitFrequency": "daily",
+  "visitLimit": 3,
+  "lines": {
+    "order": [
+      {
+        "en": "Homework all done? Then a milk tea for me, please!",
+        "zh": "作业写完了吗？先给妈妈来杯奶茶！"
+      },
+      {
+        "en": "Grading is tiring. I'd love some soup dumplings!",
+        "zh": "改作业好累呀，想吃小笼包！"
+      },
+      {
+        "en": "Mom's done with work! What's good today?",
+        "zh": "妈妈下班啦，今天有什么好吃的？"
+      }
+    ],
+    "served": [
+      {
+        "en": "Delicious! Here's an A+ for you!",
+        "zh": "真好吃！给你一张A+作业纸！"
+      },
+      {
+        "en": "You made this perfectly. Full marks!",
+        "zh": "这一份做得太棒了，满分！"
+      },
+      {
+        "en": "Thank you, sweetie! Mom is so happy!",
+        "zh": "谢谢宝贝，妈妈好开心！"
+      }
+    ],
+    "dismissed": [
+      {
+        "en": "That's okay. I'll come back after grading.",
+        "zh": "没关系，妈妈改完作业再来。"
+      },
+      {
+        "en": "Okay, see you tomorrow!",
+        "zh": "好的，那我们明天见！"
+      }
+    ]
+  },
+  "orders": [
+    {
+      "tokenPrice": 1,
+      "items": [
+        {
+          "recipe": "bubble_tea",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "tokenPrice": 2,
+      "items": [
+        {
+          "recipe": "bun",
+          "quantity": 2,
+          "specialIngredients": [
+            "pork-filling"
+          ]
+        }
+      ]
+    },
+    {
+      "tokenPrice": 2,
+      "items": [
+        {
+          "recipe": "zongzi",
+          "quantity": 2,
+          "specialIngredients": [
+            "pork-filling"
+          ]
+        }
+      ]
+    },
+    {
+      "tokenPrice": 2,
+      "items": [
+        {
+          "recipe": "bun",
+          "quantity": 1,
+          "specialIngredients": [
+            "pork-filling"
+          ]
+        },
+        {
+          "recipe": "bubble_tea",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "tokenPrice": 2,
+      "items": [
+        {
+          "recipe": "tibetan-sweet-tea",
+          "quantity": 1
+        }
+      ]
+    }
+  ],
+  "tokenContents": [
+    {
+      "title": "鸡兔同笼",
+      "body": "笼子里有鸡和兔一共8只，数一数一共有22只脚。鸡和兔各有几只？"
+    },
+    {
+      "title": "植树问题",
+      "body": "一条小路长20米，从头到尾每隔5米种一棵树，两头都要种。一共要种几棵树？"
+    },
+    {
+      "title": "锯木头",
+      "body": "把一根木头锯成4段，每锯一次要3分钟。一共要锯几分钟？"
+    },
+    {
+      "title": "妈妈的年龄",
+      "body": "妈妈今年35岁，孩子今年8岁。几年后，妈妈的年龄正好是孩子的4倍？"
+    },
+    {
+      "title": "爬楼梯",
+      "body": "从1楼走到3楼要走36级台阶。照这样，从1楼走到6楼要走几级台阶？"
+    },
+    {
+      "title": "握握手",
+      "body": "4个小朋友见面，每两个人都要握一次手。一共握了几次手？"
+    },
+    {
+      "title": "分糖果",
+      "body": "两个盒子里一共有20颗糖，第一盒比第二盒多4颗。每盒各有几颗糖？"
+    },
+    {
+      "title": "敲钟",
+      "body": "大钟敲3下要用2秒。照这样，敲6下要用几秒？"
+    }
+  ]
+}

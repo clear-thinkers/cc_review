@@ -30,11 +30,19 @@ type Notice = { tone: "success" | "error"; text: string } | null;
 /** A line that stays up until the child taps it (owner, 2026-11-25: they flashed by too fast). */
 type Talk = "served" | "dismissed" | null;
 
-/** Percentage boxes over public/shop/shop.png (1448×1086), like the kitchen's SceneHotspot. */
+/**
+ * Percentage boxes over public/shop/shop.png (1448×1086), like the kitchen's SceneHotspot.
+ * The scene is one flat image, so a visitor is always drawn over it: each spot puts the feet
+ * on open floor, never over furniture (owner, 2026-11-27: the old counter spot stood Mom
+ * inside the back chair, and one just above it left her feet on the counter front, floating).
+ * The counter spot is the owner's pick: on the rug, feet near (671, 732), so the visitor
+ * stands before the register without hiding it. The table spot is further along the rug,
+ * clear of the front chair even for a wide delighted pose.
+ */
 const VISITOR_SPOTS: Record<VisitorSpot, { left: string; top: string }> = {
   door: { left: "68.5%", top: "38%" },
-  counter: { left: "51.5%", top: "42%" },
-  table: { left: "27%", top: "45%" },
+  counter: { left: "34.35%", top: "32.4%" },
+  table: { left: "24.5%", top: "40%" },
 };
 // Sized for 960 x 1080 sprites (width % = sprite width / 40 on this 1448 x 1086 scene).
 const VISITOR_SIZE = { width: "24%", height: "36%" };

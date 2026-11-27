@@ -116,6 +116,11 @@ async function cutout(src, bgMode, chroma) {
       }
     }
 
+    // 2b. Enclosed green-screen pockets (between hair strands, or an arm and the body): a
+    //     screen green is never part of a character (sage green fails isBg by far), so every
+    //     screen-green pixel goes, connected to the edge or not. Mom (2026-11-27) needed it.
+    if (mode === "green") for (let i = 0; i < n; i++) if (bgAt(i)) bg[i] = 1;
+
     // 3. Clear the background, then soften the rim: light near-neutral (or greenish, for a
     //    green screen) pixels touching it are cleared, the next ring is half transparent.
     const fringe = (r, g, b) =>
@@ -128,6 +133,31 @@ async function cutout(src, bgMode, chroma) {
         if (cleared[i]) continue;
         if (!neighbours(i).some((j) => j >= 0 && cleared[j])) continue;
         if (fringe(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2])) rgba[i * 4 + 3] = ring === 0 ? 0 : 120;
+      }
+    }
+
+    // 3b. Green spill: thin strands (hair) keep a green tint past the rim rings. Pull green
+    //     down to the larger of red and blue wherever it clearly dominates; sage green
+    //     (green only ~20 above both) is left alone.
+    if (mode === "green") {
+      for (let i = 0; i < n; i++) {
+        if (rgba[i * 4 + 3] === 0) continue;
+        const r = rgba[i * 4];
+        const b = rgba[i * 4 + 2];
+        if (rgba[i * 4 + 1] > Math.max(r, b) + 30) rgba[i * 4 + 1] = Math.max(r, b);
+      }
+      // Within 3 px of the background, any green lead at all is spill (an olive rim on hair).
+      let near = new Uint8Array(n);
+      for (let i = 0; i < n; i++) near[i] = rgba[i * 4 + 3] === 0 ? 1 : 0;
+      for (let step = 0; step < 3; step++) {
+        const grown = near.slice();
+        for (let i = 0; i < n; i++) if (!near[i] && neighbours(i).some((j) => j >= 0 && near[j])) grown[i] = 1;
+        near = grown;
+      }
+      for (let i = 0; i < n; i++) {
+        if (!near[i] || rgba[i * 4 + 3] === 0) continue;
+        const cap = Math.max(rgba[i * 4], rgba[i * 4 + 2]);
+        if (rgba[i * 4 + 1] > cap) rgba[i * 4 + 1] = cap;
       }
     }
   }
